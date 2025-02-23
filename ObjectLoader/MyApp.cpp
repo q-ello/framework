@@ -50,6 +50,13 @@ bool MyApp::Initialize()
 	// Wait until initialization is complete.
 	FlushCommandQueue();
 
+	RAWINPUTDEVICE rid;
+	rid.usUsagePage = 1;
+	rid.usUsage = 6; // Keyboard
+	rid.dwFlags = RIDEV_INPUTSINK;
+	rid.hwndTarget = mhMainWnd;
+	RegisterRawInputDevices(&rid, 1, sizeof(rid));
+
 	return true;
 }
 
@@ -100,7 +107,7 @@ void MyApp::OnResize()
 	//resizing the render window
 	resizeRenderWindow();
 	SetWindowPos(_renderWindow, NULL, _renderWindowRect.left, _renderWindowRect.top, _renderWindowRect.right, _renderWindowRect.bottom, SWP_NOZORDER);
-
+	OnResizing();
 	D3DApp::OnResize();
 
 	// The window resized, so update the aspect ratio and recompute the projection matrix.
@@ -112,6 +119,8 @@ void MyApp::OnResizing()
 {
 	//resizing the controls
 	// Invalidate and force a redraw of the entire main window
+	SetWindowPos(_transformPanel, NULL, mClientWidth - 270, 20, 270, 130, SWP_NOZORDER);
+
 	InvalidateRect(mhMainWnd, NULL, true);
 	UpdateWindow(mhMainWnd);
 }
@@ -994,45 +1003,7 @@ bool MyApp::handleControls(WPARAM wParam)
 	//delete object
 	if (controlId == DELETE_ID)
 	{
-		
-		std::wstring name = _objectBtns[_selectedObject]->name;
-		_objectLoaded[name]--;
-		_objectBtns.erase(_objectBtns.begin() + _selectedObject);
-		mAllRitems.erase(mAllRitems.begin() + _selectedObject);
-		mOpaqueRitems.erase(mOpaqueRitems.begin() + _selectedObject);
-
-		if (_objectLoaded[name] == 0)
-		{
-			FlushCommandQueue();
-
-			UnloadModel(name);
-			_objectLoaded.erase(name);
-
-			ThrowIfFailed(mDirectCmdListAlloc->Reset());
-			ThrowIfFailed(mCommandList->Reset(mDirectCmdListAlloc.Get(), nullptr));
-
-			mCommandList->ClearRenderTargetView(CurrentBackBufferView(), Colors::LightSteelBlue, 0, nullptr);
-			mCommandList->ClearDepthStencilView(DepthStencilView(), D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
-
-			ThrowIfFailed(mCommandList->Close());
-			ID3D12CommandList* cmdsLists[] = { mCommandList.Get() };
-			mCommandQueue->ExecuteCommandLists(_countof(cmdsLists), cmdsLists);
-			FlushCommandQueue();
-		}
-
-		for (int i = 0; i < _objectBtns.size(); i++)
-		{
-			SetWindowPos((HWND)_objectBtns[i]->hwnd.get(), NULL, 10, 100 + i * 40, 100, 30, SWP_NOZORDER);
-		}
-
-		for (int i = 0; i < gNumFrameResources; ++i)
-		{
-			mFrameResources[i]->removeObjectBuffer(md3dDevice.Get(), _selectedObject);
-		}
-
-		_selectedObject = -1;
-		showTransform(false);
-
+		deleteObject();
 		return true;
 	}
 	//focus on object
@@ -1220,6 +1191,67 @@ void MyApp::showTransform(bool show)
 	SendMessage((HWND)_lockScaleBtn->hwnd.get(), BM_SETCHECK, mAllRitems[_selectedObject]->lockedScale ? BST_CHECKED : BST_UNCHECKED, 0);
 
 	ShowWindow(_transformPanel, SW_SHOW);
+}
+
+bool MyApp::onKeyDown(UINT key)
+{
+	if (key == VK_DELETE && _selectedObject != -1)
+	{
+		HWND focusedSmth = GetFocus();
+		for (auto& objBtn : _objectBtns)
+		{
+			if ((HWND)objBtn->hwnd.get() == focusedSmth)
+			{
+				deleteObject();
+				return true;
+			}
+		}
+		return false;
+	}
+
+	
+	return false;
+}
+
+void MyApp::deleteObject()
+{
+	std::wstring name = _objectBtns[_selectedObject]->name;
+	_objectLoaded[name]--;
+	_objectBtns.erase(_objectBtns.begin() + _selectedObject);
+	mAllRitems.erase(mAllRitems.begin() + _selectedObject);
+	mOpaqueRitems.erase(mOpaqueRitems.begin() + _selectedObject);
+
+	if (_objectLoaded[name] == 0)
+	{
+		FlushCommandQueue();
+
+		UnloadModel(name);
+		_objectLoaded.erase(name);
+
+		ThrowIfFailed(mDirectCmdListAlloc->Reset());
+		ThrowIfFailed(mCommandList->Reset(mDirectCmdListAlloc.Get(), nullptr));
+
+		mCommandList->ClearRenderTargetView(CurrentBackBufferView(), Colors::LightSteelBlue, 0, nullptr);
+		mCommandList->ClearDepthStencilView(DepthStencilView(), D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
+
+		ThrowIfFailed(mCommandList->Close());
+		ID3D12CommandList* cmdsLists[] = { mCommandList.Get() };
+		mCommandQueue->ExecuteCommandLists(_countof(cmdsLists), cmdsLists);
+		FlushCommandQueue();
+	}
+
+	for (int i = 0; i < _objectBtns.size(); i++)
+	{
+		SetWindowPos((HWND)_objectBtns[i]->hwnd.get(), NULL, 10, 100 + i * 40, 100, 30, SWP_NOZORDER);
+	}
+
+	for (int i = 0; i < gNumFrameResources; ++i)
+	{
+		mFrameResources[i]->removeObjectBuffer(md3dDevice.Get(), _selectedObject);
+	}
+
+	_selectedObject = -1;
+	showTransform(false);
 }
 
 LRESULT CALLBACK TransformPanelProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)

@@ -93,8 +93,11 @@ private:
 	void BuildRenderItems();
 	void CreateControls() override;
 	void DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const std::vector<RenderItem*>& ritems);
+	void buildCamera();
 
 	std::array<const CD3DX12_STATIC_SAMPLER_DESC, 8> GetStaticSamplers();
+
+	void moveCamera(int vector, float coeff);
 
 private:
 	std::vector<std::unique_ptr<FrameResource>> mFrameResources;
@@ -122,7 +125,8 @@ private:
 
 	PassConstants mMainPassCB;
 
-	XMFLOAT3 mEyePos = { 0.0f, 0.0f, 0.0f };
+	XMFLOAT3 mEyePos = { 0.0f, 0.0f, 5.0f };
+	XMFLOAT3 _targetPos = { 0.0f, 0.0f, 0.0f };
 	XMFLOAT4X4 mView = MathHelper::Identity4x4();
 	XMFLOAT4X4 mProj = MathHelper::Identity4x4();
 
@@ -155,10 +159,15 @@ private:
 	LRESULT colorOtherData(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) override;
 	void handlePaint() override;
 	void showTransform(bool show);
+	bool onKeyDown(UINT wParam) override;
+
+	void deleteObject();
 
 	int _newId = 1;
 	int _selectedObject = -1;
 	int _objCBIdx = 0;
+
+	bool _isMouseDown = false;
 };
 
 LRESULT CALLBACK TransformPanelProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
