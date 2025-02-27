@@ -86,6 +86,7 @@ private:
 	void BuildDescriptorHeaps();
 	void BuildShadersAndInputLayout();
 	void BuildShapeGeometry();
+	void buildGridGeometry();
 	void BuildModelGeometry(WCHAR* filename = L"obj\\african_head.obj");
 	void BuildPSOs();
 	void BuildFrameResources();
@@ -93,7 +94,7 @@ private:
 	void BuildRenderItems();
 	void CreateControls() override;
 	void DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const std::vector<RenderItem*>& ritems);
-	void buildCamera();
+	void buildGrid();
 
 	std::array<const CD3DX12_STATIC_SAMPLER_DESC, 8> GetStaticSamplers();
 
@@ -165,7 +166,6 @@ private:
 
 	int _newId = 1;
 	int _selectedObject = -1;
-	int _objCBIdx = 0;
 
 	bool _isMouseDown = false;
 };

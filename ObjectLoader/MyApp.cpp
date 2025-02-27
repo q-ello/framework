@@ -35,10 +35,11 @@ bool MyApp::Initialize()
 	BuildDescriptorHeaps();
 	BuildShadersAndInputLayout();
 	//BuildShapeGeometry();
+	buildGridGeometry();
 	BuildMaterials();
 	BuildModelGeometry();
 	BuildFrameResources();
-	//BuildRenderItems();
+	buildGrid();
 	BuildPSOs();
 
 	// Execute the initialization commands.
@@ -568,6 +569,101 @@ void MyApp::BuildShapeGeometry()
 	mGeometries[geo->Name] = std::move(geo);
 }
 
+void MyApp::buildGridGeometry()
+{
+	GeometryGenerator geoGen;
+	GeometryGenerator::MeshData grid = geoGen.CreateGrid(20.f, 20.f, 1.f);
+
+	SubmeshGeometry gridSubmesh;
+	gridSubmesh.IndexCount = (UINT)grid.Indices32.size();
+	gridSubmesh.StartIndexLocation = 0;
+	gridSubmesh.BaseVertexLocation = 0;
+
+
+	std::vector<Vertex> vertices(grid.Vertices.size());
+
+	for (size_t i = 0; i < grid.Vertices.size(); ++i)
+	{
+		vertices[i].Pos = grid.Vertices[i].Position;
+		vertices[i].Normal = grid.Vertices[i].Normal;
+		vertices[i].TexC = grid.Vertices[i].TexC;
+	}
+
+	std::vector<std::uint16_t> indices = grid.GetIndices16();
+
+	const UINT vbByteSize = (UINT)vertices.size() * sizeof(Vertex);
+	const UINT ibByteSize = (UINT)indices.size() * sizeof(std::uint16_t);
+
+	auto geo = std::make_unique<MeshGeometry>();
+	geo->Name = L"gridGeo";
+
+	ThrowIfFailed(D3DCreateBlob(vbByteSize, &geo->VertexBufferCPU));
+	CopyMemory(geo->VertexBufferCPU->GetBufferPointer(), vertices.data(), vbByteSize);
+
+	ThrowIfFailed(D3DCreateBlob(ibByteSize, &geo->IndexBufferCPU));
+	CopyMemory(geo->IndexBufferCPU->GetBufferPointer(), indices.data(), ibByteSize);
+
+	geo->VertexBufferGPU = d3dUtil::CreateDefaultBuffer(md3dDevice.Get(),
+		mCommandList.Get(), vertices.data(), vbByteSize, geo->VertexBufferUploader);
+
+	geo->IndexBufferGPU = d3dUtil::CreateDefaultBuffer(md3dDevice.Get(),
+		mCommandList.Get(), indices.data(), ibByteSize, geo->IndexBufferUploader);
+
+	geo->VertexByteStride = sizeof(Vertex);
+	geo->VertexBufferByteSize = vbByteSize;
+	geo->IndexFormat = DXGI_FORMAT_R16_UINT;
+	geo->IndexBufferByteSize = ibByteSize;
+
+	geo->DrawArgs[L"grid"] = gridSubmesh;
+
+	mGeometries[geo->Name] = std::move(geo);
+
+	//subgrid
+	/*GeometryGenerator::MeshData subGrid = geoGen.CreateGrid(10.f, 10.f, .1f);
+
+	gridSubmesh.IndexCount = (UINT)subGrid.Indices32.size();
+	gridSubmesh.StartIndexLocation = 0;
+	gridSubmesh.BaseVertexLocation = 0;
+
+	vertices.resize(subGrid.Vertices.size());
+
+	for (size_t i = 0; i < subGrid.Vertices.size(); ++i)
+	{
+		vertices[i].Pos = subGrid.Vertices[i].Position;
+		vertices[i].Normal = subGrid.Vertices[i].Normal;
+		vertices[i].TexC = subGrid.Vertices[i].TexC;
+	}
+
+	indices = subGrid.GetIndices16();
+
+	const UINT vbSubGridByteSize = (UINT)vertices.size() * sizeof(Vertex);
+	const UINT ibSubGridByteSize = (UINT)indices.size() * sizeof(std::uint16_t);
+
+	geo = std::make_unique<MeshGeometry>();
+	geo->Name = L"subGridGeo";
+
+	ThrowIfFailed(D3DCreateBlob(vbSubGridByteSize, &geo->VertexBufferCPU));
+	CopyMemory(geo->VertexBufferCPU->GetBufferPointer(), vertices.data(), vbSubGridByteSize);
+
+	ThrowIfFailed(D3DCreateBlob(ibSubGridByteSize, &geo->IndexBufferCPU));
+	CopyMemory(geo->IndexBufferCPU->GetBufferPointer(), indices.data(), ibSubGridByteSize);
+
+	geo->VertexBufferGPU = d3dUtil::CreateDefaultBuffer(md3dDevice.Get(),
+		mCommandList.Get(), vertices.data(), vbSubGridByteSize, geo->VertexBufferUploader);
+
+	geo->IndexBufferGPU = d3dUtil::CreateDefaultBuffer(md3dDevice.Get(),
+		mCommandList.Get(), indices.data(), ibSubGridByteSize, geo->IndexBufferUploader);
+
+	geo->VertexByteStride = sizeof(Vertex);
+	geo->VertexBufferByteSize = vbSubGridByteSize;
+	geo->IndexFormat = DXGI_FORMAT_R16_UINT;
+	geo->IndexBufferByteSize = ibSubGridByteSize;
+
+	geo->DrawArgs[L"subGrid"] = gridSubmesh;
+
+	mGeometries[geo->Name] = std::move(geo);*/
+}
+
 void MyApp::BuildModelGeometry(WCHAR* filename)
 {
 	//making pretty name
@@ -758,6 +854,48 @@ void MyApp::BuildRenderItems()
 	// All the render items are opaque.
 	for (auto& e : mAllRitems)
 		mOpaqueRitems.push_back(e.get());
+}
+
+void MyApp::buildGrid()
+{
+	//auto boxRitem = std::make_unique<RenderItem>();
+	//boxRitem->ObjCBIndex = 0;
+	////boxRitem->Mat = mMaterials["woodCrate"].get();
+
+	////3rd exercise
+	//boxRitem->Mat = mMaterials["flare"].get();
+
+	//boxRitem->Geo = mGeometries["boxGeo"].get();
+	//boxRitem->PrimitiveType = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+	//boxRitem->IndexCount = boxRitem->Geo->DrawArgs["box"].IndexCount;
+	//boxRitem->StartIndexLocation = boxRitem->Geo->DrawArgs["box"].StartIndexLocation;
+	//boxRitem->BaseVertexLocation = boxRitem->Geo->DrawArgs["box"].BaseVertexLocation;
+
+	////1st exercise
+	////XMStoreFloat4x4(&boxRitem->TexTransform, XMMatrixScaling(3.f, 3.f, 0.f) * XMMatrixTranslation(-.5f, -.5f, .0f));
+
+	//mAllRitems.push_back(std::move(boxRitem));
+
+	//// All the render items are opaque.
+	//for (auto& e : mAllRitems)
+	//	mOpaqueRitems.push_back(e.get());
+
+	auto gridRItem = std::make_unique<RenderItem>();
+	gridRItem->ObjCBIndex = 0;
+	gridRItem->Mat = mMaterials["woodCrate"].get();
+	gridRItem->Geo = mGeometries[L"gridGeo"].get();
+	gridRItem->PrimitiveType = D3D11_PRIMITIVE_TOPOLOGY_LINELIST;
+	gridRItem->IndexCount = gridRItem->Geo->DrawArgs[L"grid"].IndexCount;
+	gridRItem->StartIndexLocation = gridRItem->Geo->DrawArgs[L"grid"].StartIndexLocation;
+	gridRItem->BaseVertexLocation = gridRItem->Geo->DrawArgs[L"grid"].BaseVertexLocation;
+	mOpaqueRitems.push_back(gridRItem.get());
+	mAllRitems.push_back(std::move(gridRItem));
+
+
+	for (int i = 0; i < mFrameResources.size(); ++i)
+	{
+		mFrameResources[i]->addObjectBuffer(md3dDevice.Get());
+	}
 }
 
 void MyApp::CreateControls()
@@ -1044,8 +1182,6 @@ void MyApp::addRenderItem(const std::wstring& itemName)
 	modelRitem->IndexCount = modelRitem->Geo->DrawArgs[itemName].IndexCount;
 	modelRitem->StartIndexLocation = modelRitem->Geo->DrawArgs[itemName].StartIndexLocation;
 	modelRitem->BaseVertexLocation = modelRitem->Geo->DrawArgs[itemName].BaseVertexLocation;
-
-	_objCBIdx++;
 
 	mOpaqueRitems.push_back(modelRitem.get());
 	mAllRitems.push_back(std::move(modelRitem));
