@@ -37,9 +37,9 @@ bool MyApp::Initialize()
 	//BuildShapeGeometry();
 	buildGridGeometry();
 	BuildMaterials();
+	buildGrid();
 	BuildModelGeometry();
 	BuildFrameResources();
-	buildGrid();
 	BuildPSOs();
 
 	// Execute the initialization commands.
@@ -1354,13 +1354,13 @@ void MyApp::deleteObject()
 	std::wstring name = _objectBtns[_selectedObject]->name;
 	_objectLoaded[name]--;
 	_objectBtns.erase(_objectBtns.begin() + _selectedObject);
-	mAllRitems.erase(mAllRitems.begin() + _selectedObject);
-	mOpaqueRitems.erase(mOpaqueRitems.begin() + _selectedObject);
+	mAllRitems.erase(mAllRitems.begin() + _selectedObject + 1);
+	mOpaqueRitems.erase(mOpaqueRitems.begin() + _selectedObject + 1);
+
+	FlushCommandQueue();
 
 	if (_objectLoaded[name] == 0)
 	{
-		FlushCommandQueue();
-
 		UnloadModel(name);
 		_objectLoaded.erase(name);
 
@@ -1383,7 +1383,7 @@ void MyApp::deleteObject()
 
 	for (int i = 0; i < gNumFrameResources; ++i)
 	{
-		mFrameResources[i]->removeObjectBuffer(md3dDevice.Get(), _selectedObject);
+		mFrameResources[i]->removeObjectBuffer(md3dDevice.Get(), _selectedObject + 1);
 	}
 
 	_selectedObject = -1;
