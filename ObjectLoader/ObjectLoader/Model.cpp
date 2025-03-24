@@ -3,92 +3,58 @@
 #include <Windows.h>
 #include <sstream>
 #include <set>
+#include <assimp/Importer.hpp>      // C++ importer interface
+#include <assimp/scene.h>           // Output data structure
+#include <assimp/postprocess.h>     // Post processing flags
+#include <map>
 
 Model::Model(WCHAR* filename)
 {
-	std::ifstream file(filename);
+	// Create an instance of the Importer class
+	Assimp::Importer importer;
+	std::wstring ws(filename);
+	// And have it read the given file with some example postprocessing
+	// Usually - if speed is not the most important aspect for you - you'll
+	// probably to request more postprocessing than we do in this example.
+	const aiScene* scene = importer.ReadFile(std::string(ws.begin(), ws.end()),
+		aiProcess_Triangulate |
+		aiProcess_JoinIdenticalVertices |
+		aiProcess_MakeLeftHanded | 
+		aiProcess_FlipWindingOrder |
+		aiProcess_FlipUVs
+	);
 
-	if (!file.is_open())
-	{
+	// If the import failed, report it
+	if (nullptr == scene) {
 		MessageBox(0, L"Failed to open file", L"", MB_OK);
 		return;
 	}
 
-	Vertex v1;
-	v1.Pos = { 0.0f, 0.0f, 0.0f };
-	_vertices.push_back(v1);
+	aiMesh* mesh = scene->mMeshes[0];
 
-	DirectX::XMFLOAT2 vt1;
-	vt1 = { 0.0f, 0.0f };
-	_texCoords.push_back(vt1);
-
-	DirectX::XMFLOAT3 vn1;
-	vn1 = { 0.0f, 0.0f, 0.0f };
-	_normals.push_back(vn1);
-
-	std::set<int> verticesFilled;
-
-	std::string line;
-	while (std::getline(file, line))
+	for (int i = 0; i < mesh->mNumVertices; i++)
 	{
-		if (line.substr(0, 2) == "v ")
-		{
-			std::istringstream s(line.substr(2));
-			Vertex v;
-			s >> v.Pos.x >> v.Pos.y >> v.Pos.z;
-			_vertices.push_back(v);
-		}
-		else if (line.substr(0, 3) == "vt ")
-		{
-			std::istringstream s(line.substr(4));
-			DirectX::XMFLOAT2 vt;
-			s >> vt.x >> vt.y;
-			_texCoords.push_back(vt);
-		}
-		else if (line.substr(0, 3) == "vn ")
-		{
-			std::istringstream s(line.substr(4));
-			DirectX::XMFLOAT3 vn;
-			s >> vn.x >> vn.y >> vn.z;
-			_normals.push_back(vn);
-		}
-		else if (line.substr(0, 2) == "f ")
-		{
-			std::istringstream s(line.substr(2));
-			unsigned int vt;
-			unsigned int vn;
-			char c;
-
-			unsigned int v[4];
-			for (int i = 0; i < 3; i++)
-			{
-				s >> v[i] >> c >> vt >> c >> vn;
-				_indices.push_back(v[i]);
-				if (verticesFilled.find(v[i]) == verticesFilled.end())
-				{
-					_vertices[v[i]].TexC = _texCoords[vt];
-					_vertices[v[i]].Normal = _normals[vn];
-					verticesFilled.insert(v[i]);
-				}
-			}
-
-			if (s.peek() == ' ')
-			{
-				s >> v[3] >> c >> vt >> c >> vn;
-				_indices.push_back(v[0]);
-				_indices.push_back(v[2]);
-				_indices.push_back(v[3]);
-				if (verticesFilled.find(v[3]) == verticesFilled.end())
-				{
-					_vertices[v[3]].TexC = _texCoords[vt];
-					_vertices[v[3]].Normal = _normals[vn];
-					verticesFilled.insert(v[3]);
-				}
-			}
-		}
+		Vertex v;
+		aiVector3D pos = mesh->mVertices[i];
+		aiVector3D tex = mesh->HasTextureCoords(0) ? mesh->mTextureCoords[0][i] : aiVector3D(0.f, 0.f, 0.f);
+		aiVector3D normal = mesh->mNormals[i];
+		v.Pos = { pos.x, pos.y, pos.z };
+		v.TexC = { tex.x, tex.y };
+		v.Normal = { normal.x, normal.y, normal.z };
+		_vertices.push_back(v);
 	}
 
-	file.close();
+	for (int i = 0; i < mesh->mNumFaces; i++)
+	{
+		if (mesh->mFaces[i].mNumIndices != 3)
+		{
+			continue;
+		}
+		_indices.push_back(mesh->mFaces[i].mIndices[0]);
+		_indices.push_back(mesh->mFaces[i].mIndices[1]);
+		_indices.push_back(mesh->mFaces[i].mIndices[2]);
+	}
+
 }
 
 Model::~Model()

@@ -388,7 +388,8 @@ void MyApp::LoadTextures()
 {
 	auto woodCrateTex = std::make_unique<Texture>();
 	woodCrateTex->Name = L"woodCrateTex";
-	woodCrateTex->Filename = L"../../Textures/WoodCrate01_mipmapped.dds";
+	//woodCrateTex->Filename = L"../../Textures/WoodCrate01_mipmapped.dds";
+	woodCrateTex->Filename = L"../../Textures/african_head_diffuse.dds";
 	ThrowIfFailed(DirectX::CreateDDSTextureFromFile12(md3dDevice.Get(),
 		mCommandList.Get(), woodCrateTex->Filename.c_str(),
 		woodCrateTex->Resource, woodCrateTex->UploadHeap));

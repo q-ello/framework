@@ -134,20 +134,8 @@ float4 PS(VertexOut pin) : SV_Target
         return pin.ColorW;
     }
     
-    //4th exercise
-    float2 uv = pin.TexC - float2(.5f, .5f);
-    uv = float2(uv.x * cos(gTotalTime) + uv.y * sin(gTotalTime),
-                uv.x * sin(gTotalTime) - uv.y * cos(gTotalTime));;
-    uv += float2(.5f, .5f);
+    float4 diffuseAlbedo = gDiffuseMap.Sample(gsamLinearMirror, pin.TexC) * gDiffuseAlbedo;
     
-    //float4 diffuseAlbedo = gDiffuseMap.Sample(gsamLinearMirror, pin.TexC) * gDiffuseAlbedo;
-    
-    //3rd exercise
-    //float4 diffuseAlbedo = gDiffuseMap.Sample(gsamAnisotropicWrap, pin.TexC) * gFlareAlpha.Sample(gsamAnisotropicWrap, pin.TexC) * gDiffuseAlbedo;
-    
-    //4th exercise
-    float4 diffuseAlbedo = gDiffuseMap.Sample(gsamAnisotropicWrap, uv) * gFlareAlpha.Sample(gsamAnisotropicWrap, pin.TexC) * gDiffuseAlbedo;
-
     // Interpolating normal can unnormalize it, so renormalize it.
     pin.NormalW = normalize(pin.NormalW);
 
