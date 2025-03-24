@@ -124,9 +124,9 @@ GeometryGenerator::MeshData GeometryGenerator::CreateGrid(float width, float hei
 	{
 		XMVECTORF32 color = index % 10 == 0 ? Colors::Black : Colors::Gray;
 		v.push_back(Vertex(x, 0.f, -h2, color));
-		i.push_back(v.size() - 1);
+		i.push_back((int)v.size() - 1);
 		v.push_back(Vertex(x, 0.f, h2, color));
-		i.push_back(v.size() - 1);
+		i.push_back((int)v.size() - 1);
 		index++;
 	}
 
@@ -136,9 +136,9 @@ GeometryGenerator::MeshData GeometryGenerator::CreateGrid(float width, float hei
 	{
 		XMVECTORF32 color = index % 10 == 0 ? Colors::Black : Colors::Gray;
 		v.push_back(Vertex(-w2, 0.f, y, color));
-		i.push_back(v.size() - 1);
+		i.push_back((int)v.size() - 1);
 		v.push_back(Vertex(w2, 0.f, y, color));
-		i.push_back(v.size() - 1);
+		i.push_back((int)v.size() - 1);
 		index++;
 	}
 

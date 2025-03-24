@@ -27,7 +27,9 @@ public:
 
 	struct Vertex
 	{
-		Vertex(){}
+		Vertex()
+		{
+		}
         Vertex(
             const DirectX::XMFLOAT3& p, 
             const DirectX::XMFLOAT3& n, 
@@ -62,11 +64,11 @@ public:
 		{
 		}
 
-        DirectX::XMFLOAT3 Position;
-        DirectX::XMFLOAT3 Normal;
-        DirectX::XMFLOAT3 TangentU;
-        DirectX::XMFLOAT2 TexC;
-		DirectX::XMFLOAT4 Color;
+		DirectX::XMFLOAT3 Position = { 0.f, 0.f, 0.f };
+		DirectX::XMFLOAT3 Normal = { 0.f, 0.f, 0.f };
+        DirectX::XMFLOAT3 TangentU = { 0.f, 0.f, 0.f };
+        DirectX::XMFLOAT2 TexC = { 0.f, 0.f };
+		DirectX::XMFLOAT4 Color = { 0.f, 0.f, 0.f, 1.f };
 	};
 
 	struct MeshData

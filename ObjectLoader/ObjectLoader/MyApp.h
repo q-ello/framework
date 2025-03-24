@@ -9,6 +9,7 @@
 #include "FrameResource.h"
 
 #include "Controls.h"
+#include "HeapAllocator.h"
 
 #define DELETE_ID 333
 
@@ -97,8 +98,6 @@ private:
 	void buildGrid();
 
 	std::array<const CD3DX12_STATIC_SAMPLER_DESC, 8> GetStaticSamplers();
-
-	void moveCamera(int vector, float coeff);
 
 private:
 	std::vector<std::unique_ptr<FrameResource>> mFrameResources;

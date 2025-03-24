@@ -4,9 +4,15 @@
 #include <sstream>
 #include <commctrl.h>
 
+#include "imgui/imgui.h"
+#include "imgui/backends/imgui_impl_dx12.h"
+#include "imgui/backends/imgui_impl_win32.h"
+
 #pragma comment(lib, "ComCtl32.lib")
 
 WNDPROC g_OriginalPanelWndProc;
+
+DescriptorHeapAllocator g_heapAlloc;
 
 MyApp::MyApp(HINSTANCE hInstance)
 	: D3DApp(hInstance)
@@ -23,6 +29,30 @@ bool MyApp::Initialize()
 {
 	if (!D3DApp::Initialize())
 		return false;
+
+	// Setup Dear ImGui context
+	IMGUI_CHECKVERSION();
+	ImGui::CreateContext();
+	ImGuiIO& io = ImGui::GetIO();
+	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
+
+	ImGui::StyleColorsDark();
+
+	// Setup Platform/Renderer backends
+	ImGui_ImplWin32_Init(mhMainWnd);
+
+	ImGui_ImplDX12_InitInfo info;
+	info.CommandQueue = mCommandQueue.Get();
+	info.Device = md3dDevice.Get();
+	info.NumFramesInFlight = 2;
+	info.RTVFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
+	info.DSVFormat = DXGI_FORMAT_UNKNOWN;
+	info.SrvDescriptorHeap = mSrvDescriptorHeap.Get();
+	info.SrvDescriptorAllocFn = [](ImGui_ImplDX12_InitInfo*, D3D12_CPU_DESCRIPTOR_HANDLE* out_cpu_handle, D3D12_GPU_DESCRIPTOR_HANDLE* out_gpu_handle) 
+		{ return g_heapAlloc.Alloc(out_cpu_handle, out_gpu_handle); };
+	info.SrvDescriptorFreeFn = [](ImGui_ImplDX12_InitInfo*, D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle, D3D12_GPU_DESCRIPTOR_HANDLE gpu_handle) 
+		{ return g_heapAlloc.Free(cpu_handle, gpu_handle); };
+	ImGui_ImplDX12_Init(&info);
 
 	// Reset the command list to prep for initialization commands.
 	ThrowIfFailed(mCommandList->Reset(mDirectCmdListAlloc.Get(), nullptr));
