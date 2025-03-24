@@ -161,6 +161,7 @@ private:
 	void handlePaint() override;
 	void showTransform(bool show);
 	bool onKeyDown(UINT wParam) override;
+	bool checkForImGui(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) override;
 
 	void deleteObject();
 

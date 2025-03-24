@@ -23,36 +23,16 @@ MyApp::~MyApp()
 {
 	if (md3dDevice != nullptr)
 		FlushCommandQueue();
+
+	ImGui_ImplDX12_Shutdown();
+	ImGui_ImplWin32_Shutdown();
+	ImGui::DestroyContext();
 }
 
 bool MyApp::Initialize()
 {
 	if (!D3DApp::Initialize())
 		return false;
-
-	// Setup Dear ImGui context
-	IMGUI_CHECKVERSION();
-	ImGui::CreateContext();
-	ImGuiIO& io = ImGui::GetIO();
-	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
-
-	ImGui::StyleColorsDark();
-
-	// Setup Platform/Renderer backends
-	ImGui_ImplWin32_Init(mhMainWnd);
-
-	ImGui_ImplDX12_InitInfo info;
-	info.CommandQueue = mCommandQueue.Get();
-	info.Device = md3dDevice.Get();
-	info.NumFramesInFlight = 2;
-	info.RTVFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
-	info.DSVFormat = DXGI_FORMAT_UNKNOWN;
-	info.SrvDescriptorHeap = mSrvDescriptorHeap.Get();
-	info.SrvDescriptorAllocFn = [](ImGui_ImplDX12_InitInfo*, D3D12_CPU_DESCRIPTOR_HANDLE* out_cpu_handle, D3D12_GPU_DESCRIPTOR_HANDLE* out_gpu_handle) 
-		{ return g_heapAlloc.Alloc(out_cpu_handle, out_gpu_handle); };
-	info.SrvDescriptorFreeFn = [](ImGui_ImplDX12_InitInfo*, D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle, D3D12_GPU_DESCRIPTOR_HANDLE gpu_handle) 
-		{ return g_heapAlloc.Free(cpu_handle, gpu_handle); };
-	ImGui_ImplDX12_Init(&info);
 
 	// Reset the command list to prep for initialization commands.
 	ThrowIfFailed(mCommandList->Reset(mDirectCmdListAlloc.Get(), nullptr));
@@ -64,7 +44,6 @@ bool MyApp::Initialize()
 	BuildRootSignature();
 	BuildDescriptorHeaps();
 	BuildShadersAndInputLayout();
-	//BuildShapeGeometry();
 	buildGridGeometry();
 	BuildMaterials();
 	buildGrid();
@@ -77,9 +56,34 @@ bool MyApp::Initialize()
 	ID3D12CommandList* cmdsLists[] = { mCommandList.Get() };
 	mCommandQueue->ExecuteCommandLists(_countof(cmdsLists), cmdsLists);
 
-
 	// Wait until initialization is complete.
 	FlushCommandQueue();
+
+	// Setup Dear ImGui context
+	IMGUI_CHECKVERSION();
+	ImGui::CreateContext();
+	ImGuiIO& io = ImGui::GetIO();
+	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
+
+	ImGui::StyleColorsDark();
+
+	// Setup Platform/Renderer backends
+	ImGui_ImplDX12_InitInfo info;
+	info.CommandQueue = mCommandQueue.Get();
+	info.Device = md3dDevice.Get();
+	info.NumFramesInFlight = gNumFrameResources;
+	info.RTVFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
+	info.DSVFormat = DXGI_FORMAT_UNKNOWN;
+	info.SrvDescriptorHeap = mSrvDescriptorHeap.Get();
+	info.LegacySingleSrvCpuDescriptor = mSrvDescriptorHeap.Get()->GetCPUDescriptorHandleForHeapStart();
+	info.LegacySingleSrvGpuDescriptor = mSrvDescriptorHeap.Get()->GetGPUDescriptorHandleForHeapStart();
+	/*info.SrvDescriptorAllocFn = [](ImGui_ImplDX12_InitInfo*, D3D12_CPU_DESCRIPTOR_HANDLE* out_cpu_handle, D3D12_GPU_DESCRIPTOR_HANDLE* out_gpu_handle)
+		{ return g_heapAlloc.Alloc(out_cpu_handle, out_gpu_handle); };
+	info.SrvDescriptorFreeFn = [](ImGui_ImplDX12_InitInfo*, D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle, D3D12_GPU_DESCRIPTOR_HANDLE gpu_handle)
+		{ return g_heapAlloc.Free(cpu_handle, gpu_handle); };*/
+
+	ImGui_ImplDX12_Init(&info);
+	ImGui_ImplWin32_Init(mhMainWnd);
 
 	RAWINPUTDEVICE rid;
 	rid.usUsagePage = 1;
@@ -184,6 +188,12 @@ void MyApp::Update(const GameTimer& gt)
 
 void MyApp::Draw(const GameTimer& gt)
 {
+	// (Your code process and dispatch Win32 messages)
+	// Start the Dear ImGui frame
+	ImGui_ImplDX12_NewFrame();
+	ImGui_ImplWin32_NewFrame();
+	ImGui::NewFrame();
+
 	auto cmdListAlloc = mCurrFrameResource->CmdListAlloc;
 
 	// Reuse the memory associated with command recording.
@@ -217,6 +227,10 @@ void MyApp::Draw(const GameTimer& gt)
 	mCommandList->SetGraphicsRootConstantBufferView(2, passCB->GetGPUVirtualAddress());
 
 	DrawRenderItems(mCommandList.Get(), mOpaqueRitems);
+
+	// Rendering
+	ImGui::Render();
+	ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), mCommandList.Get());
 
 	// Indicate a state transition on the resource usage.
 	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(CurrentBackBuffer(),
@@ -484,14 +498,11 @@ void MyApp::BuildRootSignature()
 
 void MyApp::BuildDescriptorHeaps()
 {
-	//
-	// Create the SRV heap.
-	//
+	
+	 //Create the SRV heap.
+	
 	D3D12_DESCRIPTOR_HEAP_DESC srvHeapDesc = {};
-	//srvHeapDesc.NumDescriptors = 1;
-
-	//3rd exercise
-	srvHeapDesc.NumDescriptors = 3;
+	srvHeapDesc.NumDescriptors = 1;
 
 	srvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 	srvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
@@ -501,6 +512,7 @@ void MyApp::BuildDescriptorHeaps()
 	// Fill out the heap with actual descriptors.
 	//
 	CD3DX12_CPU_DESCRIPTOR_HANDLE hDescriptor(mSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
+	CD3DX12_GPU_DESCRIPTOR_HANDLE gpuDesc(mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
 
 	auto woodCrateTex = mTextures[L"woodCrateTex"]->Resource;
 
@@ -509,26 +521,12 @@ void MyApp::BuildDescriptorHeaps()
 	srvDesc.Format = woodCrateTex->GetDesc().Format;
 	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
 	srvDesc.Texture2D.MostDetailedMip = 0;
-	//srvDesc.Texture2D.MipLevels = woodCrateTex->GetDesc().MipLevels;
-
-	//2nd exercise
-	srvDesc.Texture2D.MipLevels = 4;
+	srvDesc.Texture2D.MipLevels = woodCrateTex->GetDesc().MipLevels;
 
 	srvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
 
 	md3dDevice->CreateShaderResourceView(woodCrateTex.Get(), &srvDesc, hDescriptor);
-
-	//3rd exercise
-	auto flareTex = mTextures[L"flareTex"]->Resource;
-	hDescriptor.Offset(1, mCbvSrvDescriptorSize);
-	srvDesc.Format = flareTex->GetDesc().Format;
-	srvDesc.Texture2D.MipLevels = flareTex->GetDesc().MipLevels;
-	md3dDevice->CreateShaderResourceView(flareTex.Get(), &srvDesc, hDescriptor);
-	auto flareAlphaTex = mTextures[L"flareAlphaTex"]->Resource;
-	hDescriptor.Offset(1, mCbvSrvDescriptorSize);
-	srvDesc.Format = flareAlphaTex->GetDesc().Format;
-	srvDesc.Texture2D.MipLevels = flareAlphaTex->GetDesc().MipLevels;
-	md3dDevice->CreateShaderResourceView(flareAlphaTex.Get(), &srvDesc, hDescriptor);
+	g_heapAlloc.Alloc(&hDescriptor, &gpuDesc);
 }
 
 void MyApp::BuildShadersAndInputLayout()
@@ -920,13 +918,13 @@ void MyApp::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const std::vecto
 		cmdList->IASetIndexBuffer(&ri->Geo->IndexBufferView());
 		cmdList->IASetPrimitiveTopology(ri->PrimitiveType);
 
-		CD3DX12_GPU_DESCRIPTOR_HANDLE tex(mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
-		tex.Offset(ri->Mat->DiffuseSrvHeapIndex, mCbvSrvDescriptorSize);
+		//CD3DX12_GPU_DESCRIPTOR_HANDLE tex(mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+		//tex.Offset(ri->Mat->DiffuseSrvHeapIndex, mCbvSrvDescriptorSize);
 
 		D3D12_GPU_VIRTUAL_ADDRESS objCBAddress = objectCB->GetGPUVirtualAddress() + ri->ObjCBIndex * objCBByteSize;
 		D3D12_GPU_VIRTUAL_ADDRESS matCBAddress = matCB->GetGPUVirtualAddress() + ri->Mat->MatCBIndex * matCBByteSize;
 
-		cmdList->SetGraphicsRootDescriptorTable(0, tex);
+		//cmdList->SetGraphicsRootDescriptorTable(0, tex);
 		cmdList->SetGraphicsRootConstantBufferView(1, objCBAddress);
 		cmdList->SetGraphicsRootConstantBufferView(3, matCBAddress);
 
@@ -1268,6 +1266,7 @@ bool MyApp::onKeyDown(UINT key)
 	return false;
 }
 
+
 void MyApp::deleteObject()
 {
 	std::wstring name = _objectBtns[_selectedObject]->name;
@@ -1407,4 +1406,12 @@ LRESULT CALLBACK EditProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam,
 	}
 	
 	return DefSubclassProc(hwnd, msg, wParam, lParam);
+}
+
+//some wndproc stuff
+extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+
+bool MyApp::checkForImGui(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
+{
+	return ImGui_ImplWin32_WndProcHandler(hwnd, msg, wParam, lParam);
 }

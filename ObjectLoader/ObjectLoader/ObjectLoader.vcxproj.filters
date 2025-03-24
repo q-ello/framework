@@ -31,6 +31,9 @@
     <Filter Include="Source Files\imgui\backends">
       <UniqueIdentifier>{29f9065e-bc78-4f37-99c4-350fb651501c}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Resource Files\imgui">
+      <UniqueIdentifier>{ec7d0f5e-25d3-4e16-abbc-9a64aaae9bd5}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="FrameResource.h">
@@ -155,5 +158,28 @@
     <ClCompile Include="imgui\backends\imgui_impl_dx12.cpp">
       <Filter>Source Files\imgui\backends</Filter>
     </ClCompile>
+    <ClCompile Include="imgui\misc\fonts\binary_to_compressed_c.cpp">
+      <Filter>Resource Files\imgui</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <Font Include="imgui\misc\fonts\DroidSans.ttf">
+      <Filter>Resource Files\imgui</Filter>
+    </Font>
+    <Font Include="imgui\misc\fonts\Karla-Regular.ttf">
+      <Filter>Resource Files\imgui</Filter>
+    </Font>
+    <Font Include="imgui\misc\fonts\ProggyClean.ttf">
+      <Filter>Resource Files\imgui</Filter>
+    </Font>
+    <Font Include="imgui\misc\fonts\ProggyTiny.ttf">
+      <Filter>Resource Files\imgui</Filter>
+    </Font>
+    <Font Include="imgui\misc\fonts\Roboto-Medium.ttf">
+      <Filter>Resource Files\imgui</Filter>
+    </Font>
+    <Font Include="imgui\misc\fonts\Cousine-Regular.ttf">
+      <Filter>Resource Files\imgui</Filter>
+    </Font>
   </ItemGroup>
 </Project>

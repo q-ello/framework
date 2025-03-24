@@ -245,6 +245,10 @@ void D3DApp::OnResizing()
  
 LRESULT D3DApp::MsgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
+	if (checkForImGui(hwnd, msg, wParam, lParam))
+	{
+		return true;
+	}
 	switch (msg)
 	{
 		// WM_ACTIVATE is sent when the window is activated or deactivated.  

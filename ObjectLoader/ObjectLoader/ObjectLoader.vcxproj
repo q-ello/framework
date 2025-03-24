@@ -174,9 +174,18 @@
     <ClCompile Include="imgui\imgui_tables.cpp" />
     <ClCompile Include="imgui\imgui_widgets.cpp" />
     <ClCompile Include="imgui\misc\cpp\imgui_stdlib.cpp" />
+    <ClCompile Include="imgui\misc\fonts\binary_to_compressed_c.cpp" />
     <ClCompile Include="Model.cpp" />
     <ClCompile Include="MyApp.cpp" />
     <ClCompile Include="ObjectLoader.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <Font Include="imgui\misc\fonts\Cousine-Regular.ttf" />
+    <Font Include="imgui\misc\fonts\DroidSans.ttf" />
+    <Font Include="imgui\misc\fonts\Karla-Regular.ttf" />
+    <Font Include="imgui\misc\fonts\ProggyClean.ttf" />
+    <Font Include="imgui\misc\fonts\ProggyTiny.ttf" />
+    <Font Include="imgui\misc\fonts\Roboto-Medium.ttf" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
