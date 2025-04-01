@@ -9,7 +9,6 @@
 #include "FrameResource.h"
 
 #include "Controls.h"
-#include "HeapAllocator.h"
 
 #define DELETE_ID 333
 
@@ -26,6 +25,8 @@ struct RenderItem
 	// relative to the world space, which defines the position, orientation,
 	// and scale of the object in the world.
 	XMFLOAT4X4 World = MathHelper::Identity4x4();
+
+	std::string Name;
 
 	std::vector<std::vector<float>> transform = { {0., 0., 0.}, {0., 0., 0.}, { 1., 1., 1. } };
 	bool lockedScale = true;
@@ -96,6 +97,8 @@ private:
 	void CreateControls() override;
 	void DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const std::vector<RenderItem*>& ritems);
 	void buildGrid();
+	void DrawInterface();
+	void AddNewObject();
 
 	std::array<const CD3DX12_STATIC_SAMPLER_DESC, 8> GetStaticSamplers();
 
