@@ -133,9 +133,6 @@ protected:
 	int mClientWidth = 1000;
 	int mClientHeight = 600;
 
-    HWND _renderWindow;
-	D3D12_RECT _renderWindowRect;
-
     virtual void handleRightClickControls(HWND hCtrl, int x, int y) {};
     virtual void drawUI(LPDRAWITEMSTRUCT lpdis) {};
     virtual LRESULT colorOtherData(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) { return DefWindowProc(hwnd, msg, wParam, lParam); };

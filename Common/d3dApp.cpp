@@ -27,8 +27,6 @@ D3DApp::D3DApp(HINSTANCE hInstance)
 :	mhAppInst(hInstance)
 ,	mScissorRect{1, 1, 1, 1}
 ,	mScreenViewport{ 0, 0, 0, 0, 0, 1 }
-, _renderWindow(nullptr)
-, _renderWindowRect{0, 0, 0, 0}
 {
     // Only one D3DApp can be constructed.
     assert(mApp == nullptr);
@@ -53,7 +51,7 @@ HWND D3DApp::MainWnd()const
 
 float D3DApp::AspectRatio()const
 {
-	return static_cast<float>(_renderWindowRect.right) / (_renderWindowRect.bottom);
+	return static_cast<float>(mClientWidth) / (mClientHeight);
 }
 
 bool D3DApp::Get4xMsaaState()const
@@ -496,7 +494,7 @@ bool D3DApp::InitMainWindow()
 	ShowWindow(mhMainWnd, SW_SHOW);
 	UpdateWindow(mhMainWnd);
 
-	CreateControls();
+	//CreateControls();
 
 	return true;
 }
@@ -608,7 +606,7 @@ void D3DApp::CreateSwapChain()
     sd.SampleDesc.Quality = m4xMsaaState ? (m4xMsaaQuality - 1) : 0;
     sd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
     sd.BufferCount = SwapChainBufferCount;
-    sd.OutputWindow = _renderWindow;
+    sd.OutputWindow = mhMainWnd;
     sd.Windowed = true;
 	sd.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
     sd.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
@@ -771,7 +769,5 @@ void D3DApp::LogOutputDisplayModes(IDXGIOutput* output, DXGI_FORMAT format)
 
 void D3DApp::CreateControls()
 {
-	_renderWindow = mhMainWnd;
-	_renderWindowRect = { 0, 0, mClientWidth, mClientHeight };
 }
 

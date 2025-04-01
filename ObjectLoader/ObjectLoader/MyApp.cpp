@@ -14,6 +14,95 @@ WNDPROC g_OriginalPanelWndProc;
 
 DescriptorHeapAllocator g_heapAlloc;
 
+static void ShowExampleMenuFile()
+{
+	ImGui::MenuItem("(demo menu)", NULL, false, false);
+	if (ImGui::MenuItem("New")) {}
+	if (ImGui::MenuItem("Open", "Ctrl+O")) {}
+	if (ImGui::BeginMenu("Open Recent"))
+	{
+		ImGui::MenuItem("fish_hat.c");
+		ImGui::MenuItem("fish_hat.inl");
+		ImGui::MenuItem("fish_hat.h");
+		if (ImGui::BeginMenu("More.."))
+		{
+			ImGui::MenuItem("Hello");
+			ImGui::MenuItem("Sailor");
+			if (ImGui::BeginMenu("Recurse.."))
+			{
+				ShowExampleMenuFile();
+				ImGui::EndMenu();
+			}
+			ImGui::EndMenu();
+		}
+		ImGui::EndMenu();
+	}
+	if (ImGui::MenuItem("Save", "Ctrl+S")) {}
+	if (ImGui::MenuItem("Save As..")) {}
+
+	ImGui::Separator();
+	if (ImGui::BeginMenu("Options"))
+	{
+		static bool enabled = true;
+		ImGui::MenuItem("Enabled", "", &enabled);
+		ImGui::BeginChild("child", ImVec2(0, 60), ImGuiChildFlags_Borders);
+		for (int i = 0; i < 10; i++)
+			ImGui::Text("Scrolling Text %d", i);
+		ImGui::EndChild();
+		static float f = 0.5f;
+		static int n = 0;
+		ImGui::SliderFloat("Value", &f, 0.0f, 1.0f);
+		ImGui::InputFloat("Input", &f, 0.1f);
+		ImGui::Combo("Combo", &n, "Yes\0No\0Maybe\0\0");
+		ImGui::EndMenu();
+	}
+
+	if (ImGui::BeginMenu("Colors"))
+	{
+		float sz = ImGui::GetTextLineHeight();
+		for (int i = 0; i < ImGuiCol_COUNT; i++)
+		{
+			const char* name = ImGui::GetStyleColorName((ImGuiCol)i);
+			ImVec2 p = ImGui::GetCursorScreenPos();
+			ImGui::GetWindowDrawList()->AddRectFilled(p, ImVec2(p.x + sz, p.y + sz), ImGui::GetColorU32((ImGuiCol)i));
+			ImGui::Dummy(ImVec2(sz, sz));
+			ImGui::SameLine();
+			ImGui::MenuItem(name);
+		}
+		ImGui::EndMenu();
+	}
+
+	// Here we demonstrate appending again to the "Options" menu (which we already created above)
+	// Of course in this demo it is a little bit silly that this function calls BeginMenu("Options") twice.
+	// In a real code-base using it would make senses to use this feature from very different code locations.
+	if (ImGui::BeginMenu("Options")) // <-- Append!
+	{
+		static bool b = true;
+		ImGui::Checkbox("SomeOption", &b);
+		ImGui::EndMenu();
+	}
+
+	if (ImGui::BeginMenu("Disabled", false)) // Disabled
+	{
+		IM_ASSERT(0);
+	}
+	if (ImGui::MenuItem("Checked", NULL, true)) {}
+	ImGui::Separator();
+	if (ImGui::MenuItem("Quit", "Alt+F4")) {}
+}
+
+static void HelpMarker(const char* desc)
+{
+	ImGui::TextDisabled("(?)");
+	if (ImGui::BeginItemTooltip())
+	{
+		ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+		ImGui::TextUnformatted(desc);
+		ImGui::PopTextWrapPos();
+		ImGui::EndTooltip();
+	}
+}
+
 MyApp::MyApp(HINSTANCE hInstance)
 	: D3DApp(hInstance)
 {
@@ -142,7 +231,6 @@ void MyApp::OnResize()
 {
 	//resizing the render window
 	resizeRenderWindow();
-	SetWindowPos(_renderWindow, NULL, _renderWindowRect.left, _renderWindowRect.top, _renderWindowRect.right, _renderWindowRect.bottom, SWP_NOZORDER);
 	OnResizing();
 	D3DApp::OnResize();
 
@@ -193,6 +281,33 @@ void MyApp::Draw(const GameTimer& gt)
 	ImGui_ImplDX12_NewFrame();
 	ImGui_ImplWin32_NewFrame();
 	ImGui::NewFrame();
+
+	ImGuiIO& io = ImGui::GetIO();
+	if (io.ConfigFlags & ImGuiConfigFlags_DockingEnable) {
+		ImGuiID dockspace_id = ImGui::GetID("MyDockspace");
+		ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), dockspace_flags);
+
+		static auto first_time = true;
+		if (first_time)
+		{
+			first_time = false;
+			// Clear out existing layout
+			ImGui::DockBuilderRemoveNode(dockspace_id);
+			// Add empty node
+			ImGui::DockBuilderAddNode(dockspace_id, dockspace_flags | ImGuiDockNodeFlags_DockSpace);
+			// Main node should cover entire window
+			ImGui::DockBuilderSetNodeSize(dockspace_id, ImGui::GetWindowSize());
+			// get id of main dock space area
+			ImGuiID dockspace_main_id = dockspace_id;
+			// Create a dock node for the right docked window
+			ImGuiID right = ImGui::DockBuilderSplitNode(dockspace_main_id, ImGuiDir_Right, 0.25f, nullptr, &dockspace_main_id);
+
+			ImGui::DockBuilderDockWindow("Content One", dockspace_main_id);
+			ImGui::DockBuilderDockWindow("Content Two", dockspace_main_id);
+			ImGui::DockBuilderDockWindow("Side Bar", right);
+			ImGui::DockBuilderFinish(dockspace_id);
+		}
+	}
 
 	auto cmdListAlloc = mCurrFrameResource->CmdListAlloc;
 
@@ -260,17 +375,7 @@ void MyApp::OnMouseDown(WPARAM btnState, int x, int y)
 {
 	mLastMousePos.x = x;
 	mLastMousePos.y = y;
-
-	GetWindowRect(_renderWindow, &_renderWindowRect); // Get render window position
-	MapWindowPoints(HWND_DESKTOP, mhMainWnd, (LPPOINT)&_renderWindowRect, 2);
-
-	if (mLastMousePos.x >= _renderWindowRect.left && mLastMousePos.x <= _renderWindowRect.right &&
-		mLastMousePos.y >= _renderWindowRect.top && mLastMousePos.y <= _renderWindowRect.bottom)
-	{
-		// Process button click only if inside render window
-		SetCapture(mhMainWnd);
-	}
-
+	SetCapture(mhMainWnd);
 }
 
 void MyApp::OnMouseUp(WPARAM btnState, int x, int y)
@@ -822,14 +927,6 @@ void MyApp::buildGrid()
 void MyApp::CreateControls()
 {
 	// Create the controls
-	_renderWindow = CreateWindowEx(
-		0, L"STATIC", L"", WS_CHILD | WS_VISIBLE,
-		120, 0, mClientWidth - 400, mClientHeight, mhMainWnd, NULL, (HINSTANCE)GetWindowLongPtr(mhMainWnd, GWLP_HINSTANCE), NULL);
-	resizeRenderWindow();
-
-	ShowWindow(_renderWindow, SW_SHOW);
-	UpdateWindow(_renderWindow);
-
 	_addNewBtn = std::make_shared<Control>(CreateWindow(
 		L"BUTTON", L"Add New", WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON,
 		10, 50, 100, 30, mhMainWnd, (HMENU)_newId, (HINSTANCE)GetWindowLongPtr(mhMainWnd, GWLP_HINSTANCE), NULL),
@@ -1007,7 +1104,6 @@ std::array<const CD3DX12_STATIC_SAMPLER_DESC, 8> MyApp::GetStaticSamplers()
 
 void MyApp::resizeRenderWindow()
 {
-	_renderWindowRect = { 120, 0, mClientWidth - 400, mClientHeight };
 }
 
 bool MyApp::handleControls(WPARAM wParam)
@@ -1113,7 +1209,7 @@ void MyApp::addRenderItem(const std::wstring& itemName)
 
 void MyApp::addObjectControl(const std::wstring& name)
 {
-	std::wstring counter;
+	/*std::wstring counter;
 	if (_objectCounters.find(name) != _objectCounters.end())
 	{
 		_objectCounters[name]++;
@@ -1149,7 +1245,7 @@ void MyApp::addObjectControl(const std::wstring& name)
 	showTransform(true);
 
 
-	_newId++;
+	_newId++;*/
 }
 
 void MyApp::handleRightClickControls(HWND hwnd, int x, int y)
