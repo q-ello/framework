@@ -12,8 +12,6 @@
 
 WNDPROC g_OriginalPanelWndProc;
 
-DescriptorHeapAllocator g_heapAlloc;
-
 static void ShowExampleMenuFile()
 {
 	ImGui::MenuItem("(demo menu)", NULL, false, false);
@@ -282,32 +280,7 @@ void MyApp::Draw(const GameTimer& gt)
 	ImGui_ImplWin32_NewFrame();
 	ImGui::NewFrame();
 
-	ImGuiIO& io = ImGui::GetIO();
-	if (io.ConfigFlags & ImGuiConfigFlags_DockingEnable) {
-		ImGuiID dockspace_id = ImGui::GetID("MyDockspace");
-		ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), dockspace_flags);
-
-		static auto first_time = true;
-		if (first_time)
-		{
-			first_time = false;
-			// Clear out existing layout
-			ImGui::DockBuilderRemoveNode(dockspace_id);
-			// Add empty node
-			ImGui::DockBuilderAddNode(dockspace_id, dockspace_flags | ImGuiDockNodeFlags_DockSpace);
-			// Main node should cover entire window
-			ImGui::DockBuilderSetNodeSize(dockspace_id, ImGui::GetWindowSize());
-			// get id of main dock space area
-			ImGuiID dockspace_main_id = dockspace_id;
-			// Create a dock node for the right docked window
-			ImGuiID right = ImGui::DockBuilderSplitNode(dockspace_main_id, ImGuiDir_Right, 0.25f, nullptr, &dockspace_main_id);
-
-			ImGui::DockBuilderDockWindow("Content One", dockspace_main_id);
-			ImGui::DockBuilderDockWindow("Content Two", dockspace_main_id);
-			ImGui::DockBuilderDockWindow("Side Bar", right);
-			ImGui::DockBuilderFinish(dockspace_id);
-		}
-	}
+	DrawInterface();
 
 	auto cmdListAlloc = mCurrFrameResource->CmdListAlloc;
 
@@ -385,7 +358,8 @@ void MyApp::OnMouseUp(WPARAM btnState, int x, int y)
 
 void MyApp::OnMouseMove(WPARAM btnState, int x, int y)
 {
-	if ((btnState & MK_LBUTTON) != 0 && GetCapture() == mhMainWnd)
+	ImGuiIO& io = ImGui::GetIO();
+	if ((btnState & MK_LBUTTON) != 0 && !io.WantCaptureMouse)
 	{
 		// Make each pixel correspond to a quarter of a degree.
 		float dx = XMConvertToRadians(0.25f * static_cast<float>(x - mLastMousePos.x));
@@ -398,7 +372,7 @@ void MyApp::OnMouseMove(WPARAM btnState, int x, int y)
 		// Restrict the angle mPhi.
 		mPhi = MathHelper::Clamp(mPhi, 0.1f, MathHelper::Pi - 0.1f);
 	}
-	else if ((btnState & MK_RBUTTON) != 0 && GetCapture() == mhMainWnd)
+	else if ((btnState & MK_RBUTTON) != 0 && !io.WantCaptureMouse)
 	{
 		// Make each pixel correspond to 0.2 unit in the scene.
 		float dx = 0.05f * static_cast<float>(x - mLastMousePos.x);
@@ -631,7 +605,6 @@ void MyApp::BuildDescriptorHeaps()
 	srvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
 
 	md3dDevice->CreateShaderResourceView(woodCrateTex.Get(), &srvDesc, hDescriptor);
-	g_heapAlloc.Alloc(&hDescriptor, &gpuDesc);
 }
 
 void MyApp::BuildShadersAndInputLayout()
@@ -924,6 +897,81 @@ void MyApp::buildGrid()
 	}
 }
 
+void MyApp::DrawInterface()
+{
+	static float f = 0.0f;
+	static int counter = 0;
+
+	ImGui::Begin(" ");                          // Create a window called "Hello, world!" and append into it.
+	
+	if (ImGui::CollapsingHeader("Opaque Objects"))
+	{
+		if (ImGui::Button("Add New"))
+		{
+			AddNewObject();
+		}
+		ImGui::Spacing();
+		for (int i = 0; i < mOpaqueRitems.size() - 1; i++)
+		{
+			ImGui::PushID(i);
+			if (ImGui::Button(mOpaqueRitems[i+1]->Name.c_str()))
+			{
+				_selectedObject = i - 1;
+			}
+			ImGui::PopID();
+		}
+	}
+
+	ImGui::SliderFloat("float", &f, 0.0f, 1.0f);            // Edit 1 float using a slider from 0.0f to 1.0f
+
+	if (ImGui::Button("Button"))                            // Buttons return true when clicked (most widgets return true when edited/activated)
+		counter++;
+	ImGui::SameLine();
+	ImGui::Text("counter = %d", counter);
+
+	ImGui::End();
+}
+
+void MyApp::AddNewObject()
+{
+	IFileOpenDialog* pFileOpen;
+
+	// Create the FileOpenDialog object.
+	ThrowIfFailed(CoCreateInstance(CLSID_FileOpenDialog, NULL, CLSCTX_ALL, IID_IFileOpenDialog, reinterpret_cast<void**>(&pFileOpen)));
+
+	//filter only for .obj files
+	COMDLG_FILTERSPEC rgSpec[] = { L"Wavefront Object", L"*.obj" };
+	pFileOpen->SetFileTypes(1, rgSpec);
+
+	// Show the Open dialog box.
+	HRESULT hr = pFileOpen->Show(NULL);
+	if (FAILED(hr))
+	{
+		if (hr == HRESULT_FROM_WIN32(ERROR_CANCELLED))
+		{
+			// User closed the dialog manually, just return safely
+			return;
+		}
+		else
+		{
+			// Handle other errors
+			ThrowIfFailed(hr);
+		}
+	}
+
+	// Get the file name from the dialog box.
+	IShellItem* pItem;
+	ThrowIfFailed(pFileOpen->GetResult(&pItem));
+	PWSTR pszFilePath;
+	ThrowIfFailed(pItem->GetDisplayName(SIGDN_FILESYSPATH, &pszFilePath));
+
+	BuildModelGeometry(pszFilePath);
+
+	CoTaskMemFree(pszFilePath);
+	pItem->Release();
+	pFileOpen->Release();
+}
+
 void MyApp::CreateControls()
 {
 	// Create the controls
@@ -1109,48 +1157,6 @@ void MyApp::resizeRenderWindow()
 bool MyApp::handleControls(WPARAM wParam)
 {
 	int controlId = LOWORD(wParam);
-	//add new object
-	if (controlId == _addNewBtn->id)
-	{
-		IFileOpenDialog* pFileOpen;
-
-		// Create the FileOpenDialog object.
-		ThrowIfFailed(CoCreateInstance(CLSID_FileOpenDialog, NULL, CLSCTX_ALL, IID_IFileOpenDialog, reinterpret_cast<void**>(&pFileOpen)));
-
-		//filter only for .obj files
-		COMDLG_FILTERSPEC rgSpec[] = { L"Wavefront Object", L"*.obj" };
-		pFileOpen->SetFileTypes(1, rgSpec);
-
-		// Show the Open dialog box.
-		HRESULT hr = pFileOpen->Show(NULL);
-		if (FAILED(hr))
-		{
-			if (hr == HRESULT_FROM_WIN32(ERROR_CANCELLED))
-			{
-				// User closed the dialog manually, just return safely
-				return true;
-			}
-			else
-			{
-				// Handle other errors
-				ThrowIfFailed(hr);
-			}
-		}
-
-		// Get the file name from the dialog box.
-		IShellItem* pItem;
-		ThrowIfFailed(pFileOpen->GetResult(&pItem));
-		PWSTR pszFilePath;
-		ThrowIfFailed(pItem->GetDisplayName(SIGDN_FILESYSPATH, &pszFilePath));
-
-		BuildModelGeometry(pszFilePath);
-
-		CoTaskMemFree(pszFilePath);
-		pItem->Release();
-		pFileOpen->Release();
-
-		return true;
-	}
 	//delete object
 	if (controlId == DELETE_ID)
 	{
@@ -1187,7 +1193,10 @@ void MyApp::UnloadModel(const std::wstring& modelName)
 
 void MyApp::addRenderItem(const std::wstring& itemName)
 {
+	std::string name(itemName.begin(), itemName.end());
+
 	auto modelRitem = std::make_unique<RenderItem>();
+	modelRitem->Name = name;
 	modelRitem->ObjCBIndex = 0;
 	modelRitem->Mat = mMaterials["woodCrate"].get();
 	modelRitem->Geo = mGeometries[itemName].get();
@@ -1198,8 +1207,6 @@ void MyApp::addRenderItem(const std::wstring& itemName)
 
 	mOpaqueRitems.push_back(modelRitem.get());
 	mAllRitems.push_back(std::move(modelRitem));
-
-	addObjectControl(itemName);
 
 	for (int i = 0; i < mFrameResources.size(); ++i)
 	{
