@@ -284,6 +284,15 @@ struct Texture
 	// Unique material name for lookup.
 	std::wstring Name;
 
+	inline void SetName(const std::wstring& name)
+	{
+        Name = name;
+		if (Resource != nullptr)
+		{
+			d3dSetDebugName(Resource.Get(), std::string(Name.begin(), Name.end()).c_str());
+		}
+	}
+
 	std::wstring Filename;
 
 	Microsoft::WRL::ComPtr<ID3D12Resource> Resource = nullptr;

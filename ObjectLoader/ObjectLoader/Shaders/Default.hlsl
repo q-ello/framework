@@ -43,7 +43,6 @@ cbuffer cbPerObject : register(b0)
 {
     float4x4 gWorld;
     float4x4 gTexTransform;
-    int useColor;
 };
 
 // Constant data that varies per material.
@@ -109,11 +108,7 @@ VertexOut VS(VertexIn vin)
     vout.PosH = mul(posW, gViewProj);
     
     vout.ColorW = vin.ColorL;
-    
-    if (useColor == 1)
-    {
-        return vout;
-    }
+   
     
     // Assumes nonuniform scaling; otherwise, need to use inverse-transpose of world matrix.
     vout.NormalW = mul(vin.NormalL, (float3x3) gWorld);
@@ -127,13 +122,13 @@ VertexOut VS(VertexIn vin)
 }
 
 
-float4 PS(VertexOut pin) : SV_Target
+float4 PSGrid(VertexOut pin) : SV_Target
 {
-    if (useColor)
-    {
-        return pin.ColorW;
-    }
-    
+    return pin.ColorW;
+}
+
+float4 PS(VertexOut pin) : SV_Target
+{    
     float4 diffuseAlbedo = gDiffuseMap.Sample(gsamLinearMirror, pin.TexC) * gDiffuseAlbedo;
     
     // Interpolating normal can unnormalize it, so renormalize it.

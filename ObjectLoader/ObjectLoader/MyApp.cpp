@@ -44,8 +44,8 @@ bool MyApp::Initialize()
 	BuildShadersAndInputLayout();
 	buildGridGeometry();
 	BuildMaterials();
-	buildGrid();
 	BuildModelGeometry();
+	buildGrid();
 	BuildFrameResources();
 	BuildPSOs();
 
@@ -143,7 +143,7 @@ void MyApp::Draw(const GameTimer& gt)
 
 	// A command list can be reset after it has been added to the command queue via ExecuteCommandList.
 	// Reusing the command list reuses memory.
-	ThrowIfFailed(mCommandList->Reset(cmdListAlloc.Get(), mOpaquePSO.Get()));
+	ThrowIfFailed(mCommandList->Reset(cmdListAlloc.Get(), nullptr));
 
 	mCommandList->RSSetViewports(1, &mScreenViewport);
 	mCommandList->RSSetScissorRects(1, &mScissorRect);
@@ -167,7 +167,11 @@ void MyApp::Draw(const GameTimer& gt)
 	auto passCB = mCurrFrameResource->PassCB->Resource();
 	mCommandList->SetGraphicsRootConstantBufferView(2, passCB->GetGPUVirtualAddress());
 
-	DrawRenderItems(mCommandList.Get(), mOpaqueRitems);
+	mCommandList->SetPipelineState(_psos[PSOType::Grid].Get());
+	DrawRenderItems(mCommandList.Get(), _renderItems[PSOType::Grid]);
+
+	mCommandList->SetPipelineState(_psos[PSOType::Opaque].Get());
+	DrawRenderItems(mCommandList.Get(), _renderItems[PSOType::Opaque]);
 
 	descriptorHeaps[0] = _imGuiDescriptorHeap.Get();
 	mCommandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
@@ -273,31 +277,30 @@ void MyApp::AnimateMaterials(const GameTimer& gt)
 void MyApp::UpdateObjectCBs(const GameTimer& gt)
 {
 	auto& currObjectsCB = mCurrFrameResource->ObjectsCB;
-	for (int i = 0; i < mAllRitems.size(); i++)
+	for (int i = 0; i < _allRenderItems.size(); i++)
 	{
 		// Only update the cbuffer data if the constants have changed.  
 		// This needs to be tracked per frame resource.
-		if (mAllRitems[i]->NumFramesDirty > 0)
+		if (_allRenderItems[i]->NumFramesDirty > 0)
 		{
-			XMMATRIX scale = XMMatrixScaling(mAllRitems[i]->transform[2][0], mAllRitems[i]->transform[2][1], mAllRitems[i]->transform[2][2]);
-			XMMATRIX rotation = XMMatrixRotationRollPitchYaw(mAllRitems[i]->transform[1][0] * XM_PI / 180., 
-				mAllRitems[i]->transform[1][1] * XM_PI / 180.,
-				mAllRitems[i]->transform[1][2] * XM_PI / 180.);
-			XMMATRIX translation = XMMatrixTranslation(mAllRitems[i]->transform[0][0], mAllRitems[i]->transform[0][1], mAllRitems[i]->transform[0][2]);
+			XMMATRIX scale = XMMatrixScaling(_allRenderItems[i]->transform[2][0], _allRenderItems[i]->transform[2][1], _allRenderItems[i]->transform[2][2]);
+			XMMATRIX rotation = XMMatrixRotationRollPitchYaw(_allRenderItems[i]->transform[1][0] * XM_PI / 180.,
+				_allRenderItems[i]->transform[1][1] * XM_PI / 180.,
+				_allRenderItems[i]->transform[1][2] * XM_PI / 180.);
+			XMMATRIX translation = XMMatrixTranslation(_allRenderItems[i]->transform[0][0], _allRenderItems[i]->transform[0][1], _allRenderItems[i]->transform[0][2]);
 
 			XMMATRIX world = scale * rotation * translation;
-			XMStoreFloat4x4(&mAllRitems[i]->World, world);
-			XMMATRIX texTransform = XMLoadFloat4x4(&mAllRitems[i]->TexTransform);
+			XMStoreFloat4x4(&_allRenderItems[i]->World, world);
+			XMMATRIX texTransform = XMLoadFloat4x4(&_allRenderItems[i]->TexTransform);
 
 			ObjectConstants objConstants;
 			XMStoreFloat4x4(&objConstants.World, XMMatrixTranspose(world));
 			XMStoreFloat4x4(&objConstants.TexTransform, XMMatrixTranspose(texTransform));
-			objConstants.useColor = i == 0;
 
-			currObjectsCB[i].get()->CopyData(mAllRitems[i]->ObjCBIndex, objConstants);
+			currObjectsCB[i].get()->CopyData(_allRenderItems[i]->ObjCBIndex, objConstants);
 
 			// Next FrameResource need to be updated too.
-			mAllRitems[i]->NumFramesDirty--;
+			_allRenderItems[i]->NumFramesDirty--;
 		}
 	}
 }
@@ -365,28 +368,53 @@ void MyApp::UpdateMainPassCB(const GameTimer& gt)
 
 void MyApp::LoadTextures()
 {
-	auto woodCrateTex = std::make_unique<Texture>();
-	woodCrateTex->Name = L"woodCrateTex";
-	//woodCrateTex->Filename = L"../../Textures/WoodCrate01_mipmapped.dds";
-	woodCrateTex->Filename = L"../../Textures/african_head_diffuse.dds";
+	auto defaultTex = std::make_unique<Texture>();
+	defaultTex->SetName(L"defaultTex");
+	//defaultTex->Name = L"defaultTex";
+	defaultTex->Filename = L"../../Textures/tile.dds";
 	ThrowIfFailed(DirectX::CreateDDSTextureFromFile12(md3dDevice.Get(),
-		mCommandList.Get(), woodCrateTex->Filename.c_str(),
-		woodCrateTex->Resource, woodCrateTex->UploadHeap));
+		mCommandList.Get(), defaultTex->Filename.c_str(),
+		defaultTex->Resource, defaultTex->UploadHeap));
 
-	mTextures[woodCrateTex->Name] = std::move(woodCrateTex);
+	mTextures[defaultTex->Name] = std::move(defaultTex);
+}
 
-	auto flareTex = std::make_unique<Texture>();
-	flareTex->Name = L"flareTex";
-	flareTex->Filename = L"../../Textures/flare.dds";
-	ThrowIfFailed(DirectX::CreateDDSTextureFromFile12(md3dDevice.Get(), mCommandList.Get(), flareTex->Filename.c_str(), flareTex->Resource, flareTex->UploadHeap));
-	mTextures[flareTex->Name] = std::move(flareTex);
+TextureHandle MyApp::LoadTexture(WCHAR* filename)
+{
+	std::wstring croppedName = getCroppedName(filename);
 
-	auto flareAlphaTex = std::make_unique<Texture>();
-	flareAlphaTex->Name = L"flareAlphaTex";
-	flareAlphaTex->Filename = L"../../Textures/flarealpha.dds";
-	ThrowIfFailed(DirectX::CreateDDSTextureFromFile12(md3dDevice.Get(), mCommandList.Get(), flareAlphaTex->Filename.c_str(),
-		flareAlphaTex->Resource, flareAlphaTex->UploadHeap));
-	mTextures[flareAlphaTex->Name] = std::move(flareAlphaTex);
+	if (mTextures.find(croppedName) != mTextures.end())
+	{
+		_texUsed[croppedName]++;
+		return { std::string(croppedName.begin(), croppedName.end()), _texIndices[croppedName], true};
+	}
+
+	auto tex = std::make_unique<Texture>();
+	tex->SetName(filename);
+	tex->Filename = filename;
+	ThrowIfFailed(DirectX::CreateDDSTextureFromFile12(md3dDevice.Get(),
+		mCommandList.Get(), tex->Filename.c_str(),
+		tex->Resource, tex->UploadHeap));
+
+
+	UINT index = _srvHeapAllocator.get()->Allocate();
+	D3D12_CPU_DESCRIPTOR_HANDLE srvHandle = _srvHeapAllocator.get()->GetCpuHandle(index);
+
+	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	srvDesc.Format = tex.get()->Resource->GetDesc().Format;
+	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+	srvDesc.Texture2D.MostDetailedMip = 0;
+	srvDesc.Texture2D.MipLevels = tex.get()->Resource.Get()->GetDesc().MipLevels;
+	srvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
+
+	md3dDevice->CreateShaderResourceView(tex.get()->Resource.Get(), &srvDesc, srvHandle);
+
+	mTextures[croppedName] = std::move(tex);
+	_texIndices[croppedName] = index;
+	_texUsed[croppedName] = 0;
+
+	return { std::string(croppedName.begin(), croppedName.end()), index, true };
 }
 
 void MyApp::BuildRootSignature()
@@ -444,17 +472,21 @@ void MyApp::BuildDescriptorHeaps()
 
 	_srvHeapAllocator = std::make_unique<DescriptorHeapAllocator>(mSrvDescriptorHeap.Get(), mCbvSrvUavDescriptorSize, srvHeapDesc.NumDescriptors);
 
-	//add at least three textures
-	D3D12_CPU_DESCRIPTOR_HANDLE srvHandle = _srvHeapAllocator.get()->Allocate();
-	auto woodCrateTex = mTextures[L"woodCrateTex"]->Resource;
-	md3dDevice->CreateShaderResourceView(woodCrateTex.Get(), nullptr, srvHandle);
-	srvHandle = _srvHeapAllocator.get()->Allocate();
-	auto flareTex = mTextures[L"flareTex"]->Resource;
-	md3dDevice->CreateShaderResourceView(flareTex.Get(), nullptr, srvHandle);
-	srvHandle = _srvHeapAllocator.get()->Allocate();
-	auto flareAlphaTex = mTextures[L"flareAlphaTex"]->Resource;
-	md3dDevice->CreateShaderResourceView(flareAlphaTex.Get(), nullptr, srvHandle);
+	//add default texture
+	UINT index = _srvHeapAllocator.get()->Allocate();
+	D3D12_CPU_DESCRIPTOR_HANDLE srvHandle = _srvHeapAllocator.get()->GetCpuHandle(index);
+	auto defaultTex = mTextures[L"defaultTex"]->Resource;
+	_texIndices[L"defaultTex"] = index;
 
+	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	srvDesc.Format = defaultTex.Get()->GetDesc().Format;
+	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+	srvDesc.Texture2D.MostDetailedMip = 0;
+	srvDesc.Texture2D.MipLevels = defaultTex.Get()->GetDesc().MipLevels;
+	srvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
+
+	md3dDevice->CreateShaderResourceView(defaultTex.Get(), &srvDesc, srvHandle);
 
 	//imgui heap
 	D3D12_DESCRIPTOR_HEAP_DESC heapDesc = {};
@@ -469,6 +501,7 @@ void MyApp::BuildShadersAndInputLayout()
 {
 	mShaders["standardVS"] = d3dUtil::CompileShader(L"Shaders\\Default.hlsl", nullptr, "VS", "vs_5_0");
 	mShaders["opaquePS"] = d3dUtil::CompileShader(L"Shaders\\Default.hlsl", nullptr, "PS", "ps_5_0");
+	mShaders["gridPS"] = d3dUtil::CompileShader(L"Shaders\\Default.hlsl", nullptr, "PSGrid", "ps_5_0");
 
 	mInputLayout =
 	{
@@ -580,18 +613,7 @@ void MyApp::buildGridGeometry()
 
 void MyApp::BuildModelGeometry(WCHAR* filename)
 {
-	//making pretty name
-	std::wstringstream ss(filename);
-	std::vector<std::wstring> chunks;
-	std::wstring chunk;
-
-	while (std::getline(ss, chunk, L'\\'))
-	{
-		chunks.push_back(chunk);
-	}
-
-	std::wstring name = chunks[chunks.size() - 1];
-	std::wstring croppedName = name.substr(0, name.size() - 4);
+	std::wstring croppedName = getCroppedName(filename);
 
 	//check if geometry already exists
 	if (mGeometries.find(croppedName) != mGeometries.end())
@@ -696,7 +718,16 @@ void MyApp::BuildPSOs()
 	opaquePsoDesc.SampleDesc.Count = m4xMsaaState ? 4 : 1;
 	opaquePsoDesc.SampleDesc.Quality = m4xMsaaState ? (m4xMsaaQuality - 1) : 0;
 	opaquePsoDesc.DSVFormat = mDepthStencilFormat;
-	ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&opaquePsoDesc, IID_PPV_ARGS(&mOpaquePSO)));
+	ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&opaquePsoDesc, IID_PPV_ARGS(&_psos[PSOType::Opaque])));
+
+	opaquePsoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE;
+	opaquePsoDesc.PS =
+	{
+		reinterpret_cast<BYTE*>(mShaders["gridPS"]->GetBufferPointer()),
+		mShaders["gridPS"]->GetBufferSize()
+	};
+	ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&opaquePsoDesc, IID_PPV_ARGS(&_psos[PSOType::Grid])));
+
 }
 
 void MyApp::BuildFrameResources()
@@ -704,7 +735,7 @@ void MyApp::BuildFrameResources()
 	for (int i = 0; i < gNumFrameResources; ++i)
 	{
 		mFrameResources.push_back(std::make_unique<FrameResource>(md3dDevice.Get(),
-			1, (UINT)mAllRitems.size(), (UINT)mMaterials.size()));
+			1, (UINT)_allRenderItems.size(), (UINT)mMaterials.size()));
 	}
 }
 
@@ -731,10 +762,6 @@ void MyApp::BuildMaterials()
 	mMaterials["flare"] = std::move(flare);
 }
 
-void MyApp::BuildRenderItems()
-{
-}
-
 void MyApp::buildGrid()
 {
 	auto gridRItem = std::make_unique<RenderItem>();
@@ -745,8 +772,9 @@ void MyApp::buildGrid()
 	gridRItem->IndexCount = gridRItem->Geo->DrawArgs[L"grid"].IndexCount;
 	gridRItem->StartIndexLocation = gridRItem->Geo->DrawArgs[L"grid"].StartIndexLocation;
 	gridRItem->BaseVertexLocation = gridRItem->Geo->DrawArgs[L"grid"].BaseVertexLocation;
-	mOpaqueRitems.push_back(gridRItem.get());
-	mAllRitems.push_back(std::move(gridRItem));
+	gridRItem->diffuseHandle.index = 0;
+	_renderItems[PSOType::Grid].push_back(gridRItem.get());
+	_allRenderItems.push_back(std::move(gridRItem));
 
 	for (int i = 0; i < mFrameResources.size(); ++i)
 	{
@@ -756,6 +784,11 @@ void MyApp::buildGrid()
 
 void MyApp::DrawInterface()
 {
+	//debug info
+	ImGui::Begin("Debug info");
+	ImGui::Text(("Sponzas loaded: " + std::to_string(_objectLoaded[L"sponza"])).c_str());
+	ImGui::End();
+
 	//objects window
 	ImGui::SetNextWindowPos({ 0.f, 0.f }, ImGuiCond_Once, { 0.f, 0.f });
 	ImGui::SetNextWindowSize({ 200.f, 500.f }, ImGuiCond_Once);
@@ -765,15 +798,20 @@ void MyApp::DrawInterface()
 	{
 		if (ImGui::Button("Add New"))
 		{
-			AddNewObject();
+			PWSTR pszFilePath;
+			if (TryToOpenFile(L"Wavefront Object", L"*.obj", pszFilePath))
+			{
+				BuildModelGeometry(pszFilePath);
+				CoTaskMemFree(pszFilePath);
+			}
 		}
 
 		ImGui::Spacing();
 
-		for (int i = 1; i < mOpaqueRitems.size(); i++)
+		for (int i = 0; i < _renderItems[PSOType::Opaque].size(); i++)
 		{
 			ImGui::PushID(i*2);
-			if (ImGui::Button(mOpaqueRitems[i]->Name.c_str()))
+			if (ImGui::Button((_renderItems[PSOType::Opaque][i]->Name + (_renderItems[PSOType::Opaque][i]->nameCount == 0 ? "" : std::to_string(_renderItems[PSOType::Opaque][i]->nameCount))).c_str()))
 			{
 				_selectedObject = i;
 			}
@@ -797,91 +835,97 @@ void MyApp::DrawInterface()
 		ImGui::SetNextWindowPos({ static_cast<float>(mClientWidth) - 300.f, 50.f }, ImGuiCond_Once, { 0.f, 0.f });
 		ImGui::SetNextWindowSize({ 250.f, 350.f }, ImGuiCond_Once);
 
-		ImGui::Begin("Object Info");                          // Create a window called "Hello, world!" and append into it.
+		ImGui::Begin((_renderItems[PSOType::Opaque][_selectedObject]->Name + " Info").c_str());                          // Create a window called "Hello, world!" and append into it.
 		if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen))
 		{
 			ImGui::Text("Location: ");
 			ImGui::SameLine();
 
-			if (ImGui::InputFloat3("##1", mOpaqueRitems[_selectedObject]->transform[0]))
+			if (ImGui::InputFloat3("##1", _renderItems[PSOType::Opaque][_selectedObject]->transform[0]))
 			{
-				mOpaqueRitems[_selectedObject]->NumFramesDirty = gNumFrameResources;
+				_renderItems[PSOType::Opaque][_selectedObject]->NumFramesDirty = gNumFrameResources;
 			}
 
 			ImGui::Text("Rotation: ");
 			ImGui::SameLine();
-			if (ImGui::InputFloat3("##2", mOpaqueRitems[_selectedObject]->transform[1]))
+			if (ImGui::InputFloat3("##2", _renderItems[PSOType::Opaque][_selectedObject]->transform[1]))
 			{
-				mOpaqueRitems[_selectedObject]->NumFramesDirty = gNumFrameResources;
+				_renderItems[PSOType::Opaque][_selectedObject]->NumFramesDirty = gNumFrameResources;
 			}
 
 			ImGui::Text("Scale:");
 			ImGui::SameLine();
-			ImGui::Checkbox("##4", &mOpaqueRitems[_selectedObject]->lockedScale);
+			ImGui::Checkbox("##4", &_renderItems[PSOType::Opaque][_selectedObject]->lockedScale);
 			ImGui::SameLine();
-			float before[3] = { mOpaqueRitems[_selectedObject]->transform[2][0], mOpaqueRitems[_selectedObject]->transform[2][1], mOpaqueRitems[_selectedObject]->transform[2][2] };
-			if (ImGui::InputFloat3("##3", mOpaqueRitems[_selectedObject]->transform[2]))
+			float before[3] = { _renderItems[PSOType::Opaque][_selectedObject]->transform[2][0], _renderItems[PSOType::Opaque][_selectedObject]->transform[2][1], _renderItems[PSOType::Opaque][_selectedObject]->transform[2][2] };
+			if (ImGui::InputFloat3("##3", _renderItems[PSOType::Opaque][_selectedObject]->transform[2]))
 			{
-				if (mOpaqueRitems[_selectedObject]->lockedScale)
+				if (_renderItems[PSOType::Opaque][_selectedObject]->lockedScale)
 				{
 					float difference = 1.f;
 
 					for (int i = 0; i < 3; i++)
 					{
 
-						difference *= mOpaqueRitems[_selectedObject]->transform[2][i] / before[i];
+						difference *= _renderItems[PSOType::Opaque][_selectedObject]->transform[2][i] / before[i];
 					}
 
 					for (int i = 0; i < 3; i++)
 					{
-						mOpaqueRitems[_selectedObject]->transform[2][i] = before[i] * difference;
+						_renderItems[PSOType::Opaque][_selectedObject]->transform[2][i] = before[i] * difference;
 					}
 				}
-				mOpaqueRitems[_selectedObject]->NumFramesDirty = gNumFrameResources;
+				_renderItems[PSOType::Opaque][_selectedObject]->NumFramesDirty = gNumFrameResources;
 			}
 		}
+		if (ImGui::CollapsingHeader("Textures", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			ImGui::Text("Diffuse");
+			ImGui::SameLine();
+			ImGui::PushID(0);
+			std::string name = _renderItems[PSOType::Opaque][_selectedObject]->diffuseHandle.name;
+			if (name.size() > 15)
+			{
+				name = name.substr(0, 12) + "...";
+			}
+			if (ImGui::Button(name.c_str()))
+			{
+				WCHAR* texturePath;
+				if (TryToOpenFile(L"DDS Textures", L"*.dds", texturePath))
+				{
+					_renderItems[PSOType::Opaque][_selectedObject]->diffuseHandle = LoadTexture(texturePath);
+				}
+			}
+			ImGui::PopID();
+			ImGui::SameLine();
+			ImGui::PushID(1);
+			ImGui::Button("delete");
+			ImGui::PopID();
+
+			ImGui::Text("Specular");
+			ImGui::SameLine();
+			ImGui::PushID(2);
+			ImGui::Button(_renderItems[PSOType::Opaque][_selectedObject]->specularHandle.name.c_str());
+			ImGui::PopID();
+			ImGui::SameLine();
+			ImGui::PushID(3);
+			ImGui::Button("delete");
+			ImGui::PopID();
+
+			ImGui::Text("Normal");
+			ImGui::SameLine();
+			ImGui::PushID(4);
+			ImGui::Button(_renderItems[PSOType::Opaque][_selectedObject]->normalHandle.name.c_str());
+			ImGui::PopID();
+			ImGui::SameLine();
+			ImGui::PushID(5);
+			ImGui::Button("delete");
+			ImGui::PopID();
+		}
+
+
 		ImGui::End();
 	}
-}
-
-void MyApp::AddNewObject()
-{
-	IFileOpenDialog* pFileOpen;
-
-	// Create the FileOpenDialog object.
-	ThrowIfFailed(CoCreateInstance(CLSID_FileOpenDialog, NULL, CLSCTX_ALL, IID_IFileOpenDialog, reinterpret_cast<void**>(&pFileOpen)));
-
-	//filter only for .obj files
-	COMDLG_FILTERSPEC rgSpec[] = { L"Wavefront Object", L"*.obj" };
-	pFileOpen->SetFileTypes(1, rgSpec);
-
-	// Show the Open dialog box.
-	HRESULT hr = pFileOpen->Show(NULL);
-	if (FAILED(hr))
-	{
-		if (hr == HRESULT_FROM_WIN32(ERROR_CANCELLED))
-		{
-			// User closed the dialog manually, just return safely
-			return;
-		}
-		else
-		{
-			// Handle other errors
-			ThrowIfFailed(hr);
-		}
-	}
-
-	// Get the file name from the dialog box.
-	IShellItem* pItem;
-	ThrowIfFailed(pFileOpen->GetResult(&pItem));
-	PWSTR pszFilePath;
-	ThrowIfFailed(pItem->GetDisplayName(SIGDN_FILESYSPATH, &pszFilePath));
-
-	BuildModelGeometry(pszFilePath);
-
-	CoTaskMemFree(pszFilePath);
-	pItem->Release();
-	pFileOpen->Release();
 }
 
 void MyApp::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const std::vector<RenderItem*>& ritems)
@@ -904,9 +948,11 @@ void MyApp::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const std::vecto
 		D3D12_GPU_VIRTUAL_ADDRESS objCBAddress = objectCB->GetGPUVirtualAddress() + ri->ObjCBIndex * objCBByteSize;
 		D3D12_GPU_VIRTUAL_ADDRESS matCBAddress = matCB->GetGPUVirtualAddress() + ri->Mat->MatCBIndex * matCBByteSize;
 
-		//cmdList->SetGraphicsRootDescriptorTable(0, tex);
 		cmdList->SetGraphicsRootConstantBufferView(1, objCBAddress);
 		cmdList->SetGraphicsRootConstantBufferView(3, matCBAddress);
+
+		CD3DX12_GPU_DESCRIPTOR_HANDLE diffuseTex(_srvHeapAllocator.get()->GetGpuHandle(ri->diffuseHandle.index));
+		cmdList->SetGraphicsRootDescriptorTable(0, diffuseTex);
 
 		cmdList->DrawIndexedInstanced(ri->IndexCount, 1, ri->StartIndexLocation, ri->BaseVertexLocation, 0);
 	}
@@ -985,6 +1031,22 @@ std::array<const CD3DX12_STATIC_SAMPLER_DESC, 8> MyApp::GetStaticSamplers()
 		anisotropicWrap, anisotropicClamp, linearMirror };
 }
 
+std::wstring MyApp::getCroppedName(WCHAR* filename)
+{
+	//making pretty name
+	std::wstringstream ss(filename);
+	std::vector<std::wstring> chunks;
+	std::wstring chunk;
+
+	while (std::getline(ss, chunk, L'\\'))
+	{
+		chunks.push_back(chunk);
+	}
+
+	std::wstring name = chunks[chunks.size() - 1];
+	return name.substr(0, name.size() - 4);
+}
+
 void MyApp::UnloadModel(const std::wstring& modelName)
 {
 	if (mGeometries.find(modelName) != mGeometries.end())
@@ -998,7 +1060,9 @@ void MyApp::addRenderItem(const std::wstring& itemName)
 	std::string name(itemName.begin(), itemName.end());
 
 	auto modelRitem = std::make_unique<RenderItem>();
+	_objectLoaded[itemName]++;
 	modelRitem->Name = name;
+	modelRitem->nameCount = _objectCounters[itemName]++;
 	modelRitem->ObjCBIndex = 0;
 	modelRitem->Mat = mMaterials["woodCrate"].get();
 	modelRitem->Geo = mGeometries[itemName].get();
@@ -1007,8 +1071,10 @@ void MyApp::addRenderItem(const std::wstring& itemName)
 	modelRitem->StartIndexLocation = modelRitem->Geo->DrawArgs[itemName].StartIndexLocation;
 	modelRitem->BaseVertexLocation = modelRitem->Geo->DrawArgs[itemName].BaseVertexLocation;
 
-	mOpaqueRitems.push_back(modelRitem.get());
-	mAllRitems.push_back(std::move(modelRitem));
+	modelRitem->diffuseHandle.index = _texIndices[L"defaultTex"];
+
+	_renderItems[PSOType::Opaque].push_back(modelRitem.get());
+	_allRenderItems.push_back(std::move(modelRitem));
 
 	for (int i = 0; i < mFrameResources.size(); ++i)
 	{
@@ -1016,48 +1082,12 @@ void MyApp::addRenderItem(const std::wstring& itemName)
 	}
 }
 
-void MyApp::drawUI(LPDRAWITEMSTRUCT lpdis)
-{
-	HBRUSH hBrush;
-
-	if (lpdis->CtlType == ODT_BUTTON) // Ensure it's a button
-	{
-
-		// Check button state
-		if (lpdis->itemState & ODS_SELECTED) // Button pressed
-		{
-			hBrush = CreateSolidBrush(RGB(50, 50, 50)); // Darker blue
-		}
-		else if (lpdis->itemState & ODS_FOCUS) // Button focused
-		{
-			hBrush = CreateSolidBrush(RGB(60, 60, 60)); // Original blue
-		}
-		else // Default state
-		{
-			hBrush = CreateSolidBrush(RGB(90, 90, 90)); // Lighter blue
-		}
-
-		FillRect(lpdis->hDC, &lpdis->rcItem, hBrush);
-		DeleteObject(hBrush); // Prevent memory leaks
-
-		// Draw button text
-		SetTextColor(lpdis->hDC, RGB(255, 255, 255)); // White text
-		SetBkMode(lpdis->hDC, TRANSPARENT);
-
-		wchar_t buttonText[256];
-		GetWindowText(lpdis->hwndItem, buttonText, _countof(buttonText));
-		DrawText(lpdis->hDC, buttonText, -1, &lpdis->rcItem, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-
-		return;
-	}
-}
-
 void MyApp::deleteObject()
 {
-	std::wstring name(mOpaqueRitems[_selectedObject]->Name.begin(), mOpaqueRitems[_selectedObject]->Name.end());
+	std::wstring name(_renderItems[PSOType::Opaque][_selectedObject]->Name.begin(), _renderItems[PSOType::Opaque][_selectedObject]->Name.end());
 	_objectLoaded[name]--;
-	mAllRitems.erase(mAllRitems.begin() + _selectedObject);
-	mOpaqueRitems.erase(mOpaqueRitems.begin() + _selectedObject);
+	_allRenderItems.erase(_allRenderItems.begin() + _selectedObject);
+	_renderItems[PSOType::Opaque].erase(_renderItems[PSOType::Opaque].begin() + _selectedObject);
 
 	FlushCommandQueue();
 
@@ -1084,6 +1114,48 @@ void MyApp::deleteObject()
 	}
 
 	_selectedObject = -1;
+}
+
+bool MyApp::TryToOpenFile(WCHAR* extension1, WCHAR* extension2, PWSTR& filePath)
+{
+	IFileOpenDialog* pFileOpen;
+
+	// Create the FileOpenDialog object.
+	ThrowIfFailed(CoCreateInstance(CLSID_FileOpenDialog, NULL, CLSCTX_ALL, IID_IFileOpenDialog, reinterpret_cast<void**>(&pFileOpen)));
+
+	COMDLG_FILTERSPEC rgSpec[] = { extension1, extension2 };
+
+	//filter only for .obj files
+	pFileOpen->SetFileTypes(1, rgSpec);
+
+	// Show the Open dialog box.
+	HRESULT hr = pFileOpen->Show(NULL);
+	if (FAILED(hr))
+	{
+		if (hr == HRESULT_FROM_WIN32(ERROR_CANCELLED))
+		{
+			// User closed the dialog manually, just return safely
+			return false;
+		}
+		else
+		{
+			// Handle other errors
+			ThrowIfFailed(hr);
+		}
+	}
+
+	// Get the file name from the dialog box.
+	IShellItem* pItem;
+	ThrowIfFailed(pFileOpen->GetResult(&pItem));
+	PWSTR pszFilePath;
+	ThrowIfFailed(pItem->GetDisplayName(SIGDN_FILESYSPATH, &pszFilePath));
+
+	filePath = pszFilePath;
+
+	pItem->Release();
+	pFileOpen->Release();
+
+	return true;
 }
 
 //some wndproc stuff

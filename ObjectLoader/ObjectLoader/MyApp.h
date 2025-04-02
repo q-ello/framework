@@ -15,6 +15,23 @@ using Microsoft::WRL::ComPtr;
 using namespace DirectX;
 using namespace DirectX::PackedVector;
 
+enum class PSOType
+{
+	Opaque = 0,
+	Transparent,
+	AlphaTested,
+	Grid,
+	Count
+};
+
+//textureStaff
+struct TextureHandle
+{
+	std::string name = "load";
+	UINT index = -1;
+	bool isRelevant = true;
+};
+
 // Lightweight structure stores parameters to draw a shape.  This will
 // vary from app-to-app.
 struct RenderItem
@@ -26,6 +43,7 @@ struct RenderItem
 	XMFLOAT4X4 World = MathHelper::Identity4x4();
 
 	std::string Name;
+	int nameCount = 0;
 
 	float transform[3][3] = { {0., 0., 0.}, {0., 0., 0.}, {1., 1., 1.} };
 	bool lockedScale = true;
@@ -51,6 +69,10 @@ struct RenderItem
 	UINT IndexCount = 0;
 	UINT StartIndexLocation = 0;
 	int BaseVertexLocation = 0;
+
+	TextureHandle diffuseHandle;
+	TextureHandle specularHandle;
+	TextureHandle normalHandle;
 };
 
 class MyApp : public D3DApp
@@ -80,6 +102,7 @@ private:
 	void UpdateMainPassCB(const GameTimer& gt);
 
 	void LoadTextures();
+	TextureHandle LoadTexture(WCHAR* filename);
 	void BuildRootSignature();
 	void BuildDescriptorHeaps();
 	void BuildShadersAndInputLayout();
@@ -89,13 +112,14 @@ private:
 	void BuildPSOs();
 	void BuildFrameResources();
 	void BuildMaterials();
-	void BuildRenderItems();
 	void DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const std::vector<RenderItem*>& ritems);
 	void buildGrid();
 	void DrawInterface();
-	void AddNewObject();
+	bool TryToOpenFile(WCHAR* extension1, WCHAR* extension2, PWSTR& filePath);
 
 	std::array<const CD3DX12_STATIC_SAMPLER_DESC, 8> GetStaticSamplers();
+
+	std::wstring getCroppedName(WCHAR* filename);
 
 private:
 	std::vector<std::unique_ptr<FrameResource>> mFrameResources;
@@ -111,6 +135,8 @@ private:
 	std::unordered_map<std::wstring, std::unique_ptr<MeshGeometry>> mGeometries;
 	std::unordered_map<std::string, std::unique_ptr<Material>> mMaterials;
 	std::unordered_map<std::wstring, std::unique_ptr<Texture>> mTextures;
+	std::unordered_map<std::wstring, UINT> _texIndices;
+	std::unordered_map<std::wstring, int> _texUsed;
 	std::unordered_map<std::string, ComPtr<ID3DBlob>> mShaders;
 	std::unordered_map<std::wstring, int> _objectCounters;
 	std::unordered_map<std::wstring, int> _objectLoaded;
@@ -118,12 +144,10 @@ private:
 	std::vector<D3D12_INPUT_ELEMENT_DESC> mInputLayout;
 	std::vector<D3D12_INPUT_ELEMENT_DESC> mInputLayoutColored;
 
-	ComPtr<ID3D12PipelineState> mOpaquePSO = nullptr;
-
-	// List of all the render items.
-	std::vector<std::unique_ptr<RenderItem>> mAllRitems;
 	// Render items divided by PSO.
-	std::vector<RenderItem*> mOpaqueRitems;
+	std::unordered_map<PSOType, ComPtr<ID3D12PipelineState>> _psos;
+	std::unordered_map<PSOType, std::vector<RenderItem*>> _renderItems;
+	std::vector<std::unique_ptr<RenderItem>> _allRenderItems;
 
 	PassConstants mMainPassCB;
 
@@ -140,14 +164,10 @@ private:
 
 	void UnloadModel(const std::wstring& modelName);
 	void addRenderItem(const std::wstring& itemName);
-	void drawUI(LPDRAWITEMSTRUCT lpdis) override;
 	bool checkForImGui(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) override;
 
 	void deleteObject();
 
-	int _newId = 1;
 	int _selectedObject = -1;
-
-	bool _isMouseDown = false;
 };
 

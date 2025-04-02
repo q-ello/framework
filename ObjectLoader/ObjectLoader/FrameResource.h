@@ -9,7 +9,10 @@ struct ObjectConstants
 {
     DirectX::XMFLOAT4X4 World = MathHelper::Identity4x4();
     DirectX::XMFLOAT4X4 TexTransform = MathHelper::Identity4x4();
-    int useColor = 1;
+    bool useColor = false;
+    int pad1 = 0;
+    int pad2 = 0;
+    int pad3 = 0;
 };
 
 struct PassConstants
