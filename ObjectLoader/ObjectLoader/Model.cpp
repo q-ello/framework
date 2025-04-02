@@ -30,31 +30,33 @@ Model::Model(WCHAR* filename)
 		return;
 	}
 
-	aiMesh* mesh = scene->mMeshes[0];
-
-	for (int i = 0; i < mesh->mNumVertices; i++)
+	for (int i = 0; i < scene->mNumMeshes; i++)
 	{
-		Vertex v;
-		aiVector3D pos = mesh->mVertices[i];
-		aiVector3D tex = mesh->HasTextureCoords(0) ? mesh->mTextureCoords[0][i] : aiVector3D(0.f, 0.f, 0.f);
-		aiVector3D normal = mesh->mNormals[i];
-		v.Pos = { pos.x, pos.y, pos.z };
-		v.TexC = { tex.x, tex.y };
-		v.Normal = { normal.x, normal.y, normal.z };
-		_vertices.push_back(v);
-	}
+		aiMesh* mesh = scene->mMeshes[i];
 
-	for (int i = 0; i < mesh->mNumFaces; i++)
-	{
-		if (mesh->mFaces[i].mNumIndices != 3)
+		for (int i = 0; i < mesh->mNumVertices; i++)
 		{
-			continue;
+			Vertex v;
+			aiVector3D pos = mesh->mVertices[i];
+			aiVector3D tex = mesh->HasTextureCoords(0) ? mesh->mTextureCoords[0][i] : aiVector3D(0.f, 0.f, 0.f);
+			aiVector3D normal = mesh->mNormals[i];
+			v.Pos = { pos.x, pos.y, pos.z };
+			v.TexC = { tex.x, tex.y };
+			v.Normal = { normal.x, normal.y, normal.z };
+			_vertices.push_back(v);
 		}
-		_indices.push_back(mesh->mFaces[i].mIndices[0]);
-		_indices.push_back(mesh->mFaces[i].mIndices[1]);
-		_indices.push_back(mesh->mFaces[i].mIndices[2]);
-	}
 
+		for (int i = 0; i < mesh->mNumFaces; i++)
+		{
+			if (mesh->mFaces[i].mNumIndices != 3)
+			{
+				continue;
+			}
+			_indices.push_back(mesh->mFaces[i].mIndices[0]);
+			_indices.push_back(mesh->mFaces[i].mIndices[1]);
+			_indices.push_back(mesh->mFaces[i].mIndices[2]);
+		}
+	}
 }
 
 Model::~Model()

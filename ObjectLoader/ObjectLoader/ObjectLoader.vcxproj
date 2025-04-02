@@ -145,7 +145,7 @@
     <ClInclude Include="..\..\Common\UploadBuffer.h" />
     <ClInclude Include="Controls.h" />
     <ClInclude Include="FrameResource.h" />
-    <ClInclude Include="HeapAllocator.h" />
+    <ClInclude Include="DescriptorHeapAllocator.h" />
     <ClInclude Include="imgui\backends\imgui_impl_dx12.h" />
     <ClInclude Include="imgui\backends\imgui_impl_win32.h" />
     <ClInclude Include="imgui\imconfig.h" />

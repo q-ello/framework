@@ -7,8 +7,7 @@
 #include "../../Common/UploadBuffer.h"
 #include "../../Common/GeometryGenerator.h"
 #include "FrameResource.h"
-
-#include "Controls.h"
+#include "DescriptorHeapAllocator.h"
 
 #define DELETE_ID 333
 
@@ -105,6 +104,9 @@ private:
 	UINT mCbvSrvDescriptorSize = 0;
 	ComPtr<ID3D12RootSignature> mRootSignature = nullptr;
 	ComPtr<ID3D12DescriptorHeap> mSrvDescriptorHeap = nullptr;
+	ComPtr<ID3D12DescriptorHeap> _imGuiDescriptorHeap = nullptr;
+	std::unique_ptr<DescriptorHeapAllocator> _srvHeapAllocator = nullptr;
+
 
 	std::unordered_map<std::wstring, std::unique_ptr<MeshGeometry>> mGeometries;
 	std::unordered_map<std::string, std::unique_ptr<Material>> mMaterials;
@@ -135,19 +137,6 @@ private:
 	float mRadius = 2.5f;
 
 	POINT mLastMousePos;
-
-	std::shared_ptr<Control> _addNewBtn;
-	std::shared_ptr<Control> _lockScaleBtn;
-	std::vector<std::shared_ptr<Control>> _objectBtns;
-
-	HWND _transformPanel;
-	std::vector<HWND> _transformControls;
-	std::vector<std::vector<HWND>> _transformControlsRects;
-	std::vector<std::vector<std::shared_ptr<Control>>> _transformControlsCoords;
-
-	HBRUSH _transformBG = CreateSolidBrush(RGB(40, 40, 40));
-	HBRUSH _transformPartsBG = CreateSolidBrush(RGB(50, 50, 50));
-
 
 	void UnloadModel(const std::wstring& modelName);
 	void addRenderItem(const std::wstring& itemName);

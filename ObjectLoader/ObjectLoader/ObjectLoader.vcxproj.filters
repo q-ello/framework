@@ -75,7 +75,7 @@
     <ClInclude Include="VertexData.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="HeapAllocator.h">
+    <ClInclude Include="DescriptorHeapAllocator.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="imgui\imconfig.h">

@@ -72,14 +72,10 @@ bool MyApp::Initialize()
 	info.NumFramesInFlight = gNumFrameResources;
 	info.RTVFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
 	info.DSVFormat = DXGI_FORMAT_UNKNOWN;
-	info.SrvDescriptorHeap = mSrvDescriptorHeap.Get();
-	info.LegacySingleSrvCpuDescriptor = mSrvDescriptorHeap.Get()->GetCPUDescriptorHandleForHeapStart();
-	info.LegacySingleSrvGpuDescriptor = mSrvDescriptorHeap.Get()->GetGPUDescriptorHandleForHeapStart();
-	/*info.SrvDescriptorAllocFn = [](ImGui_ImplDX12_InitInfo*, D3D12_CPU_DESCRIPTOR_HANDLE* out_cpu_handle, D3D12_GPU_DESCRIPTOR_HANDLE* out_gpu_handle)
-		{ return g_heapAlloc.Alloc(out_cpu_handle, out_gpu_handle); };
-	info.SrvDescriptorFreeFn = [](ImGui_ImplDX12_InitInfo*, D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle, D3D12_GPU_DESCRIPTOR_HANDLE gpu_handle)
-		{ return g_heapAlloc.Free(cpu_handle, gpu_handle); };*/
-
+	info.SrvDescriptorHeap = _imGuiDescriptorHeap.Get();
+	info.LegacySingleSrvCpuDescriptor = _imGuiDescriptorHeap.Get()->GetCPUDescriptorHandleForHeapStart();
+	info.LegacySingleSrvGpuDescriptor = _imGuiDescriptorHeap.Get()->GetGPUDescriptorHandleForHeapStart();
+	
 	ImGui_ImplDX12_Init(&info);
 	ImGui_ImplWin32_Init(mhMainWnd);
 
@@ -172,6 +168,9 @@ void MyApp::Draw(const GameTimer& gt)
 	mCommandList->SetGraphicsRootConstantBufferView(2, passCB->GetGPUVirtualAddress());
 
 	DrawRenderItems(mCommandList.Get(), mOpaqueRitems);
+
+	descriptorHeaps[0] = _imGuiDescriptorHeap.Get();
+	mCommandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
 
 	// Rendering
 	ImGui::Render();
@@ -376,12 +375,12 @@ void MyApp::LoadTextures()
 
 	mTextures[woodCrateTex->Name] = std::move(woodCrateTex);
 
-	//3rd exercise
 	auto flareTex = std::make_unique<Texture>();
 	flareTex->Name = L"flareTex";
 	flareTex->Filename = L"../../Textures/flare.dds";
 	ThrowIfFailed(DirectX::CreateDDSTextureFromFile12(md3dDevice.Get(), mCommandList.Get(), flareTex->Filename.c_str(), flareTex->Resource, flareTex->UploadHeap));
 	mTextures[flareTex->Name] = std::move(flareTex);
+
 	auto flareAlphaTex = std::make_unique<Texture>();
 	flareAlphaTex->Name = L"flareAlphaTex";
 	flareAlphaTex->Filename = L"../../Textures/flarealpha.dds";
@@ -434,34 +433,36 @@ void MyApp::BuildRootSignature()
 
 void MyApp::BuildDescriptorHeaps()
 {
-	
 	 //Create the SRV heap.
-	
 	D3D12_DESCRIPTOR_HEAP_DESC srvHeapDesc = {};
-	srvHeapDesc.NumDescriptors = 1;
+	srvHeapDesc.NumDescriptors = 100;
 
 	srvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 	srvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 	ThrowIfFailed(md3dDevice->CreateDescriptorHeap(&srvHeapDesc, IID_PPV_ARGS(&mSrvDescriptorHeap)));
+	mCbvSrvUavDescriptorSize = md3dDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
-	//
-	// Fill out the heap with actual descriptors.
-	//
-	CD3DX12_CPU_DESCRIPTOR_HANDLE hDescriptor(mSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
-	CD3DX12_GPU_DESCRIPTOR_HANDLE gpuDesc(mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+	_srvHeapAllocator = std::make_unique<DescriptorHeapAllocator>(mSrvDescriptorHeap.Get(), mCbvSrvUavDescriptorSize, srvHeapDesc.NumDescriptors);
 
+	//add at least three textures
+	D3D12_CPU_DESCRIPTOR_HANDLE srvHandle = _srvHeapAllocator.get()->Allocate();
 	auto woodCrateTex = mTextures[L"woodCrateTex"]->Resource;
+	md3dDevice->CreateShaderResourceView(woodCrateTex.Get(), nullptr, srvHandle);
+	srvHandle = _srvHeapAllocator.get()->Allocate();
+	auto flareTex = mTextures[L"flareTex"]->Resource;
+	md3dDevice->CreateShaderResourceView(flareTex.Get(), nullptr, srvHandle);
+	srvHandle = _srvHeapAllocator.get()->Allocate();
+	auto flareAlphaTex = mTextures[L"flareAlphaTex"]->Resource;
+	md3dDevice->CreateShaderResourceView(flareAlphaTex.Get(), nullptr, srvHandle);
 
-	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-	srvDesc.Format = woodCrateTex->GetDesc().Format;
-	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-	srvDesc.Texture2D.MostDetailedMip = 0;
-	srvDesc.Texture2D.MipLevels = woodCrateTex->GetDesc().MipLevels;
 
-	srvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
+	//imgui heap
+	D3D12_DESCRIPTOR_HEAP_DESC heapDesc = {};
+	heapDesc.NumDescriptors = 1; // Adjust based on the number of UI textures
+	heapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+	heapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 
-	md3dDevice->CreateShaderResourceView(woodCrateTex.Get(), &srvDesc, hDescriptor);
+	ThrowIfFailed(md3dDevice->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(&_imGuiDescriptorHeap)));
 }
 
 void MyApp::BuildShadersAndInputLayout()
@@ -747,7 +748,6 @@ void MyApp::buildGrid()
 	mOpaqueRitems.push_back(gridRItem.get());
 	mAllRitems.push_back(std::move(gridRItem));
 
-
 	for (int i = 0; i < mFrameResources.size(); ++i)
 	{
 		mFrameResources[i]->addObjectBuffer(md3dDevice.Get());
@@ -900,9 +900,6 @@ void MyApp::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const std::vecto
 		cmdList->IASetVertexBuffers(0, 1, &ri->Geo->VertexBufferView());
 		cmdList->IASetIndexBuffer(&ri->Geo->IndexBufferView());
 		cmdList->IASetPrimitiveTopology(ri->PrimitiveType);
-
-		//CD3DX12_GPU_DESCRIPTOR_HANDLE tex(mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
-		//tex.Offset(ri->Mat->DiffuseSrvHeapIndex, mCbvSrvDescriptorSize);
 
 		D3D12_GPU_VIRTUAL_ADDRESS objCBAddress = objectCB->GetGPUVirtualAddress() + ri->ObjCBIndex * objCBByteSize;
 		D3D12_GPU_VIRTUAL_ADDRESS matCBAddress = matCB->GetGPUVirtualAddress() + ri->Mat->MatCBIndex * matCBByteSize;
@@ -1079,11 +1076,6 @@ void MyApp::deleteObject()
 		ID3D12CommandList* cmdsLists[] = { mCommandList.Get() };
 		mCommandQueue->ExecuteCommandLists(_countof(cmdsLists), cmdsLists);
 		FlushCommandQueue();
-	}
-
-	for (int i = 0; i < _objectBtns.size(); i++)
-	{
-		SetWindowPos((HWND)_objectBtns[i]->hwnd.get(), NULL, 10, 100 + i * 40, 100, 30, SWP_NOZORDER);
 	}
 
 	for (int i = 0; i < gNumFrameResources; ++i)
