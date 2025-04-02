@@ -28,7 +28,7 @@ struct RenderItem
 
 	std::string Name;
 
-	std::vector<std::vector<float>> transform = { {0., 0., 0.}, {0., 0., 0.}, { 1., 1., 1. } };
+	float transform[3][3] = { {0., 0., 0.}, {0., 0., 0.}, {1., 1., 1.} };
 	bool lockedScale = true;
 
 	XMFLOAT4X4 TexTransform = MathHelper::Identity4x4();
@@ -64,11 +64,8 @@ public:
 
 	virtual bool Initialize()override;
 
-	void processText(HWND hwnd, wchar_t* text) override;
-
 private:
 	void OnResize() override;
-	void OnResizing() override;
 	virtual void Update(const GameTimer& gt)override;
 	virtual void Draw(const GameTimer& gt)override;
 
@@ -94,7 +91,6 @@ private:
 	void BuildFrameResources();
 	void BuildMaterials();
 	void BuildRenderItems();
-	void CreateControls() override;
 	void DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const std::vector<RenderItem*>& ritems);
 	void buildGrid();
 	void DrawInterface();
@@ -153,17 +149,9 @@ private:
 	HBRUSH _transformPartsBG = CreateSolidBrush(RGB(50, 50, 50));
 
 
-	void resizeRenderWindow();
 	void UnloadModel(const std::wstring& modelName);
 	void addRenderItem(const std::wstring& itemName);
-	void addObjectControl(const std::wstring& name);
-	bool handleControls(WPARAM wParam) override;
-	void handleRightClickControls(HWND hwnd, int x, int y) override;
 	void drawUI(LPDRAWITEMSTRUCT lpdis) override;
-	LRESULT colorOtherData(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) override;
-	void handlePaint() override;
-	void showTransform(bool show);
-	bool onKeyDown(UINT wParam) override;
 	bool checkForImGui(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) override;
 
 	void deleteObject();
@@ -174,6 +162,3 @@ private:
 	bool _isMouseDown = false;
 };
 
-LRESULT CALLBACK TransformPanelProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
-LRESULT CALLBACK EditProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam,
-	UINT_PTR uIdSubclass, DWORD_PTR dwRefData);

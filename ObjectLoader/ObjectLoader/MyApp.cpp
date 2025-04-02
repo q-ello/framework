@@ -12,95 +12,6 @@
 
 WNDPROC g_OriginalPanelWndProc;
 
-static void ShowExampleMenuFile()
-{
-	ImGui::MenuItem("(demo menu)", NULL, false, false);
-	if (ImGui::MenuItem("New")) {}
-	if (ImGui::MenuItem("Open", "Ctrl+O")) {}
-	if (ImGui::BeginMenu("Open Recent"))
-	{
-		ImGui::MenuItem("fish_hat.c");
-		ImGui::MenuItem("fish_hat.inl");
-		ImGui::MenuItem("fish_hat.h");
-		if (ImGui::BeginMenu("More.."))
-		{
-			ImGui::MenuItem("Hello");
-			ImGui::MenuItem("Sailor");
-			if (ImGui::BeginMenu("Recurse.."))
-			{
-				ShowExampleMenuFile();
-				ImGui::EndMenu();
-			}
-			ImGui::EndMenu();
-		}
-		ImGui::EndMenu();
-	}
-	if (ImGui::MenuItem("Save", "Ctrl+S")) {}
-	if (ImGui::MenuItem("Save As..")) {}
-
-	ImGui::Separator();
-	if (ImGui::BeginMenu("Options"))
-	{
-		static bool enabled = true;
-		ImGui::MenuItem("Enabled", "", &enabled);
-		ImGui::BeginChild("child", ImVec2(0, 60), ImGuiChildFlags_Borders);
-		for (int i = 0; i < 10; i++)
-			ImGui::Text("Scrolling Text %d", i);
-		ImGui::EndChild();
-		static float f = 0.5f;
-		static int n = 0;
-		ImGui::SliderFloat("Value", &f, 0.0f, 1.0f);
-		ImGui::InputFloat("Input", &f, 0.1f);
-		ImGui::Combo("Combo", &n, "Yes\0No\0Maybe\0\0");
-		ImGui::EndMenu();
-	}
-
-	if (ImGui::BeginMenu("Colors"))
-	{
-		float sz = ImGui::GetTextLineHeight();
-		for (int i = 0; i < ImGuiCol_COUNT; i++)
-		{
-			const char* name = ImGui::GetStyleColorName((ImGuiCol)i);
-			ImVec2 p = ImGui::GetCursorScreenPos();
-			ImGui::GetWindowDrawList()->AddRectFilled(p, ImVec2(p.x + sz, p.y + sz), ImGui::GetColorU32((ImGuiCol)i));
-			ImGui::Dummy(ImVec2(sz, sz));
-			ImGui::SameLine();
-			ImGui::MenuItem(name);
-		}
-		ImGui::EndMenu();
-	}
-
-	// Here we demonstrate appending again to the "Options" menu (which we already created above)
-	// Of course in this demo it is a little bit silly that this function calls BeginMenu("Options") twice.
-	// In a real code-base using it would make senses to use this feature from very different code locations.
-	if (ImGui::BeginMenu("Options")) // <-- Append!
-	{
-		static bool b = true;
-		ImGui::Checkbox("SomeOption", &b);
-		ImGui::EndMenu();
-	}
-
-	if (ImGui::BeginMenu("Disabled", false)) // Disabled
-	{
-		IM_ASSERT(0);
-	}
-	if (ImGui::MenuItem("Checked", NULL, true)) {}
-	ImGui::Separator();
-	if (ImGui::MenuItem("Quit", "Alt+F4")) {}
-}
-
-static void HelpMarker(const char* desc)
-{
-	ImGui::TextDisabled("(?)");
-	if (ImGui::BeginItemTooltip())
-	{
-		ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
-		ImGui::TextUnformatted(desc);
-		ImGui::PopTextWrapPos();
-		ImGui::EndTooltip();
-	}
-}
-
 MyApp::MyApp(HINSTANCE hInstance)
 	: D3DApp(hInstance)
 {
@@ -182,69 +93,15 @@ bool MyApp::Initialize()
 	return true;
 }
 
-//change transform of my objects
-void MyApp::processText(HWND hwnd, wchar_t* text)
-{
-	for (int i = 0; i < 3; i++)
-	{
-		for (int j = 0; j < 3; j++)
-		{
-			if ((HWND)_transformControlsCoords[i][j]->hwnd.get() == hwnd)
-			{
-				wchar_t* end;
-				float newNumber = std::wcstof(text, &end);
-				if (i == 2 && newNumber == 0.f)
-				{
-					newNumber = .1f;
-					if (!mAllRitems[_selectedObject]->lockedScale)
-					{
-						mAllRitems[_selectedObject]->transform[i][j] = newNumber;
-						SetWindowText((HWND)_transformControlsCoords[i][j]->hwnd.get(),
-							std::to_wstring(mAllRitems[_selectedObject]->transform[i][j]).c_str());
-					}
-				}
-				else if (i == 2 && mAllRitems[_selectedObject]->lockedScale)
-				{
-					float difference = newNumber / mAllRitems[_selectedObject]->transform[i][j];
-					for (int k = 0; k < 3; k++)
-					{
-						mAllRitems[_selectedObject]->transform[i][k] = mAllRitems[_selectedObject]->transform[i][k] * difference;
-						SetWindowText((HWND)_transformControlsCoords[i][k]->hwnd.get(), 
-							std::to_wstring(mAllRitems[_selectedObject]->transform[i][k]).c_str());
-					}
-				}
-				else
-				{
-					mAllRitems[_selectedObject]->transform[i][j] = newNumber;
-				}
-
-				mAllRitems[_selectedObject]->NumFramesDirty = gNumFrameResources;
-				return;
-			}
-		}
-	}
-}
-
 void MyApp::OnResize()
 {
 	//resizing the render window
-	resizeRenderWindow();
 	OnResizing();
 	D3DApp::OnResize();
 
 	// The window resized, so update the aspect ratio and recompute the projection matrix.
 	XMMATRIX P = XMMatrixPerspectiveFovLH(0.25f * MathHelper::Pi, AspectRatio(), 1.0f, 1000.0f);
 	XMStoreFloat4x4(&mProj, P);
-}
-
-void MyApp::OnResizing()
-{
-	//resizing the controls
-	// Invalidate and force a redraw of the entire main window
-	SetWindowPos(_transformPanel, NULL, mClientWidth - 270, 20, 270, 130, SWP_NOZORDER);
-
-	InvalidateRect(mhMainWnd, NULL, true);
-	UpdateWindow(mhMainWnd);
 }
 
 void MyApp::Update(const GameTimer& gt)
@@ -899,37 +756,92 @@ void MyApp::buildGrid()
 
 void MyApp::DrawInterface()
 {
-	static float f = 0.0f;
-	static int counter = 0;
+	//objects window
+	ImGui::SetNextWindowPos({ 0.f, 0.f }, ImGuiCond_Once, { 0.f, 0.f });
+	ImGui::SetNextWindowSize({ 200.f, 500.f }, ImGuiCond_Once);
 
-	ImGui::Begin(" ");                          // Create a window called "Hello, world!" and append into it.
-	
-	if (ImGui::CollapsingHeader("Opaque Objects"))
+	ImGui::Begin("Objects");                          // Create a window called "Hello, world!" and append into it.
+	if (ImGui::CollapsingHeader("Opaque Objects", ImGuiTreeNodeFlags_DefaultOpen))
 	{
 		if (ImGui::Button("Add New"))
 		{
 			AddNewObject();
 		}
+
 		ImGui::Spacing();
-		for (int i = 0; i < mOpaqueRitems.size() - 1; i++)
+
+		for (int i = 1; i < mOpaqueRitems.size(); i++)
 		{
-			ImGui::PushID(i);
-			if (ImGui::Button(mOpaqueRitems[i+1]->Name.c_str()))
+			ImGui::PushID(i*2);
+			if (ImGui::Button(mOpaqueRitems[i]->Name.c_str()))
 			{
-				_selectedObject = i - 1;
+				_selectedObject = i;
+			}
+			ImGui::SameLine();
+			ImGui::PopID();
+			ImGui::PushID(i*2 + 1);
+			if (ImGui::Button("delete"))
+			{
+				_selectedObject = i;
+				deleteObject();
 			}
 			ImGui::PopID();
 		}
 	}
-
-	ImGui::SliderFloat("float", &f, 0.0f, 1.0f);            // Edit 1 float using a slider from 0.0f to 1.0f
-
-	if (ImGui::Button("Button"))                            // Buttons return true when clicked (most widgets return true when edited/activated)
-		counter++;
-	ImGui::SameLine();
-	ImGui::Text("counter = %d", counter);
-
 	ImGui::End();
+
+	//object info
+
+	if (_selectedObject != -1)
+	{
+		ImGui::SetNextWindowPos({ static_cast<float>(mClientWidth) - 300.f, 50.f }, ImGuiCond_Once, { 0.f, 0.f });
+		ImGui::SetNextWindowSize({ 250.f, 350.f }, ImGuiCond_Once);
+
+		ImGui::Begin("Object Info");                          // Create a window called "Hello, world!" and append into it.
+		if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			ImGui::Text("Location: ");
+			ImGui::SameLine();
+
+			if (ImGui::InputFloat3("##1", mOpaqueRitems[_selectedObject]->transform[0]))
+			{
+				mOpaqueRitems[_selectedObject]->NumFramesDirty = gNumFrameResources;
+			}
+
+			ImGui::Text("Rotation: ");
+			ImGui::SameLine();
+			if (ImGui::InputFloat3("##2", mOpaqueRitems[_selectedObject]->transform[1]))
+			{
+				mOpaqueRitems[_selectedObject]->NumFramesDirty = gNumFrameResources;
+			}
+
+			ImGui::Text("Scale:");
+			ImGui::SameLine();
+			ImGui::Checkbox("##4", &mOpaqueRitems[_selectedObject]->lockedScale);
+			ImGui::SameLine();
+			float before[3] = { mOpaqueRitems[_selectedObject]->transform[2][0], mOpaqueRitems[_selectedObject]->transform[2][1], mOpaqueRitems[_selectedObject]->transform[2][2] };
+			if (ImGui::InputFloat3("##3", mOpaqueRitems[_selectedObject]->transform[2]))
+			{
+				if (mOpaqueRitems[_selectedObject]->lockedScale)
+				{
+					float difference = 1.f;
+
+					for (int i = 0; i < 3; i++)
+					{
+
+						difference *= mOpaqueRitems[_selectedObject]->transform[2][i] / before[i];
+					}
+
+					for (int i = 0; i < 3; i++)
+					{
+						mOpaqueRitems[_selectedObject]->transform[2][i] = before[i] * difference;
+					}
+				}
+				mOpaqueRitems[_selectedObject]->NumFramesDirty = gNumFrameResources;
+			}
+		}
+		ImGui::End();
+	}
 }
 
 void MyApp::AddNewObject()
@@ -970,80 +882,6 @@ void MyApp::AddNewObject()
 	CoTaskMemFree(pszFilePath);
 	pItem->Release();
 	pFileOpen->Release();
-}
-
-void MyApp::CreateControls()
-{
-	// Create the controls
-	_addNewBtn = std::make_shared<Control>(CreateWindow(
-		L"BUTTON", L"Add New", WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON,
-		10, 50, 100, 30, mhMainWnd, (HMENU)_newId, (HINSTANCE)GetWindowLongPtr(mhMainWnd, GWLP_HINSTANCE), NULL),
-		_newId, L"Add New");
-
-	_newId++;
-
-	//creating transform panel
-	_transformPanel = CreateWindowEx(
-		0, L"STATIC", L"Transform", WS_CHILD | WS_VISIBLE,
-		mClientWidth - 270, 20, 270, 130, mhMainWnd, NULL, (HINSTANCE)GetWindowLongPtr(mhMainWnd, GWLP_HINSTANCE), NULL);
-
-	// Save the original WindowProc of the static control (_transformPanel)
-	g_OriginalPanelWndProc = (WNDPROC)GetWindowLongPtr(_transformPanel, GWLP_WNDPROC);
-
-	// Subclass the window (attach custom WindowProc)
-	SetWindowLongPtr(_transformPanel, GWLP_WNDPROC, (LONG_PTR)TransformPanelProc);
-
-	std::vector<std::wstring> labels = { L"Position", L"Rotation", L"Scale" };
-	std::vector<std::wstring> labelCoords = { L"x:", L"y:", L"z:" };
-
-	for (int i = 0; i < 3; i++)
-	{
-		_transformControls.push_back(CreateWindowEx(
-			0, L"STATIC", labels[i].c_str(), WS_CHILD | WS_VISIBLE,
-			0, 30 + 30*i, 260, 20, _transformPanel, NULL, (HINSTANCE)GetWindowLongPtr(_transformPanel, GWLP_HINSTANCE), NULL));
-	}
-
-	//forcing to send message for redrawing because windows is stupid!!
-	for (HWND ctrl : _transformControls)
-	{
-		DRAWITEMSTRUCT dis = {};
-		dis.CtlID = GetDlgCtrlID(ctrl);
-		dis.hwndItem = ctrl;
-		dis.hDC = GetDC(ctrl);
-		dis.rcItem = { 0, 0, 260, 20 }; // Adjust as necessary
-
-		SendMessage(mhMainWnd, WM_DRAWITEM, dis.CtlID, (LPARAM)&dis);
-
-		ReleaseDC(ctrl, dis.hDC);
-	}
-
-	_lockScaleBtn = std::make_shared<Control>(CreateWindow(L"BUTTON", L"", WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX | BS_NOTIFY,
-		40, 34 + 30 * 2, 12, 12, _transformPanel, (HMENU)_newId, (HINSTANCE)GetWindowLongPtr(_transformPanel, GWLP_HINSTANCE), NULL), _newId,
-		L"Lock Scale");
-
-	_newId++;
-
-	for (int i = 0; i < 3; i++)
-	{
-		_transformControlsRects.push_back({});
-		_transformControlsCoords.push_back({});
-		for (int j = 0; j < 3; j++)
-		{
-			_transformControlsRects[i].push_back(CreateWindowEx(
-				0, L"STATIC", labelCoords[j].c_str(), WS_CHILD | WS_VISIBLE,
-				70 + 60 * j, 30 + 30 * i, 50, 20, _transformPanel, NULL, (HINSTANCE)GetWindowLongPtr(_transformPanel, GWLP_HINSTANCE), NULL));
-			_transformControlsCoords[i].push_back(std::make_shared<Control>(CreateWindow(
-				L"EDIT", L"", WS_TABSTOP | WS_VISIBLE | WS_CHILD | WS_BORDER | ES_AUTOHSCROLL,
-				82 + 60 * j, 30 + 30 * i, 38, 20, _transformPanel, (HMENU)_newId, (HINSTANCE)GetWindowLongPtr(_transformPanel, GWLP_HINSTANCE), NULL),
-				_newId, L"Edit Field"));
-
-			SetWindowSubclass((HWND)_transformControlsCoords[i][j]->hwnd.get(), EditProc, 0, 0);
-			_newId++;
-		}
-	}
-
-	ShowWindow(_transformPanel, SW_SHOW);
-	UpdateWindow(_transformPanel);
 }
 
 void MyApp::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const std::vector<RenderItem*>& ritems)
@@ -1150,39 +988,6 @@ std::array<const CD3DX12_STATIC_SAMPLER_DESC, 8> MyApp::GetStaticSamplers()
 		anisotropicWrap, anisotropicClamp, linearMirror };
 }
 
-void MyApp::resizeRenderWindow()
-{
-}
-
-bool MyApp::handleControls(WPARAM wParam)
-{
-	int controlId = LOWORD(wParam);
-	//delete object
-	if (controlId == DELETE_ID)
-	{
-		deleteObject();
-		return true;
-	}
-	//focus on object
-	for (int i = 0; i < _objectBtns.size(); i++)
-	{
-		if (_objectBtns[i]->id == controlId)
-		{
-			_selectedObject = i + 1;
-			showTransform(true);
-			return true;
-		}
-	}
-	//lock scale
-	if (controlId == _lockScaleBtn->id && HIWORD(wParam) == BN_CLICKED)
-	{
-		mAllRitems[_selectedObject]->lockedScale = !mAllRitems[_selectedObject]->lockedScale;
-		return true;
-	}
-	//transform
-	return false;
-}
-
 void MyApp::UnloadModel(const std::wstring& modelName)
 {
 	if (mGeometries.find(modelName) != mGeometries.end())
@@ -1211,67 +1016,6 @@ void MyApp::addRenderItem(const std::wstring& itemName)
 	for (int i = 0; i < mFrameResources.size(); ++i)
 	{
 		mFrameResources[i]->addObjectBuffer(md3dDevice.Get());
-	}
-}
-
-void MyApp::addObjectControl(const std::wstring& name)
-{
-	/*std::wstring counter;
-	if (_objectCounters.find(name) != _objectCounters.end())
-	{
-		_objectCounters[name]++;
-		counter = std::to_wstring(_objectCounters[name]);
-	}
-	else
-	{
-		_objectCounters[name] = 1;
-		counter = L"";
-	}
-
-	std::wstring objName = name + counter;
-
-	std::shared_ptr<Control> newObjBtn = std::make_shared<Control>(CreateWindow(
-		L"BUTTON", objName.c_str(), WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON | BS_LEFT | BS_OWNERDRAW,
-		10, 100 + (int)_objectBtns.size() * 40, 100, 30, mhMainWnd, (HMENU)_newId, (HINSTANCE)GetWindowLongPtr(mhMainWnd, GWLP_HINSTANCE), NULL),
-		_newId, name);
-
-	SetFocus((HWND)newObjBtn->hwnd.get());
-
-	_objectBtns.push_back(std::move(newObjBtn));
-
-	if (_objectLoaded.find(name) == _objectLoaded.end())
-	{
-		_objectLoaded[name] = 1;
-	}
-	else
-	{
-		_objectLoaded[name]++;
-	}
-
-	_selectedObject = (int)_objectBtns.size();
-	showTransform(true);
-
-
-	_newId++;*/
-}
-
-void MyApp::handleRightClickControls(HWND hwnd, int x, int y)
-{
-	// Check if the right-click happened on a specific control
-	for (int i = 0; i < _objectBtns.size(); i++)
-	{
-		if (hwnd == _objectBtns[i]->hwnd.get())
-		{
-			_selectedObject = i + 1;
-			SetFocus((HWND)_objectBtns[i]->hwnd.get());
-			showTransform(true);
-
-			HMENU hPopupMenu = CreatePopupMenu();
-			AppendMenu(hPopupMenu, MF_STRING, DELETE_ID, L"Delete");
-			// Show the menu at the clicked position
-			TrackPopupMenu(hPopupMenu, TPM_RIGHTBUTTON, x, y, 0, mhMainWnd, NULL);
-			DestroyMenu(hPopupMenu);
-		}
 	}
 }
 
@@ -1311,70 +1055,10 @@ void MyApp::drawUI(LPDRAWITEMSTRUCT lpdis)
 	}
 }
 
-LRESULT MyApp::colorOtherData(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
-{
-	if ((HWND)lParam == _transformPanel)
-	{
-		HDC hdcStatic = (HDC)wParam;
-		SetBkColor(hdcStatic, RGB(40, 40, 40));
-		SetTextColor(hdcStatic, RGB(200, 200, 200));
-		return (INT_PTR)_transformBG;
-	}
-
-	return DefWindowProc(hwnd, msg, wParam, lParam);
-}
-
-void MyApp::handlePaint()
-{
-}
-
-void MyApp::showTransform(bool show)
-{
-	if (!show)
-	{
-		ShowWindow(_transformPanel, SW_HIDE);
-		return;
-	}
-
-	for (int i = 0; i < 3; i++)
-	{
-		for (int j = 0; j < 3; j++)
-		{
-			SetWindowText((HWND)_transformControlsCoords[i][j]->hwnd.get(), std::to_wstring(mAllRitems[_selectedObject]->transform[i][j]).c_str());
-		}
-	}
-
-	SendMessage((HWND)_lockScaleBtn->hwnd.get(), BM_SETCHECK, mAllRitems[_selectedObject]->lockedScale ? BST_CHECKED : BST_UNCHECKED, 0);
-
-	ShowWindow(_transformPanel, SW_SHOW);
-}
-
-bool MyApp::onKeyDown(UINT key)
-{
-	if (key == VK_DELETE && _selectedObject != -1)
-	{
-		HWND focusedSmth = GetFocus();
-		for (auto& objBtn : _objectBtns)
-		{
-			if ((HWND)objBtn->hwnd.get() == focusedSmth)
-			{
-				deleteObject();
-				return true;
-			}
-		}
-		return false;
-	}
-
-	
-	return false;
-}
-
-
 void MyApp::deleteObject()
 {
-	std::wstring name = _objectBtns[_selectedObject]->name;
+	std::wstring name(mOpaqueRitems[_selectedObject]->Name.begin(), mOpaqueRitems[_selectedObject]->Name.end());
 	_objectLoaded[name]--;
-	_objectBtns.erase(_objectBtns.begin() + _selectedObject - 1);
 	mAllRitems.erase(mAllRitems.begin() + _selectedObject);
 	mOpaqueRitems.erase(mOpaqueRitems.begin() + _selectedObject);
 
@@ -1408,107 +1092,6 @@ void MyApp::deleteObject()
 	}
 
 	_selectedObject = -1;
-	showTransform(false);
-}
-
-LRESULT CALLBACK TransformPanelProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
-{
-	switch (msg)
-	{
-	case WM_COMMAND:
-		if (HIWORD(wParam) == EN_CHANGE) // If the edit control text changes
-		{
-			HWND hWndEdit = (HWND)lParam;
-			int len = GetWindowTextLength(hWndEdit);
-			if (len == 0) return 0;
-
-			wchar_t* text = new wchar_t[len + 1];
-			GetWindowText(hWndEdit, text, len + 1);
-
-			std::wstring filteredText;
-			bool hasDot = false;
-			bool hasMinus = false;
-
-			for (int i = 0; i < len; i++)
-			{
-				wchar_t ch = text[i];
-
-				if (iswdigit(ch)) // Allow digits
-				{
-					filteredText += ch;
-				}
-				else if (ch == L'.' && !hasDot) // Allow only one decimal point
-				{
-					filteredText += ch;
-					hasDot = true;
-				}
-				else if (ch == L'-' && i == 0 && !hasMinus) // Allow minus sign only at the beginning
-				{
-					filteredText += ch;
-					hasMinus = true;
-				}
-			}
-
-			// If the filtered text differs from input, update the edit control
-			if (filteredText != text)
-			{
-				SetWindowText(hWndEdit, filteredText.c_str());
-
-				// Move the caret to the end of the text
-				SendMessage(hWndEdit, EM_SETSEL, filteredText.size(), filteredText.size());
-			}
-
-			delete[] text;
-		}
-		// Handle command messages, like button clicks
-		SendMessage(GetParent(hwnd), msg, wParam, lParam);
-		break;
-
-	case WM_CTLCOLORSTATIC:
-	{
-		HDC hdcStatic = (HDC)wParam;
-		HBRUSH hBrush = CreateSolidBrush(RGB(50, 50, 50));
-		SetBkColor(hdcStatic, RGB(50, 50, 50));
-		SetTextColor(hdcStatic, RGB(200, 200, 200));
-		return (INT_PTR)hBrush;
-	}
-
-	default:
-		// Forward all other messages to the original WindowProc
-		return CallWindowProc(g_OriginalPanelWndProc, hwnd, msg, wParam, lParam);
-	}
-
-	return 0;
-}
-
-LRESULT CALLBACK EditProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam,
-	UINT_PTR uIdSubclass, DWORD_PTR dwRefData)
-{
-	switch (msg)
-	{
-	case WM_KEYDOWN:
-		if (wParam == VK_RETURN)
-		{
-			wchar_t text[256];
-			GetWindowText(hwnd, text, 256);
-
-			MyApp::GetApp()->processText(hwnd, text);
-
-			return 0; // Prevents beeping
-		}
-		break;
-	case WM_NCDESTROY:
-		RemoveWindowSubclass(hwnd, EditProc, uIdSubclass);
-		break;
-	case WM_CHAR:
-		if (wParam == VK_RETURN)
-		{
-			return 0; // Block Enter key from making the beep
-		}
-		break; // Let all other characters, including arrows, be processed normally
-	}
-	
-	return DefSubclassProc(hwnd, msg, wParam, lParam);
 }
 
 //some wndproc stuff
