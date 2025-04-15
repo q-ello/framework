@@ -9,11 +9,6 @@ FrameResource::FrameResource(ID3D12Device* device, UINT passCount, UINT objectCo
     //  FrameCB = std::make_unique<UploadBuffer<FrameConstants>>(device, 1, true);
     PassCB = std::make_unique<UploadBuffer<PassConstants>>(device, passCount, true);
     MaterialCB = std::make_unique<UploadBuffer<MaterialConstants>>(device, materialCount, true);
-
-    for (int i = 0; i < objectCount; i++)
-    {
-        ObjectsCB.push_back(std::make_unique<UploadBuffer<ObjectConstants>>(device, 1, true));
-    }
 }
 
 FrameResource::~FrameResource()
@@ -21,12 +16,12 @@ FrameResource::~FrameResource()
 
 }
 
-void FrameResource::addObjectBuffer(ID3D12Device* device)
+void FrameResource::addObjectBuffer(ID3D12Device* device, std::uint32_t uid)
 {
-    ObjectsCB.push_back(std::make_unique<UploadBuffer<ObjectConstants>>(device, 1, true));
+    ObjectsCB[uid] = std::make_unique<UploadBuffer<ObjectConstants>>(device, 1, true);
 }
 
-void FrameResource::removeObjectBuffer(ID3D12Device* device, int index)
+void FrameResource::removeObjectBuffer(ID3D12Device* device, std::uint32_t uid)
 {
-    ObjectsCB.erase(ObjectsCB.begin() + index);
+    ObjectsCB.erase(uid);
 }

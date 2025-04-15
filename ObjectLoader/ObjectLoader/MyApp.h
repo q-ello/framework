@@ -15,11 +15,11 @@ using Microsoft::WRL::ComPtr;
 using namespace DirectX;
 using namespace DirectX::PackedVector;
 
-enum class PSOType
+enum class PSO
 {
 	Opaque = 0,
-	Transparent,
-	AlphaTested,
+	//Transparent,
+	//AlphaTested,
 	Grid,
 	Count
 };
@@ -41,6 +41,8 @@ struct RenderItem
 	// relative to the world space, which defines the position, orientation,
 	// and scale of the object in the world.
 	XMFLOAT4X4 World = MathHelper::Identity4x4();
+
+	std::uint32_t uid = 0;
 
 	std::string Name;
 	int nameCount = 0;
@@ -73,6 +75,8 @@ struct RenderItem
 	TextureHandle diffuseHandle;
 	TextureHandle specularHandle;
 	TextureHandle normalHandle;
+
+	PSO type = PSO::Opaque;
 };
 
 class MyApp : public D3DApp
@@ -145,9 +149,10 @@ private:
 	std::vector<D3D12_INPUT_ELEMENT_DESC> mInputLayoutColored;
 
 	// Render items divided by PSO.
-	std::unordered_map<PSOType, ComPtr<ID3D12PipelineState>> _psos;
-	std::unordered_map<PSOType, std::vector<RenderItem*>> _renderItems;
+	std::unordered_map<PSO, ComPtr<ID3D12PipelineState>> _psos;
+	std::unordered_map<PSO, std::vector<RenderItem*>> _renderItems;
 	std::vector<std::unique_ptr<RenderItem>> _allRenderItems;
+	std::uint32_t uidCount = 0;
 
 	PassConstants mMainPassCB;
 
@@ -169,5 +174,6 @@ private:
 	void deleteObject();
 
 	int _selectedObject = -1;
+	PSO _selectedType = PSO::Opaque;
 };
 

@@ -167,11 +167,12 @@ void MyApp::Draw(const GameTimer& gt)
 	auto passCB = mCurrFrameResource->PassCB->Resource();
 	mCommandList->SetGraphicsRootConstantBufferView(2, passCB->GetGPUVirtualAddress());
 
-	mCommandList->SetPipelineState(_psos[PSOType::Grid].Get());
-	DrawRenderItems(mCommandList.Get(), _renderItems[PSOType::Grid]);
-
-	mCommandList->SetPipelineState(_psos[PSOType::Opaque].Get());
-	DrawRenderItems(mCommandList.Get(), _renderItems[PSOType::Opaque]);
+	for (int i = 0; i < static_cast<int>(PSO::Count); i++)
+	{
+		PSO type = static_cast<PSO>(i);
+		mCommandList->SetPipelineState(_psos[type].Get());
+		DrawRenderItems(mCommandList.Get(), _renderItems[type]);
+	}
 
 	descriptorHeaps[0] = _imGuiDescriptorHeap.Get();
 	mCommandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
@@ -281,26 +282,27 @@ void MyApp::UpdateObjectCBs(const GameTimer& gt)
 	{
 		// Only update the cbuffer data if the constants have changed.  
 		// This needs to be tracked per frame resource.
-		if (_allRenderItems[i]->NumFramesDirty > 0)
+		auto& ri = _allRenderItems[i];
+		if (ri->NumFramesDirty > 0)
 		{
-			XMMATRIX scale = XMMatrixScaling(_allRenderItems[i]->transform[2][0], _allRenderItems[i]->transform[2][1], _allRenderItems[i]->transform[2][2]);
-			XMMATRIX rotation = XMMatrixRotationRollPitchYaw(_allRenderItems[i]->transform[1][0] * XM_PI / 180.,
-				_allRenderItems[i]->transform[1][1] * XM_PI / 180.,
-				_allRenderItems[i]->transform[1][2] * XM_PI / 180.);
-			XMMATRIX translation = XMMatrixTranslation(_allRenderItems[i]->transform[0][0], _allRenderItems[i]->transform[0][1], _allRenderItems[i]->transform[0][2]);
+			XMMATRIX scale = XMMatrixScaling(ri->transform[2][0], ri->transform[2][1], ri->transform[2][2]);
+			XMMATRIX rotation = XMMatrixRotationRollPitchYaw(ri->transform[1][0] * XM_PI / 180.,
+				ri->transform[1][1] * XM_PI / 180.,
+				ri->transform[1][2] * XM_PI / 180.);
+			XMMATRIX translation = XMMatrixTranslation(ri->transform[0][0], ri->transform[0][1], ri->transform[0][2]);
 
 			XMMATRIX world = scale * rotation * translation;
-			XMStoreFloat4x4(&_allRenderItems[i]->World, world);
-			XMMATRIX texTransform = XMLoadFloat4x4(&_allRenderItems[i]->TexTransform);
+			XMStoreFloat4x4(&ri->World, world);
+			XMMATRIX texTransform = XMLoadFloat4x4(&ri->TexTransform);
 
 			ObjectConstants objConstants;
 			XMStoreFloat4x4(&objConstants.World, XMMatrixTranspose(world));
 			XMStoreFloat4x4(&objConstants.TexTransform, XMMatrixTranspose(texTransform));
 
-			currObjectsCB[i].get()->CopyData(_allRenderItems[i]->ObjCBIndex, objConstants);
+			currObjectsCB[ri->uid].get()->CopyData(ri->ObjCBIndex, objConstants);
 
 			// Next FrameResource need to be updated too.
-			_allRenderItems[i]->NumFramesDirty--;
+			ri->NumFramesDirty--;
 		}
 	}
 }
@@ -718,7 +720,7 @@ void MyApp::BuildPSOs()
 	opaquePsoDesc.SampleDesc.Count = m4xMsaaState ? 4 : 1;
 	opaquePsoDesc.SampleDesc.Quality = m4xMsaaState ? (m4xMsaaQuality - 1) : 0;
 	opaquePsoDesc.DSVFormat = mDepthStencilFormat;
-	ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&opaquePsoDesc, IID_PPV_ARGS(&_psos[PSOType::Opaque])));
+	ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&opaquePsoDesc, IID_PPV_ARGS(&_psos[PSO::Opaque])));
 
 	opaquePsoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE;
 	opaquePsoDesc.PS =
@@ -726,7 +728,7 @@ void MyApp::BuildPSOs()
 		reinterpret_cast<BYTE*>(mShaders["gridPS"]->GetBufferPointer()),
 		mShaders["gridPS"]->GetBufferSize()
 	};
-	ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&opaquePsoDesc, IID_PPV_ARGS(&_psos[PSOType::Grid])));
+	ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&opaquePsoDesc, IID_PPV_ARGS(&_psos[PSO::Grid])));
 
 }
 
@@ -736,6 +738,10 @@ void MyApp::BuildFrameResources()
 	{
 		mFrameResources.push_back(std::make_unique<FrameResource>(md3dDevice.Get(),
 			1, (UINT)_allRenderItems.size(), (UINT)mMaterials.size()));
+		for (auto& item : _allRenderItems)
+		{
+			mFrameResources[i]->addObjectBuffer(md3dDevice.Get(), item->uid);
+		}
 	}
 }
 
@@ -765,6 +771,8 @@ void MyApp::BuildMaterials()
 void MyApp::buildGrid()
 {
 	auto gridRItem = std::make_unique<RenderItem>();
+	gridRItem->uid = uidCount++;
+	gridRItem->Name = "grid";
 	gridRItem->ObjCBIndex = 0;
 	gridRItem->Mat = mMaterials["woodCrate"].get();
 	gridRItem->Geo = mGeometries[L"gridGeo"].get();
@@ -773,20 +781,16 @@ void MyApp::buildGrid()
 	gridRItem->StartIndexLocation = gridRItem->Geo->DrawArgs[L"grid"].StartIndexLocation;
 	gridRItem->BaseVertexLocation = gridRItem->Geo->DrawArgs[L"grid"].BaseVertexLocation;
 	gridRItem->diffuseHandle.index = 0;
-	_renderItems[PSOType::Grid].push_back(gridRItem.get());
+	gridRItem->type = PSO::Grid;
+	_renderItems[PSO::Grid].push_back(gridRItem.get());
 	_allRenderItems.push_back(std::move(gridRItem));
-
-	for (int i = 0; i < mFrameResources.size(); ++i)
-	{
-		mFrameResources[i]->addObjectBuffer(md3dDevice.Get());
-	}
 }
 
 void MyApp::DrawInterface()
 {
 	//debug info
 	ImGui::Begin("Debug info");
-	ImGui::Text(("Sponzas loaded: " + std::to_string(_objectLoaded[L"sponza"])).c_str());
+	ImGui::Text(("Grid translation x: " + std::to_string(_renderItems[PSO::Grid][0]->transform[0][0])).c_str());
 	ImGui::End();
 
 	//objects window
@@ -808,12 +812,13 @@ void MyApp::DrawInterface()
 
 		ImGui::Spacing();
 
-		for (int i = 0; i < _renderItems[PSOType::Opaque].size(); i++)
+		for (int i = 0; i < _renderItems[PSO::Opaque].size(); i++)
 		{
 			ImGui::PushID(i*2);
-			if (ImGui::Button((_renderItems[PSOType::Opaque][i]->Name + (_renderItems[PSOType::Opaque][i]->nameCount == 0 ? "" : std::to_string(_renderItems[PSOType::Opaque][i]->nameCount))).c_str()))
+			if (ImGui::Button((_renderItems[PSO::Opaque][i]->Name + (_renderItems[PSO::Opaque][i]->nameCount == 0 ? "" : std::to_string(_renderItems[PSO::Opaque][i]->nameCount))).c_str()))
 			{
 				_selectedObject = i;
+				_selectedType = PSO::Opaque;
 			}
 			ImGui::SameLine();
 			ImGui::PopID();
@@ -821,6 +826,7 @@ void MyApp::DrawInterface()
 			if (ImGui::Button("delete"))
 			{
 				_selectedObject = i;
+				_selectedType = PSO::Opaque;
 				deleteObject();
 			}
 			ImGui::PopID();
@@ -835,47 +841,47 @@ void MyApp::DrawInterface()
 		ImGui::SetNextWindowPos({ static_cast<float>(mClientWidth) - 300.f, 50.f }, ImGuiCond_Once, { 0.f, 0.f });
 		ImGui::SetNextWindowSize({ 250.f, 350.f }, ImGuiCond_Once);
 
-		ImGui::Begin((_renderItems[PSOType::Opaque][_selectedObject]->Name + " Info").c_str());                          // Create a window called "Hello, world!" and append into it.
+		ImGui::Begin((_renderItems[_selectedType][_selectedObject]->Name + " Info").c_str());                          // Create a window called "Hello, world!" and append into it.
 		if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen))
 		{
 			ImGui::Text("Location: ");
 			ImGui::SameLine();
 
-			if (ImGui::InputFloat3("##1", _renderItems[PSOType::Opaque][_selectedObject]->transform[0]))
+			if (ImGui::InputFloat3("##1", _renderItems[_selectedType][_selectedObject]->transform[0]))
 			{
-				_renderItems[PSOType::Opaque][_selectedObject]->NumFramesDirty = gNumFrameResources;
+				_renderItems[_selectedType][_selectedObject]->NumFramesDirty = gNumFrameResources;
 			}
 
 			ImGui::Text("Rotation: ");
 			ImGui::SameLine();
-			if (ImGui::InputFloat3("##2", _renderItems[PSOType::Opaque][_selectedObject]->transform[1]))
+			if (ImGui::InputFloat3("##2", _renderItems[_selectedType][_selectedObject]->transform[1]))
 			{
-				_renderItems[PSOType::Opaque][_selectedObject]->NumFramesDirty = gNumFrameResources;
+				_renderItems[_selectedType][_selectedObject]->NumFramesDirty = gNumFrameResources;
 			}
 
 			ImGui::Text("Scale:");
 			ImGui::SameLine();
-			ImGui::Checkbox("##4", &_renderItems[PSOType::Opaque][_selectedObject]->lockedScale);
+			ImGui::Checkbox("##4", &_renderItems[_selectedType][_selectedObject]->lockedScale);
 			ImGui::SameLine();
-			float before[3] = { _renderItems[PSOType::Opaque][_selectedObject]->transform[2][0], _renderItems[PSOType::Opaque][_selectedObject]->transform[2][1], _renderItems[PSOType::Opaque][_selectedObject]->transform[2][2] };
-			if (ImGui::InputFloat3("##3", _renderItems[PSOType::Opaque][_selectedObject]->transform[2]))
+			float before[3] = { _renderItems[_selectedType][_selectedObject]->transform[2][0], _renderItems[_selectedType][_selectedObject]->transform[2][1], _renderItems[_selectedType][_selectedObject]->transform[2][2] };
+			if (ImGui::InputFloat3("##3", _renderItems[_selectedType][_selectedObject]->transform[2]))
 			{
-				if (_renderItems[PSOType::Opaque][_selectedObject]->lockedScale)
+				if (_renderItems[_selectedType][_selectedObject]->lockedScale)
 				{
 					float difference = 1.f;
 
 					for (int i = 0; i < 3; i++)
 					{
 
-						difference *= _renderItems[PSOType::Opaque][_selectedObject]->transform[2][i] / before[i];
+						difference *= _renderItems[_selectedType][_selectedObject]->transform[2][i] / before[i];
 					}
 
 					for (int i = 0; i < 3; i++)
 					{
-						_renderItems[PSOType::Opaque][_selectedObject]->transform[2][i] = before[i] * difference;
+						_renderItems[_selectedType][_selectedObject]->transform[2][i] = before[i] * difference;
 					}
 				}
-				_renderItems[PSOType::Opaque][_selectedObject]->NumFramesDirty = gNumFrameResources;
+				_renderItems[_selectedType][_selectedObject]->NumFramesDirty = gNumFrameResources;
 			}
 		}
 		if (ImGui::CollapsingHeader("Textures", ImGuiTreeNodeFlags_DefaultOpen))
@@ -883,7 +889,7 @@ void MyApp::DrawInterface()
 			ImGui::Text("Diffuse");
 			ImGui::SameLine();
 			ImGui::PushID(0);
-			std::string name = _renderItems[PSOType::Opaque][_selectedObject]->diffuseHandle.name;
+			std::string name = _renderItems[_selectedType][_selectedObject]->diffuseHandle.name;
 			if (name.size() > 15)
 			{
 				name = name.substr(0, 12) + "...";
@@ -893,7 +899,7 @@ void MyApp::DrawInterface()
 				WCHAR* texturePath;
 				if (TryToOpenFile(L"DDS Textures", L"*.dds", texturePath))
 				{
-					_renderItems[PSOType::Opaque][_selectedObject]->diffuseHandle = LoadTexture(texturePath);
+					_renderItems[_selectedType][_selectedObject]->diffuseHandle = LoadTexture(texturePath);
 				}
 			}
 			ImGui::PopID();
@@ -905,7 +911,7 @@ void MyApp::DrawInterface()
 			ImGui::Text("Specular");
 			ImGui::SameLine();
 			ImGui::PushID(2);
-			ImGui::Button(_renderItems[PSOType::Opaque][_selectedObject]->specularHandle.name.c_str());
+			ImGui::Button(_renderItems[_selectedType][_selectedObject]->specularHandle.name.c_str());
 			ImGui::PopID();
 			ImGui::SameLine();
 			ImGui::PushID(3);
@@ -915,7 +921,7 @@ void MyApp::DrawInterface()
 			ImGui::Text("Normal");
 			ImGui::SameLine();
 			ImGui::PushID(4);
-			ImGui::Button(_renderItems[PSOType::Opaque][_selectedObject]->normalHandle.name.c_str());
+			ImGui::Button(_renderItems[_selectedType][_selectedObject]->normalHandle.name.c_str());
 			ImGui::PopID();
 			ImGui::SameLine();
 			ImGui::PushID(5);
@@ -938,8 +944,8 @@ void MyApp::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const std::vecto
 	// For each render item...
 	for (size_t i = 0; i < ritems.size(); ++i)
 	{
-		auto objectCB = mCurrFrameResource->ObjectsCB[i]->Resource();
 		auto ri = ritems[i];
+		auto objectCB = mCurrFrameResource->ObjectsCB[ri->uid]->Resource();
 
 		cmdList->IASetVertexBuffers(0, 1, &ri->Geo->VertexBufferView());
 		cmdList->IASetIndexBuffer(&ri->Geo->IndexBufferView());
@@ -1061,6 +1067,7 @@ void MyApp::addRenderItem(const std::wstring& itemName)
 
 	auto modelRitem = std::make_unique<RenderItem>();
 	_objectLoaded[itemName]++;
+	modelRitem->uid = uidCount++;
 	modelRitem->Name = name;
 	modelRitem->nameCount = _objectCounters[itemName]++;
 	modelRitem->ObjCBIndex = 0;
@@ -1073,21 +1080,39 @@ void MyApp::addRenderItem(const std::wstring& itemName)
 
 	modelRitem->diffuseHandle.index = _texIndices[L"defaultTex"];
 
-	_renderItems[PSOType::Opaque].push_back(modelRitem.get());
-	_allRenderItems.push_back(std::move(modelRitem));
-
 	for (int i = 0; i < mFrameResources.size(); ++i)
 	{
-		mFrameResources[i]->addObjectBuffer(md3dDevice.Get());
+		mFrameResources[i]->addObjectBuffer(md3dDevice.Get(), modelRitem->uid);
 	}
+
+	_renderItems[modelRitem->type].push_back(modelRitem.get());
+	_allRenderItems.push_back(std::move(modelRitem));
 }
 
 void MyApp::deleteObject()
 {
-	std::wstring name(_renderItems[PSOType::Opaque][_selectedObject]->Name.begin(), _renderItems[PSOType::Opaque][_selectedObject]->Name.end());
+	std::wstring name(_renderItems[_selectedType][_selectedObject]->Name.begin(), _renderItems[_selectedType][_selectedObject]->Name.end());
 	_objectLoaded[name]--;
-	_allRenderItems.erase(_allRenderItems.begin() + _selectedObject);
-	_renderItems[PSOType::Opaque].erase(_renderItems[PSOType::Opaque].begin() + _selectedObject);
+
+	//need for deleting from frame resource
+	std::uint32_t uid = _renderItems[_selectedType][_selectedObject]->uid;
+
+	//finding index in the general array
+	size_t index = -1;
+	for (size_t i = 0; i < _allRenderItems.size(); i++)
+	{
+		if (_allRenderItems[i]->uid == uid)
+		{
+			index = i;
+			break;
+		}
+	}
+
+	if (index != -1)
+	{
+		_allRenderItems.erase(_allRenderItems.begin() + index);
+	}
+	_renderItems[_selectedType].erase(_renderItems[_selectedType].begin() + _selectedObject);
 
 	FlushCommandQueue();
 
@@ -1110,7 +1135,7 @@ void MyApp::deleteObject()
 
 	for (int i = 0; i < gNumFrameResources; ++i)
 	{
-		mFrameResources[i]->removeObjectBuffer(md3dDevice.Get(), _selectedObject);
+		mFrameResources[i]->removeObjectBuffer(md3dDevice.Get(), uid);
 	}
 
 	_selectedObject = -1;

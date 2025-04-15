@@ -53,8 +53,8 @@ public:
     FrameResource& operator=(const FrameResource& rhs) = delete;
     ~FrameResource();
 
-    void addObjectBuffer(ID3D12Device* device);
-    void removeObjectBuffer(ID3D12Device* device, int index);
+    void addObjectBuffer(ID3D12Device* device, std::uint32_t uid);
+    void removeObjectBuffer(ID3D12Device* device, std::uint32_t uid);
 
     // We cannot reset the allocator until the GPU is done processing the commands.
     // So each frame needs their own allocator.
@@ -65,7 +65,7 @@ public:
    // std::unique_ptr<UploadBuffer<FrameConstants>> FrameCB = nullptr;
     std::unique_ptr<UploadBuffer<PassConstants>> PassCB = nullptr;
     std::unique_ptr<UploadBuffer<MaterialConstants>> MaterialCB = nullptr;
-    std::vector<std::unique_ptr<UploadBuffer<ObjectConstants>>> ObjectsCB = {};
+    std::unordered_map<std::uint32_t, std::unique_ptr<UploadBuffer<ObjectConstants>>> ObjectsCB = {};
 
     // Fence value to mark commands up to this fence point.  This lets us
     // check if these frame resources are still in use by the GPU.
