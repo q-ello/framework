@@ -120,10 +120,15 @@ private:
 	void buildGrid();
 	void DrawInterface();
 	bool TryToOpenFile(WCHAR* extension1, WCHAR* extension2, PWSTR& filePath);
+	
+	//upload stuff
+	void ExecuteUploadCommandList();
 
 	std::array<const CD3DX12_STATIC_SAMPLER_DESC, 8> GetStaticSamplers();
 
+	//helper with strings
 	std::wstring getCroppedName(WCHAR* filename);
+	std::string trimName(const std::string& name, int border) const;
 
 private:
 	std::vector<std::unique_ptr<FrameResource>> mFrameResources;
@@ -135,6 +140,12 @@ private:
 	ComPtr<ID3D12DescriptorHeap> _imGuiDescriptorHeap = nullptr;
 	std::unique_ptr<DescriptorHeapAllocator> _srvHeapAllocator = nullptr;
 
+	//stuff for uploading data dynamically
+	Microsoft::WRL::ComPtr<ID3D12CommandAllocator> _uploadCmdAlloc;
+	Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> _uploadCmdList;
+	Microsoft::WRL::ComPtr<ID3D12Fence> _uploadFence;
+	UINT64 _uploadFenceValue = 0;
+	HANDLE _uploadFenceEvent = nullptr;
 
 	std::unordered_map<std::wstring, std::unique_ptr<MeshGeometry>> mGeometries;
 	std::unordered_map<std::string, std::unique_ptr<Material>> mMaterials;

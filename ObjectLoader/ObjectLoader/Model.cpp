@@ -30,9 +30,12 @@ Model::Model(WCHAR* filename)
 		return;
 	}
 
-	for (int i = 0; i < scene->mNumMeshes; i++)
+	for (int j = 0; j < scene->mNumMeshes; j++)
 	{
-		aiMesh* mesh = scene->mMeshes[i];
+		//offsetting vertices because, well, parsing is incorrect
+		size_t vertexOffset = _vertices.size();
+
+		aiMesh* mesh = scene->mMeshes[j];
 
 		for (int i = 0; i < mesh->mNumVertices; i++)
 		{
@@ -52,9 +55,9 @@ Model::Model(WCHAR* filename)
 			{
 				continue;
 			}
-			_indices.push_back(mesh->mFaces[i].mIndices[0]);
-			_indices.push_back(mesh->mFaces[i].mIndices[1]);
-			_indices.push_back(mesh->mFaces[i].mIndices[2]);
+			_indices.push_back(mesh->mFaces[i].mIndices[0] + vertexOffset);
+			_indices.push_back(mesh->mFaces[i].mIndices[1] + vertexOffset);
+			_indices.push_back(mesh->mFaces[i].mIndices[2] + vertexOffset);
 		}
 	}
 }

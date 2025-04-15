@@ -32,6 +32,15 @@ bool MyApp::Initialize()
 	if (!D3DApp::Initialize())
 		return false;
 
+	//initializing upload stuff
+	OutputDebugString(L"Starting to initialize upload data...\n");
+	md3dDevice->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&_uploadCmdAlloc));
+	md3dDevice->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, _uploadCmdAlloc.Get(), nullptr, IID_PPV_ARGS(&_uploadCmdList));
+	md3dDevice->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&_uploadFence));
+	_uploadFenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+	ThrowIfFailed(_uploadCmdList->Close());
+	OutputDebugString(L"Upload data initialized.\n");
+
 	// Reset the command list to prep for initialization commands.
 	ThrowIfFailed(mCommandList->Reset(mDirectCmdListAlloc.Get(), nullptr));
 
@@ -566,6 +575,8 @@ void MyApp::BuildShapeGeometry()
 
 void MyApp::buildGridGeometry()
 {
+	ThrowIfFailed(_uploadCmdList->Reset(_uploadCmdAlloc.Get(), nullptr));
+
 	GeometryGenerator geoGen;
 	GeometryGenerator::MeshData grid = geoGen.CreateGrid(20.f, 20.f, 0.1f);
 
@@ -597,11 +608,15 @@ void MyApp::buildGridGeometry()
 	ThrowIfFailed(D3DCreateBlob(ibByteSize, &geo->IndexBufferCPU));
 	CopyMemory(geo->IndexBufferCPU->GetBufferPointer(), indices.data(), ibByteSize);
 
+	OutputDebugString(L"Creating grid vertex buffer...\n");
 	geo->VertexBufferGPU = d3dUtil::CreateDefaultBuffer(md3dDevice.Get(),
-		mCommandList.Get(), vertices.data(), vbByteSize, geo->VertexBufferUploader);
+		_uploadCmdList.Get(), vertices.data(), vbByteSize, geo->VertexBufferUploader);
+	OutputDebugString(L"Grid vertex buffer created.\n");
 
+	OutputDebugString(L"Creating grid index buffer...\n");
 	geo->IndexBufferGPU = d3dUtil::CreateDefaultBuffer(md3dDevice.Get(),
-		mCommandList.Get(), indices.data(), ibByteSize, geo->IndexBufferUploader);
+		_uploadCmdList.Get(), indices.data(), ibByteSize, geo->IndexBufferUploader);
+	OutputDebugString(L"Grid index buffer created.\n");
 
 	geo->VertexByteStride = sizeof(Vertex);
 	geo->VertexBufferByteSize = vbByteSize;
@@ -625,8 +640,14 @@ void MyApp::BuildModelGeometry(WCHAR* filename)
 	}
 
 	//load new model
-
 	std::unique_ptr<Model> model = std::make_unique<Model>(filename);
+
+	//veryfying that model does actually have some data
+	if (model->vertices().empty() || model->indices().empty())
+	{
+		OutputDebugString(L"[ERROR] Model data is empty! Aborting geometry creation.\n");
+		return;
+	}
 
 	// Pack the indices of all the meshes into one index buffer.
 	//
@@ -639,23 +660,22 @@ void MyApp::BuildModelGeometry(WCHAR* filename)
 
 	geo->Name = croppedName;
 
-	if (!mFrameResources.empty())
-	{
-		// Reset command list and begin recording
-		ThrowIfFailed(mCommandList->Reset(mDirectCmdListAlloc.Get(), nullptr));
-	}
-
 	ThrowIfFailed(D3DCreateBlob(vbByteSize, &geo->VertexBufferCPU));
 	CopyMemory(geo->VertexBufferCPU->GetBufferPointer(), model->vertices().data(), vbByteSize);
+
 
 	ThrowIfFailed(D3DCreateBlob(ibByteSize, &geo->IndexBufferCPU));
 	CopyMemory(geo->IndexBufferCPU->GetBufferPointer(), model->indices().data(), ibByteSize);
 
+	OutputDebugString(L"Creating model vertex buffer...\n");
 	geo->VertexBufferGPU = d3dUtil::CreateDefaultBuffer(md3dDevice.Get(),
-		mCommandList.Get(), model->vertices().data(), vbByteSize, geo->VertexBufferUploader);
+		_uploadCmdList.Get(), model->vertices().data(), vbByteSize, geo->VertexBufferUploader);
+	OutputDebugString(L"Model vertex buffer created.\n");
 
+	OutputDebugString(L"Creating model index buffer...\n");
 	geo->IndexBufferGPU = d3dUtil::CreateDefaultBuffer(md3dDevice.Get(),
-		mCommandList.Get(), model->indices().data(), ibByteSize, geo->IndexBufferUploader);
+		_uploadCmdList.Get(), model->indices().data(), ibByteSize, geo->IndexBufferUploader);
+	OutputDebugString(L"Model index buffer created.\n");
 
 	geo->VertexByteStride = sizeof(Vertex);
 	geo->VertexBufferByteSize = vbByteSize;
@@ -673,21 +693,7 @@ void MyApp::BuildModelGeometry(WCHAR* filename)
 
 	addRenderItem(croppedName);
 
-	if (mFrameResources.empty())
-	{
-		return;
-	}
-
-	ThrowIfFailed(mCommandList->Close());
-
-	// Execute command list to commit GPU resource updates
-	ID3D12CommandList* cmdsLists[] = { mCommandList.Get() };
-	mCommandQueue->ExecuteCommandLists(_countof(cmdsLists), cmdsLists);
-
-	// Flush command queue to ensure all commands are completed
-	FlushCommandQueue();
-
-	
+	ExecuteUploadCommandList();
 }
 
 void MyApp::BuildPSOs()
@@ -803,7 +809,7 @@ void MyApp::DrawInterface()
 		if (ImGui::Button("Add New"))
 		{
 			PWSTR pszFilePath;
-			if (TryToOpenFile(L"Wavefront Object", L"*.obj", pszFilePath))
+			if (TryToOpenFile(L"3D Object", L"*.obj;*.fbx", pszFilePath))
 			{
 				BuildModelGeometry(pszFilePath);
 				CoTaskMemFree(pszFilePath);
@@ -815,7 +821,9 @@ void MyApp::DrawInterface()
 		for (int i = 0; i < _renderItems[PSO::Opaque].size(); i++)
 		{
 			ImGui::PushID(i*2);
-			if (ImGui::Button((_renderItems[PSO::Opaque][i]->Name + (_renderItems[PSO::Opaque][i]->nameCount == 0 ? "" : std::to_string(_renderItems[PSO::Opaque][i]->nameCount))).c_str()))
+			std::string name = trimName(_renderItems[PSO::Opaque][i]->Name + 
+				(_renderItems[PSO::Opaque][i]->nameCount == 0 ? "" : std::to_string(_renderItems[PSO::Opaque][i]->nameCount)), 15);
+			if (ImGui::Button(name.c_str()))
 			{
 				_selectedObject = i;
 				_selectedType = PSO::Opaque;
@@ -863,7 +871,9 @@ void MyApp::DrawInterface()
 			ImGui::SameLine();
 			ImGui::Checkbox("##4", &_renderItems[_selectedType][_selectedObject]->lockedScale);
 			ImGui::SameLine();
-			float before[3] = { _renderItems[_selectedType][_selectedObject]->transform[2][0], _renderItems[_selectedType][_selectedObject]->transform[2][1], _renderItems[_selectedType][_selectedObject]->transform[2][2] };
+			float before[3] = { _renderItems[_selectedType][_selectedObject]->transform[2][0], 
+				_renderItems[_selectedType][_selectedObject]->transform[2][1], 
+				_renderItems[_selectedType][_selectedObject]->transform[2][2] };
 			if (ImGui::InputFloat3("##3", _renderItems[_selectedType][_selectedObject]->transform[2]))
 			{
 				if (_renderItems[_selectedType][_selectedObject]->lockedScale)
@@ -884,16 +894,14 @@ void MyApp::DrawInterface()
 				_renderItems[_selectedType][_selectedObject]->NumFramesDirty = gNumFrameResources;
 			}
 		}
+
+		//textures
 		if (ImGui::CollapsingHeader("Textures", ImGuiTreeNodeFlags_DefaultOpen))
 		{
 			ImGui::Text("Diffuse");
 			ImGui::SameLine();
 			ImGui::PushID(0);
-			std::string name = _renderItems[_selectedType][_selectedObject]->diffuseHandle.name;
-			if (name.size() > 15)
-			{
-				name = name.substr(0, 12) + "...";
-			}
+			std::string name = trimName(_renderItems[_selectedType][_selectedObject]->diffuseHandle.name, 15);
 			if (ImGui::Button(name.c_str()))
 			{
 				WCHAR* texturePath;
@@ -962,6 +970,26 @@ void MyApp::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const std::vecto
 
 		cmdList->DrawIndexedInstanced(ri->IndexCount, 1, ri->StartIndexLocation, ri->BaseVertexLocation, 0);
 	}
+}
+
+void MyApp::ExecuteUploadCommandList()
+{
+	OutputDebugString(L"Executing upload command list");
+	ThrowIfFailed(_uploadCmdList->Close());
+	ID3D12CommandList* cmds[] = { _uploadCmdList.Get() };
+	mCommandQueue->ExecuteCommandLists(1, cmds);
+
+	_uploadFenceValue++;
+	mCommandQueue->Signal(_uploadFence.Get(), _uploadFenceValue);
+	if (_uploadFence->GetCompletedValue() < _uploadFenceValue)
+	{
+		_uploadFence->SetEventOnCompletion(_uploadFenceValue, _uploadFenceEvent);
+		WaitForSingleObject(_uploadFenceEvent, INFINITE);
+	}
+
+	 //Reset upload allocator + list for next use
+	ThrowIfFailed(_uploadCmdAlloc->Reset());
+	ThrowIfFailed(_uploadCmdList->Reset(_uploadCmdAlloc.Get(), nullptr));
 }
 
 std::array<const CD3DX12_STATIC_SAMPLER_DESC, 8> MyApp::GetStaticSamplers()
@@ -1051,6 +1079,11 @@ std::wstring MyApp::getCroppedName(WCHAR* filename)
 
 	std::wstring name = chunks[chunks.size() - 1];
 	return name.substr(0, name.size() - 4);
+}
+
+std::string MyApp::trimName(const std::string& name, int border) const
+{
+	return name.size() > border ? name.substr(0, 12) + "..." : name;
 }
 
 void MyApp::UnloadModel(const std::wstring& modelName)
