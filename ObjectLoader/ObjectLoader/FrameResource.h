@@ -8,11 +8,12 @@
 struct ObjectConstants
 {
     DirectX::XMFLOAT4X4 World = MathHelper::Identity4x4();
+    DirectX::XMFLOAT4X4 WorldView = MathHelper::Identity4x4();
+    DirectX::XMFLOAT4X4 WorldInvTranspose = MathHelper::Identity4x4();
     DirectX::XMFLOAT4X4 TexTransform = MathHelper::Identity4x4();
-    bool useColor = false;
-    int pad1 = 0;
-    int pad2 = 0;
-    int pad3 = 0;
+    DirectX::XMUINT2 normalMapSize = {0, 0};
+    bool useNormalMap = false;
+    bool padding[3] = { };
 };
 
 struct PassConstants

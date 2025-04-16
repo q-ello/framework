@@ -6,7 +6,7 @@
 
 // Defaults for number of lights.
 #ifndef NUM_DIR_LIGHTS
-#define NUM_DIR_LIGHTS 3
+#define NUM_DIR_LIGHTS 1
 #endif
 
 #ifndef NUM_POINT_LIGHTS
@@ -21,13 +21,8 @@
 #include "LightingUtil.hlsl"
 
 Texture2D gDiffuseMap : register(t0);
+Texture2D gNormalMap : register(t1);
 
-//3rd exercise
-Texture2D gFlareAlpha : register(t1);
-
-//SamplerState gsamLinear  : register(s0);
-
-//1st exercise
 SamplerState gsamPointWrap : register(s0);
 SamplerState gsamPointClamp : register(s1);
 SamplerState gsamLinearWrap : register(s2);
@@ -42,7 +37,11 @@ SamplerState gsamLinearMirror : register(s7);
 cbuffer cbPerObject : register(b0)
 {
     float4x4 gWorld;
+    float4x4 gWorldView;
+    float4x4 gWorldInvTranspose;
     float4x4 gTexTransform;
+    uint2 normalMapSize;
+    bool useNormalMap;
 };
 
 // Constant data that varies per material.
@@ -85,6 +84,8 @@ struct VertexIn
     float3 NormalL : NORMAL;
     float2 TexC : TEXCOORD;
     float4 ColorL : COLOR;
+    float3 TangentL : TANGENT;
+    float3 BinormalL : BINORMAL;
 };
 
 struct VertexOut
@@ -94,6 +95,8 @@ struct VertexOut
     float3 NormalW : NORMAL;
     float2 TexC : TEXCOORD;
     float4 ColorW : COLOR;
+    float3 TangentW : TANGENT;
+    float3 BiNormalW : BINORMAL;
 };
 
 VertexOut VS(VertexIn vin)
@@ -108,16 +111,20 @@ VertexOut VS(VertexIn vin)
     vout.PosH = mul(posW, gViewProj);
     
     vout.ColorW = vin.ColorL;
-   
     
-    // Assumes nonuniform scaling; otherwise, need to use inverse-transpose of world matrix.
-    vout.NormalW = mul(vin.NormalL, (float3x3) gWorld);
-	
-	// Output vertex attributes for interpolation across triangle.
-    float4 texC = mul(float4(vin.TexC, 0.0f, 1.0f), gTexTransform);
+    vout.TexC = vin.TexC;
     
-    vout.TexC = mul(texC, gMatTransform).xy;
-
+    if (useNormalMap)
+    {
+        vout.NormalW = normalize(mul(vin.NormalL, (float3x3) gWorldView));
+        vout.TangentW = normalize(mul(vin.TangentL, (float3x3) gWorldView));
+        vout.BiNormalW = normalize(mul(vin.BinormalL, (float3x3) gWorldView));
+    }
+    else
+    {
+        vout.NormalW = normalize(mul(vin.NormalL, (float3x3) gWorldInvTranspose));
+    }
+    
     return vout;
 }
 
@@ -131,9 +138,23 @@ float4 PS(VertexOut pin) : SV_Target
 {    
     float4 diffuseAlbedo = gDiffuseMap.Sample(gsamLinearMirror, pin.TexC) * gDiffuseAlbedo;
     
-    // Interpolating normal can unnormalize it, so renormalize it.
-    pin.NormalW = normalize(pin.NormalW);
-
+    if (useNormalMap)
+    {
+        float3x3 tbnMat =
+        {
+            normalize(pin.TangentW),
+            normalize(pin.BiNormalW),
+            normalize(pin.NormalW)
+        };
+        
+        pin.NormalW = gNormalMap.Load(int3(pin.TexC * normalMapSize, 0)).xyz * 2.0f - 1.0f;
+        pin.NormalW = normalize(mul(pin.NormalW, tbnMat));
+    }
+    else
+    {
+        pin.NormalW = normalize(pin.NormalW);
+    }
+    
     // Vector from point being lit to eye. 
     float3 toEyeW = normalize(gEyePosW - pin.PosW);
 
@@ -150,7 +171,7 @@ float4 PS(VertexOut pin) : SV_Target
 
     // Common convention to take alpha from diffuse material.
     litColor.a = diffuseAlbedo.a;
-
+    
     return litColor;
 }
 

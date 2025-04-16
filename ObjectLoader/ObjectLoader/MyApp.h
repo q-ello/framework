@@ -29,7 +29,7 @@ struct TextureHandle
 {
 	std::string name = "load";
 	UINT index = 0;
-	bool isRelevant = true;
+	bool isRelevant = false;
 };
 
 // Lightweight structure stores parameters to draw a shape.  This will
@@ -178,6 +178,8 @@ private:
 	XMFLOAT3 _targetPos = { 0.0f, 0.0f, 0.0f };
 	XMFLOAT4X4 mView = MathHelper::Identity4x4();
 	XMFLOAT4X4 mProj = MathHelper::Identity4x4();
+	//light
+	XMFLOAT3 _mainLightDirection = { 0.577f, -0.577f, 0.577f };
 
 	float mTheta = .5f * XM_PI;
 	float mPhi = .5f * XM_PI;

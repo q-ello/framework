@@ -21,7 +21,8 @@ Model::Model(WCHAR* filename)
 		aiProcess_JoinIdenticalVertices |
 		aiProcess_MakeLeftHanded | 
 		aiProcess_FlipWindingOrder |
-		aiProcess_FlipUVs
+		aiProcess_FlipUVs |
+		aiProcess_CalcTangentSpace
 	);
 
 	// If the import failed, report it
@@ -43,9 +44,23 @@ Model::Model(WCHAR* filename)
 			aiVector3D pos = mesh->mVertices[i];
 			aiVector3D tex = mesh->HasTextureCoords(0) ? mesh->mTextureCoords[0][i] : aiVector3D(0.f, 0.f, 0.f);
 			aiVector3D normal = mesh->mNormals[i];
+			aiVector3D tangent;
+			aiVector3D biNormal;
+			if (mesh->HasTangentsAndBitangents())
+			{
+				tangent = mesh->mTangents[i];
+				biNormal = mesh->mBitangents[i];
+			}
+			else
+			{
+				tangent = aiVector3D(0.f, 0.f, 0.f);
+				biNormal = aiVector3D(0.f, 0.f, 0.f);
+			}
 			v.Pos = { pos.x, pos.y, pos.z };
 			v.TexC = { tex.x, tex.y };
 			v.Normal = { normal.x, normal.y, normal.z };
+			v.Tangent = { tangent.x, tangent.y, tangent.z };
+			v.BiNormal = { biNormal.x, biNormal.y, biNormal.z };
 			_vertices.push_back(v);
 		}
 

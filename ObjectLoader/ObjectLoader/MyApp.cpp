@@ -174,7 +174,7 @@ void MyApp::Draw(const GameTimer& gt)
 	mCommandList->SetGraphicsRootSignature(mRootSignature.Get());
 
 	auto passCB = mCurrFrameResource->PassCB->Resource();
-	mCommandList->SetGraphicsRootConstantBufferView(2, passCB->GetGPUVirtualAddress());
+	mCommandList->SetGraphicsRootConstantBufferView(3, passCB->GetGPUVirtualAddress());
 
 	for (int i = 0; i < static_cast<int>(PSO::Count); i++)
 	{
@@ -261,6 +261,11 @@ void MyApp::OnMouseMove(WPARAM btnState, int x, int y)
 
 void MyApp::OnKeyboardInput(const GameTimer& gt)
 {
+	if (GetAsyncKeyState('E') & 0x8000)
+	{
+		//since view matrix is transponed I'm taking z-column
+		_mainLightDirection = { mView._13, mView._23, mView._33 };
+	}
 }
 
 void MyApp::UpdateCamera(const GameTimer& gt)
@@ -295,9 +300,9 @@ void MyApp::UpdateObjectCBs(const GameTimer& gt)
 		if (ri->NumFramesDirty > 0)
 		{
 			XMMATRIX scale = XMMatrixScaling(ri->transform[2][0], ri->transform[2][1], ri->transform[2][2]);
-			XMMATRIX rotation = XMMatrixRotationRollPitchYaw(ri->transform[1][0] * XM_PI / 180.,
-				ri->transform[1][1] * XM_PI / 180.,
-				ri->transform[1][2] * XM_PI / 180.);
+			XMMATRIX rotation = XMMatrixRotationRollPitchYaw(ri->transform[1][0] * XM_PI / 180.f,
+				ri->transform[1][1] * XM_PI / 180.f,
+				ri->transform[1][2] * XM_PI / 180.f);
 			XMMATRIX translation = XMMatrixTranslation(ri->transform[0][0], ri->transform[0][1], ri->transform[0][2]);
 
 			XMMATRIX world = scale * rotation * translation;
@@ -306,7 +311,16 @@ void MyApp::UpdateObjectCBs(const GameTimer& gt)
 
 			ObjectConstants objConstants;
 			XMStoreFloat4x4(&objConstants.World, XMMatrixTranspose(world));
+			XMMATRIX view = XMLoadFloat4x4(&mView);
+			XMStoreFloat4x4(&objConstants.WorldView, XMMatrixTranspose(world * view));
+			XMStoreFloat4x4(&objConstants.WorldInvTranspose, XMMatrixInverse(&XMMatrixDeterminant(world), world));
 			XMStoreFloat4x4(&objConstants.TexTransform, XMMatrixTranspose(texTransform));
+			objConstants.useNormalMap = ri->normalHandle.isRelevant;
+			if (ri->normalHandle.isRelevant)
+			{
+				const std::wstring& texName = std::wstring(ri->normalHandle.name.begin(), ri->normalHandle.name.end());
+				objConstants.normalMapSize = { mTextures[texName]->size[0], mTextures[texName]->size[1] };
+			}
 
 			currObjectsCB[ri->uid].get()->CopyData(ri->ObjCBIndex, objConstants);
 
@@ -366,12 +380,12 @@ void MyApp::UpdateMainPassCB(const GameTimer& gt)
 	mMainPassCB.TotalTime = gt.TotalTime();
 	mMainPassCB.DeltaTime = gt.DeltaTime();
 	mMainPassCB.AmbientLight = { 0.25f, 0.25f, 0.35f, 1.0f };
-	mMainPassCB.Lights[0].Direction = { 0.57735f, -0.57735f, 0.57735f };
+	mMainPassCB.Lights[0].Direction = _mainLightDirection;
 	mMainPassCB.Lights[0].Strength = { 0.6f, 0.6f, 0.6f };
-	mMainPassCB.Lights[1].Direction = { -0.57735f, -0.57735f, 0.57735f };
+	/*mMainPassCB.Lights[1].Direction = { -0.57735f, -0.57735f, 0.57735f };
 	mMainPassCB.Lights[1].Strength = { 0.3f, 0.3f, 0.3f };
 	mMainPassCB.Lights[2].Direction = { 0.0f, -0.707f, -0.707f };
-	mMainPassCB.Lights[2].Strength = { 0.15f, 0.15f, 0.15f };
+	mMainPassCB.Lights[2].Strength = { 0.15f, 0.15f, 0.15f };*/
 
 	auto currPassCB = mCurrFrameResource->PassCB.get();
 	currPassCB->CopyData(0, mMainPassCB);
@@ -400,7 +414,7 @@ TextureHandle MyApp::LoadTexture(WCHAR* filename, int prevIndex)
 		{
 			_texUsed[croppedName]++;
 		}
-		return { std::string(croppedName.begin(), croppedName.end()), _texIndices[croppedName], true};
+		return { std::string(croppedName.begin(), croppedName.end()), _texIndices[croppedName], true };
 	}
 
 	auto tex = std::make_unique<Texture>();
@@ -410,6 +424,8 @@ TextureHandle MyApp::LoadTexture(WCHAR* filename, int prevIndex)
 	ThrowIfFailed(DirectX::CreateDDSTextureFromFile12(md3dDevice.Get(),
 		_uploadCmdList.Get(), tex->Filename.c_str(),
 		tex->Resource, tex->UploadHeap));
+	tex->size[0] = (std::uint32_t)tex->Resource.Get()->GetDesc().Width;
+	tex->size[1] = (std::uint32_t)tex->Resource.Get()->GetDesc().Height;
 
 	UINT index = _srvHeapAllocator.get()->Allocate();
 	D3D12_CPU_DESCRIPTOR_HANDLE srvHandle = _srvHeapAllocator.get()->GetCpuHandle(index);
@@ -449,24 +465,26 @@ void MyApp::deleteTexture(std::wstring name)
 
 void MyApp::BuildRootSignature()
 {
-	//3rd exercise
-	CD3DX12_DESCRIPTOR_RANGE texTable;
-	texTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
-	//texTable[1].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1);
+	//two tables for 
+	CD3DX12_DESCRIPTOR_RANGE diffTexTable;
+	diffTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
+	CD3DX12_DESCRIPTOR_RANGE normTexTable;
+	normTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1);
 
 	// Root parameter can be a table, root descriptor or root constants.
-	CD3DX12_ROOT_PARAMETER slotRootParameter[4];
+	CD3DX12_ROOT_PARAMETER slotRootParameter[5];
 
 	// Perfomance TIP: Order from most frequent to least frequent.
-	slotRootParameter[0].InitAsDescriptorTable(1, &texTable, D3D12_SHADER_VISIBILITY_PIXEL);
-	slotRootParameter[1].InitAsConstantBufferView(0);
-	slotRootParameter[2].InitAsConstantBufferView(1);
-	slotRootParameter[3].InitAsConstantBufferView(2);
+	slotRootParameter[0].InitAsDescriptorTable(1, &diffTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
+	slotRootParameter[1].InitAsDescriptorTable(1, &normTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
+	slotRootParameter[2].InitAsConstantBufferView(0);
+	slotRootParameter[3].InitAsConstantBufferView(1);
+	slotRootParameter[4].InitAsConstantBufferView(2);
 
 	auto staticSamplers = GetStaticSamplers();
 
 	// A root signature is an array of root parameters.
-	CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(4, slotRootParameter,
+	CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(5, slotRootParameter,
 		(UINT)staticSamplers.size(), staticSamplers.data(),
 		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 
@@ -538,7 +556,9 @@ void MyApp::BuildShadersAndInputLayout()
 		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
 		{ "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
 		{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 24, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-		{ "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 32, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0}
+		{ "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 32, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
+		{ "TANGENT", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 48, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
+		{ "BINORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 60, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0}
 	};
 }
 
@@ -805,7 +825,6 @@ void MyApp::buildGrid()
 	gridRItem->IndexCount = gridRItem->Geo->DrawArgs[L"grid"].IndexCount;
 	gridRItem->StartIndexLocation = gridRItem->Geo->DrawArgs[L"grid"].StartIndexLocation;
 	gridRItem->BaseVertexLocation = gridRItem->Geo->DrawArgs[L"grid"].BaseVertexLocation;
-	gridRItem->diffuseHandle.index = 0;
 	gridRItem->type = PSO::Grid;
 	_renderItems[PSO::Grid].push_back(gridRItem.get());
 	_allRenderItems.push_back(std::move(gridRItem));
@@ -817,7 +836,10 @@ void MyApp::DrawInterface()
 
 	//debug window
 	ImGui::Begin("Debug info");
-	ImGui::Text(("african texture used:" + std::to_string(_texUsed[L"african_head_diffuse"])).c_str());
+	if (_selectedObject != -1)
+	{
+		ImGui::Text(("use normal map:" + std::to_string(_renderItems[_selectedType][_selectedObject]->normalHandle.isRelevant)).c_str());
+	}
 	ImGui::End();
 
 	//objects window
@@ -932,6 +954,7 @@ void MyApp::DrawInterface()
 		//textures
 		if (ImGui::CollapsingHeader("Textures", ImGuiTreeNodeFlags_DefaultOpen))
 		{
+			//diffuse button
 			ImGui::Text("Diffuse");
 			ImGui::SameLine();
 			ImGui::PushID(buttonId++);
@@ -957,6 +980,7 @@ void MyApp::DrawInterface()
 			}
 			ImGui::PopID();
 
+			//specular map
 			ImGui::Text("Specular");
 			ImGui::SameLine();
 			ImGui::PushID(buttonId++);
@@ -967,14 +991,32 @@ void MyApp::DrawInterface()
 			ImGui::Button("delete");
 			ImGui::PopID();
 
+			//normal map 
 			ImGui::Text("Normal");
 			ImGui::SameLine();
 			ImGui::PushID(buttonId++);
-			ImGui::Button(_renderItems[_selectedType][_selectedObject]->normalHandle.name.c_str());
+			name = trimName(_renderItems[_selectedType][_selectedObject]->normalHandle.name, 15);
+			if (ImGui::Button(name.c_str()))
+			{
+				WCHAR* texturePath;
+				if (TryToOpenFile(L"DDS Textures", L"*.dds", texturePath))
+				{
+					_renderItems[_selectedType][_selectedObject]->normalHandle
+						= LoadTexture(texturePath, _renderItems[_selectedType][_selectedObject]->normalHandle.index);
+					CoTaskMemFree(texturePath);
+					_renderItems[_selectedType][_selectedObject]->NumFramesDirty = gNumFrameResources;
+				}
+			}
 			ImGui::PopID();
 			ImGui::SameLine();
 			ImGui::PushID(buttonId++);
-			ImGui::Button("delete");
+			if (ImGui::Button("delete") && _renderItems[_selectedType][_selectedObject]->normalHandle.isRelevant == true)
+			{
+				const std::string normalName = _renderItems[_selectedType][_selectedObject]->normalHandle.name;
+				deleteTexture(std::wstring(normalName.begin(), normalName.end()));
+				_renderItems[_selectedType][_selectedObject]->normalHandle = TextureHandle();
+				_renderItems[_selectedType][_selectedObject]->NumFramesDirty = gNumFrameResources;
+			}
 			ImGui::PopID();
 		}
 
@@ -1003,11 +1045,14 @@ void MyApp::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const std::vecto
 		D3D12_GPU_VIRTUAL_ADDRESS objCBAddress = objectCB->GetGPUVirtualAddress() + ri->ObjCBIndex * objCBByteSize;
 		D3D12_GPU_VIRTUAL_ADDRESS matCBAddress = matCB->GetGPUVirtualAddress() + ri->Mat->MatCBIndex * matCBByteSize;
 
-		cmdList->SetGraphicsRootConstantBufferView(1, objCBAddress);
-		cmdList->SetGraphicsRootConstantBufferView(3, matCBAddress);
+		cmdList->SetGraphicsRootConstantBufferView(2, objCBAddress);
+		cmdList->SetGraphicsRootConstantBufferView(4, matCBAddress);
 
+		//textures
 		CD3DX12_GPU_DESCRIPTOR_HANDLE diffuseTex(_srvHeapAllocator.get()->GetGpuHandle(ri->diffuseHandle.index));
 		cmdList->SetGraphicsRootDescriptorTable(0, diffuseTex);
+		CD3DX12_GPU_DESCRIPTOR_HANDLE normalTex(_srvHeapAllocator.get()->GetGpuHandle(ri->normalHandle.index));
+		cmdList->SetGraphicsRootDescriptorTable(1, normalTex);
 
 		cmdList->DrawIndexedInstanced(ri->IndexCount, 1, ri->StartIndexLocation, ri->BaseVertexLocation, 0);
 	}

@@ -7,4 +7,6 @@ struct Vertex
     DirectX::XMFLOAT3 Normal;
     DirectX::XMFLOAT2 TexC;
     DirectX::XMFLOAT4 Color;
+    DirectX::XMFLOAT3 Tangent;
+    DirectX::XMFLOAT3 BiNormal;
 };
