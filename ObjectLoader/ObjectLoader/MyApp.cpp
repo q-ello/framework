@@ -433,7 +433,7 @@ TextureHandle MyApp::LoadTexture(WCHAR* filename, int prevIndex)
 	return { std::string(croppedName.begin(), croppedName.end()), index, true };
 }
 
-void MyApp::DeleteTexture(std::wstring name)
+void MyApp::deleteTexture(std::wstring name)
 {
 	_texUsed[name]--;
 	if (_texUsed[name] == 0)
@@ -856,6 +856,8 @@ void MyApp::DrawInterface()
 			{
 				_selectedObject = i;
 				_selectedType = PSO::Opaque;
+				const std::string diffName = _renderItems[_selectedType][_selectedObject]->diffuseHandle.name;
+				deleteTexture(std::wstring(diffName.begin(), diffName.end()));
 				deleteObject();
 			}
 			ImGui::PopID();
@@ -950,7 +952,7 @@ void MyApp::DrawInterface()
 			if (ImGui::Button("delete") && name != "load")
 			{
 				const std::string diffName = _renderItems[_selectedType][_selectedObject]->diffuseHandle.name;
-				DeleteTexture(std::wstring(diffName.begin(), diffName.end()));
+				deleteTexture(std::wstring(diffName.begin(), diffName.end()));
 				_renderItems[_selectedType][_selectedObject]->diffuseHandle = TextureHandle();
 			}
 			ImGui::PopID();

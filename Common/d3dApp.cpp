@@ -512,9 +512,31 @@ bool D3DApp::InitDirect3D()
 
 	ThrowIfFailed(CreateDXGIFactory1(IID_PPV_ARGS(&mdxgiFactory)));
 
-	// Try to create hardware device.
+	ComPtr<IDXGIAdapter1> selectedAdapter;
+	for (UINT adapterIndex = 0; ; ++adapterIndex)
+	{
+		ComPtr<IDXGIAdapter1> adapter;
+		if (mdxgiFactory->EnumAdapters1(adapterIndex, &adapter) == DXGI_ERROR_NOT_FOUND)
+			break;
+
+		DXGI_ADAPTER_DESC1 desc;
+		adapter->GetDesc1(&desc);
+
+		if (desc.VendorId == 0x10DE) // 0x10DE = NVIDIA
+		{
+			selectedAdapter = adapter;
+			break;
+		}
+	}
+
+	if (!selectedAdapter)
+	{
+		mdxgiFactory->EnumAdapters1(0, &selectedAdapter);
+	}
+
+	// Use selectedAdapter here to create the D3D12 device
 	HRESULT hardwareResult = D3D12CreateDevice(
-		nullptr,             // default adapter
+		selectedAdapter.Get(),             // default adapter
 		D3D_FEATURE_LEVEL_11_0,
 		IID_PPV_ARGS(&md3dDevice));
 

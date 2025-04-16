@@ -109,7 +109,7 @@ private:
 
 	//dynamically loading/unloading textures
 	TextureHandle LoadTexture(WCHAR* filename, int prevIndex);
-	void DeleteTexture(std::wstring name);
+	void deleteTexture(std::wstring name);
 
 	void BuildRootSignature();
 	void BuildDescriptorHeaps();
