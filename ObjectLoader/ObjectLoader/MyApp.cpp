@@ -401,12 +401,12 @@ TextureHandle MyApp::LoadTexture(WCHAR* filename)
 	}
 
 	auto tex = std::make_unique<Texture>();
-	tex->SetName(filename);
+	tex->Name = croppedName;
 	tex->Filename = filename;
-	ThrowIfFailed(DirectX::CreateDDSTextureFromFile12(md3dDevice.Get(),
-		mCommandList.Get(), tex->Filename.c_str(),
-		tex->Resource, tex->UploadHeap));
 
+	ThrowIfFailed(DirectX::CreateDDSTextureFromFile12(md3dDevice.Get(),
+		_uploadCmdList.Get(), tex->Filename.c_str(),
+		tex->Resource, tex->UploadHeap));
 
 	UINT index = _srvHeapAllocator.get()->Allocate();
 	D3D12_CPU_DESCRIPTOR_HANDLE srvHandle = _srvHeapAllocator.get()->GetCpuHandle(index);
@@ -421,6 +421,8 @@ TextureHandle MyApp::LoadTexture(WCHAR* filename)
 
 	md3dDevice->CreateShaderResourceView(tex.get()->Resource.Get(), &srvDesc, srvHandle);
 
+	ExecuteUploadCommandList();
+
 	mTextures[croppedName] = std::move(tex);
 	_texIndices[croppedName] = index;
 	_texUsed[croppedName] = 0;
@@ -431,15 +433,15 @@ TextureHandle MyApp::LoadTexture(WCHAR* filename)
 void MyApp::BuildRootSignature()
 {
 	//3rd exercise
-	CD3DX12_DESCRIPTOR_RANGE texTable[2];
-	texTable[0].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
-	texTable[1].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1);
+	CD3DX12_DESCRIPTOR_RANGE texTable;
+	texTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
+	//texTable[1].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1);
 
 	// Root parameter can be a table, root descriptor or root constants.
 	CD3DX12_ROOT_PARAMETER slotRootParameter[4];
 
 	// Perfomance TIP: Order from most frequent to least frequent.
-	slotRootParameter[0].InitAsDescriptorTable(2, texTable, D3D12_SHADER_VISIBILITY_PIXEL);
+	slotRootParameter[0].InitAsDescriptorTable(1, &texTable, D3D12_SHADER_VISIBILITY_PIXEL);
 	slotRootParameter[1].InitAsConstantBufferView(0);
 	slotRootParameter[2].InitAsConstantBufferView(1);
 	slotRootParameter[3].InitAsConstantBufferView(2);
