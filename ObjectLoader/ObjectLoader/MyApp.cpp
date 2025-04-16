@@ -390,13 +390,16 @@ void MyApp::LoadTextures()
 	mTextures[defaultTex->Name] = std::move(defaultTex);
 }
 
-TextureHandle MyApp::LoadTexture(WCHAR* filename)
+TextureHandle MyApp::LoadTexture(WCHAR* filename, int prevIndex)
 {
 	std::wstring croppedName = getCroppedName(filename);
 
 	if (mTextures.find(croppedName) != mTextures.end())
 	{
-		_texUsed[croppedName]++;
+		if (_texIndices[croppedName] != prevIndex)
+		{
+			_texUsed[croppedName]++;
+		}
 		return { std::string(croppedName.begin(), croppedName.end()), _texIndices[croppedName], true};
 	}
 
@@ -425,9 +428,23 @@ TextureHandle MyApp::LoadTexture(WCHAR* filename)
 
 	mTextures[croppedName] = std::move(tex);
 	_texIndices[croppedName] = index;
-	_texUsed[croppedName] = 0;
+	_texUsed[croppedName] = 1;
 
 	return { std::string(croppedName.begin(), croppedName.end()), index, true };
+}
+
+void MyApp::DeleteTexture(std::wstring name)
+{
+	_texUsed[name]--;
+	if (_texUsed[name] == 0)
+	{
+		FlushCommandQueue();
+		mTextures[name].release();
+		mTextures.erase(name);
+		_texUsed.erase(name);
+		_srvHeapAllocator->Free(_texIndices[name]);
+		_texIndices.erase(name);
+	}
 }
 
 void MyApp::BuildRootSignature()
@@ -796,9 +813,11 @@ void MyApp::buildGrid()
 
 void MyApp::DrawInterface()
 {
-	//debug info
+	int buttonId = 0;
+
+	//debug window
 	ImGui::Begin("Debug info");
-	ImGui::Text(("Grid translation x: " + std::to_string(_renderItems[PSO::Grid][0]->transform[0][0])).c_str());
+	ImGui::Text(("african texture used:" + std::to_string(_texUsed[L"african_head_diffuse"])).c_str());
 	ImGui::End();
 
 	//objects window
@@ -822,7 +841,7 @@ void MyApp::DrawInterface()
 
 		for (int i = 0; i < _renderItems[PSO::Opaque].size(); i++)
 		{
-			ImGui::PushID(i*2);
+			ImGui::PushID(buttonId++);
 			std::string name = trimName(_renderItems[PSO::Opaque][i]->Name + 
 				(_renderItems[PSO::Opaque][i]->nameCount == 0 ? "" : std::to_string(_renderItems[PSO::Opaque][i]->nameCount)), 15);
 			if (ImGui::Button(name.c_str()))
@@ -832,7 +851,7 @@ void MyApp::DrawInterface()
 			}
 			ImGui::SameLine();
 			ImGui::PopID();
-			ImGui::PushID(i*2 + 1);
+			ImGui::PushID(buttonId++);
 			if (ImGui::Button("delete"))
 			{
 				_selectedObject = i;
@@ -857,26 +876,35 @@ void MyApp::DrawInterface()
 			ImGui::Text("Location: ");
 			ImGui::SameLine();
 
-			if (ImGui::InputFloat3("##1", _renderItems[_selectedType][_selectedObject]->transform[0]))
+			ImGui::PushID(buttonId++);
+			if (ImGui::InputFloat3("", _renderItems[_selectedType][_selectedObject]->transform[0]))
 			{
 				_renderItems[_selectedType][_selectedObject]->NumFramesDirty = gNumFrameResources;
 			}
+			ImGui::PopID();
 
 			ImGui::Text("Rotation: ");
 			ImGui::SameLine();
-			if (ImGui::InputFloat3("##2", _renderItems[_selectedType][_selectedObject]->transform[1]))
+			ImGui::PushID(buttonId++);
+			if (ImGui::InputFloat3("", _renderItems[_selectedType][_selectedObject]->transform[1]))
 			{
 				_renderItems[_selectedType][_selectedObject]->NumFramesDirty = gNumFrameResources;
 			}
+			ImGui::PopID();
 
 			ImGui::Text("Scale:");
 			ImGui::SameLine();
-			ImGui::Checkbox("##4", &_renderItems[_selectedType][_selectedObject]->lockedScale);
+			ImGui::PushID(buttonId++);
+			ImGui::Checkbox("", &_renderItems[_selectedType][_selectedObject]->lockedScale);
 			ImGui::SameLine();
+			ImGui::PopID();
+
 			float before[3] = { _renderItems[_selectedType][_selectedObject]->transform[2][0], 
 				_renderItems[_selectedType][_selectedObject]->transform[2][1], 
 				_renderItems[_selectedType][_selectedObject]->transform[2][2] };
-			if (ImGui::InputFloat3("##3", _renderItems[_selectedType][_selectedObject]->transform[2]))
+
+			ImGui::PushID(buttonId++);
+			if (ImGui::InputFloat3("", _renderItems[_selectedType][_selectedObject]->transform[2]))
 			{
 				if (_renderItems[_selectedType][_selectedObject]->lockedScale)
 				{
@@ -895,6 +923,8 @@ void MyApp::DrawInterface()
 				}
 				_renderItems[_selectedType][_selectedObject]->NumFramesDirty = gNumFrameResources;
 			}
+			ImGui::PopID();
+
 		}
 
 		//textures
@@ -902,39 +932,46 @@ void MyApp::DrawInterface()
 		{
 			ImGui::Text("Diffuse");
 			ImGui::SameLine();
-			ImGui::PushID(0);
+			ImGui::PushID(buttonId++);
 			std::string name = trimName(_renderItems[_selectedType][_selectedObject]->diffuseHandle.name, 15);
 			if (ImGui::Button(name.c_str()))
 			{
 				WCHAR* texturePath;
 				if (TryToOpenFile(L"DDS Textures", L"*.dds", texturePath))
 				{
-					_renderItems[_selectedType][_selectedObject]->diffuseHandle = LoadTexture(texturePath);
+					_renderItems[_selectedType][_selectedObject]->diffuseHandle 
+						= LoadTexture(texturePath, _renderItems[_selectedType][_selectedObject]->diffuseHandle.index);
+					CoTaskMemFree(texturePath);
 				}
 			}
 			ImGui::PopID();
 			ImGui::SameLine();
-			ImGui::PushID(1);
-			ImGui::Button("delete");
+			ImGui::PushID(buttonId++);
+			if (ImGui::Button("delete") && name != "load")
+			{
+				const std::string diffName = _renderItems[_selectedType][_selectedObject]->diffuseHandle.name;
+				DeleteTexture(std::wstring(diffName.begin(), diffName.end()));
+				_renderItems[_selectedType][_selectedObject]->diffuseHandle = TextureHandle();
+			}
 			ImGui::PopID();
 
 			ImGui::Text("Specular");
 			ImGui::SameLine();
-			ImGui::PushID(2);
+			ImGui::PushID(buttonId++);
 			ImGui::Button(_renderItems[_selectedType][_selectedObject]->specularHandle.name.c_str());
 			ImGui::PopID();
 			ImGui::SameLine();
-			ImGui::PushID(3);
+			ImGui::PushID(buttonId++);
 			ImGui::Button("delete");
 			ImGui::PopID();
 
 			ImGui::Text("Normal");
 			ImGui::SameLine();
-			ImGui::PushID(4);
+			ImGui::PushID(buttonId++);
 			ImGui::Button(_renderItems[_selectedType][_selectedObject]->normalHandle.name.c_str());
 			ImGui::PopID();
 			ImGui::SameLine();
-			ImGui::PushID(5);
+			ImGui::PushID(buttonId++);
 			ImGui::Button("delete");
 			ImGui::PopID();
 		}

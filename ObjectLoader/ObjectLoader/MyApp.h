@@ -24,11 +24,11 @@ enum class PSO
 	Count
 };
 
-//textureStaff
+//textureStuff
 struct TextureHandle
 {
 	std::string name = "load";
-	UINT index = -1;
+	UINT index = 0;
 	bool isRelevant = true;
 };
 
@@ -106,7 +106,11 @@ private:
 	void UpdateMainPassCB(const GameTimer& gt);
 
 	void LoadTextures();
-	TextureHandle LoadTexture(WCHAR* filename);
+
+	//dynamically loading/unloading textures
+	TextureHandle LoadTexture(WCHAR* filename, int prevIndex);
+	void DeleteTexture(std::wstring name);
+
 	void BuildRootSignature();
 	void BuildDescriptorHeaps();
 	void BuildShadersAndInputLayout();
@@ -149,9 +153,12 @@ private:
 
 	std::unordered_map<std::wstring, std::unique_ptr<MeshGeometry>> mGeometries;
 	std::unordered_map<std::string, std::unique_ptr<Material>> mMaterials;
+
+	//data to manage textures
 	std::unordered_map<std::wstring, std::unique_ptr<Texture>> mTextures;
 	std::unordered_map<std::wstring, UINT> _texIndices;
 	std::unordered_map<std::wstring, int> _texUsed;
+
 	std::unordered_map<std::string, ComPtr<ID3DBlob>> mShaders;
 	std::unordered_map<std::wstring, int> _objectCounters;
 	std::unordered_map<std::wstring, int> _objectLoaded;
