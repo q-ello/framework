@@ -116,9 +116,9 @@ VertexOut VS(VertexIn vin)
     
     if (useNormalMap)
     {
-        vout.NormalW = normalize(mul(vin.NormalL, (float3x3) gWorldView));
-        vout.TangentW = normalize(mul(vin.TangentL, (float3x3) gWorldView));
-        vout.BiNormalW = normalize(mul(vin.BinormalL, (float3x3) gWorldView));
+        vout.NormalW = normalize(mul(vin.NormalL, (float3x3) gWorld));
+        vout.TangentW = normalize(mul(vin.TangentL, (float3x3) gWorld));
+        vout.BiNormalW = normalize(mul(vin.BinormalL, (float3x3) gWorld));
     }
     else
     {
