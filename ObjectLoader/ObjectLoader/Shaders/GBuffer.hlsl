@@ -100,7 +100,7 @@ GBufferInfo GBufferPS(VertexOut pin)
     GBufferInfo res;
     
     res.Diffuse = gDiffuseMap.Sample(gsamLinearMirror, pin.TexC);
-    res.Normal = float4(normalize(pin.NormalW), 0);
+    res.Normal = float4(normalize(pin.NormalW), 1);
     
     return res;
 }
@@ -109,7 +109,7 @@ GBufferInfo GBufferGridPS(VertexOut pin)
 {
     GBufferInfo res;
     res.Diffuse = float4(pin.ColorW);
-    res.Normal = float4(0, 1, 0, 0);
+    res.Normal = float4(0, 1, 0, 1);
     
     return res;
 }

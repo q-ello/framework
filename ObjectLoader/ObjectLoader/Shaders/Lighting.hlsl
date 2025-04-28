@@ -33,7 +33,7 @@ VertexOut LightingVS(uint id : SV_VertexID)
     float2 texcoords[3] = { float2(0, 1), float2(0, -1), float2(2, 1) };
     
     vout.PosH = float4(positions[id], 0, 1);
-    vout.TexC = texcoords[id] * .5f + .5f;
+    vout.TexC = texcoords[id];// * .5f + .5f;
     
     return vout;
 }
@@ -53,6 +53,7 @@ float3 ComputeWorldPos(float2 texcoord)
 float4 LightingPS(VertexOut pin) : SV_Target
 {
     float4 albedo = gDiffuse.Load(int3(pin.TexC * gRTSize, 0));
+    
     float3 normal = gNormal.Load(int3(pin.TexC * gRTSize, 0)).xyz;
     
     float3 posW = ComputeWorldPos(pin.TexC);
@@ -66,6 +67,7 @@ float4 LightingPS(VertexOut pin) : SV_Target
     float diff = saturate(dot(normal, lightVec));
     
     float3 finalColor = albedo.rgb * gLightColor * diff * atten;
+    
     
     return float4(finalColor, 1);
 }

@@ -313,6 +313,7 @@ void MyApp::UpdateMainPassCBs(const GameTimer& gt)
 	XMStoreFloat4x4(&_lightingCB.InvViewProj, XMMatrixTranspose(invViewProj));
 	_lightingCB.EyePosW = mEyePos;
 	_lightingCB.RenderTargetSize = XMFLOAT2((float)mClientWidth, (float)mClientHeight);
+	_lightingCB.gLightPosW = XMFLOAT3(sin(gt.TotalTime()), 0.0f, cos(gt.TotalTime()));
 
 	auto currLightingCB = mCurrFrameResource->LightingPassCB.get();
 	currLightingCB->CopyData(0, _lightingCB);
@@ -771,6 +772,7 @@ void MyApp::buildGrid()
 	gridRItem->Geo = mGeometries[L"gridGeo"].get();
 	gridRItem->PrimitiveType = D3D11_PRIMITIVE_TOPOLOGY_LINELIST;
 	gridRItem->type = PSO::Grid;
+	gridRItem->IndexCount = gridRItem->Geo->DrawArgs[L"grid"].IndexCount;
 	_renderItems[PSO::Grid].push_back(gridRItem.get());
 	_allRenderItems.push_back(std::move(gridRItem));
 }
@@ -983,7 +985,7 @@ void MyApp::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const std::vecto
 		CD3DX12_GPU_DESCRIPTOR_HANDLE normalTex(_srvHeapAllocator.get()->GetGpuHandle(ri->normalHandle.index));
 		cmdList->SetGraphicsRootDescriptorTable(1, normalTex);
 
-		cmdList->DrawIndexedInstanced(0, 1, 0, 0, 0);
+		cmdList->DrawIndexedInstanced(ri->IndexCount, 1, 0, 0, 0);
 	}
 }
 
@@ -1099,7 +1101,7 @@ void MyApp::addRenderItem(const std::wstring& itemName)
 	modelRitem->nameCount = _objectCounters[itemName]++;
 	modelRitem->Geo = mGeometries[itemName].get();
 	modelRitem->PrimitiveType = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
-
+	modelRitem->IndexCount = modelRitem->Geo->DrawArgs[itemName].IndexCount;
 	modelRitem->diffuseHandle.index = _texIndices[L"defaultTex"];
 
 	for (int i = 0; i < mFrameResources.size(); ++i)
@@ -1209,6 +1211,7 @@ void MyApp::GBufferPass()
 {
 	//deferred rendering: writing in gbuffer first
 	_gBuffer->ChangeRTVsState(mCommandList.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET);
+	_gBuffer->ChangeDSVState(mCommandList.Get(), D3D12_RESOURCE_STATE_DEPTH_WRITE);
 	
 	_gBuffer->ClearInfo(mCommandList.Get(), Colors::Black);
 	mCommandList->OMSetRenderTargets(_gBuffer->InfoCount(), _gBuffer->RTVs().data(),
@@ -1221,7 +1224,6 @@ void MyApp::GBufferPass()
 	for (int i = 0; i < static_cast<int>(PSO::Count); i++)
 	{
 		PSO type = static_cast<PSO>(i);
-		//check for transparent objects later TODO
 		mCommandList->SetPipelineState(_psos[type].Get());
 		DrawRenderItems(mCommandList.Get(), _renderItems[type]);
 	}
@@ -1233,8 +1235,8 @@ void MyApp::LightingPass()
 	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(CurrentBackBuffer(),
 		D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET));
 
-	_gBuffer->ChangeRTVsState(mCommandList.Get(), D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE);
-	_gBuffer->ChangeDSVState(mCommandList.Get(), D3D12_RESOURCE_STATE_DEPTH_READ);
+	_gBuffer->ChangeRTVsState(mCommandList.Get(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+	_gBuffer->ChangeDSVState(mCommandList.Get(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 
 	mCommandList->ClearRenderTargetView(CurrentBackBufferView(), Colors::LightSteelBlue, 0, nullptr);
 
@@ -1248,13 +1250,12 @@ void MyApp::LightingPass()
 	mCommandList->SetPipelineState(_lightingPSO.Get());
 	mCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 	
-	CD3DX12_GPU_DESCRIPTOR_HANDLE diffuseTex(_gBuffer->SRVHeap()->GetGPUDescriptorHandleForHeapStart());
-	mCommandList->SetGraphicsRootDescriptorTable(0, diffuseTex);
-
-	mCommandList->DrawInstanced(3, 1, 0, 0);
+	mCommandList->SetGraphicsRootDescriptorTable(0, _gBuffer->SRVHeap()->GetGPUDescriptorHandleForHeapStart());
 
 	auto lightingPassCB = mCurrFrameResource->LightingPassCB->Resource();
 	mCommandList->SetGraphicsRootConstantBufferView(1, lightingPassCB->GetGPUVirtualAddress());
+
+	mCommandList->DrawInstanced(3, 1, 0, 0);
 }
 
 //some wndproc stuff

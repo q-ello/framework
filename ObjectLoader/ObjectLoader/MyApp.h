@@ -62,6 +62,8 @@ struct RenderItem
 	// Primitive topology.
 	D3D12_PRIMITIVE_TOPOLOGY PrimitiveType = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 
+	UINT IndexCount = 0;
+
 	TextureHandle diffuseHandle;
 	TextureHandle normalHandle;
 
