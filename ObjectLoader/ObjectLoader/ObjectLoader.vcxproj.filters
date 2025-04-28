@@ -105,6 +105,12 @@
     <ClInclude Include="imgui\backends\imgui_impl_win32.h">
       <Filter>Header Files\imgui\backends</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\Common\GBuffer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="BasicUtil.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="ObjectLoader.cpp">
@@ -160,6 +166,12 @@
     </ClCompile>
     <ClCompile Include="imgui\misc\fonts\binary_to_compressed_c.cpp">
       <Filter>Resource Files\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Common\GBuffer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="BasicUtil.cpp">
+      <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
