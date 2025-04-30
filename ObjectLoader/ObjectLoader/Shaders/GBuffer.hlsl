@@ -31,7 +31,6 @@ struct VertexIn
     float3 PosL : POSITION;
     float3 NormalL : NORMAL;
     float2 TexC : TEXCOORD;
-    float4 ColorL : COLOR;
     float3 TangentL : TANGENT;
     float3 BinormalL : BINORMAL;
 };
@@ -42,7 +41,6 @@ struct VertexOut
     float3 PosW : POSITION;
     float3 NormalW : NORMAL;
     float2 TexC : TEXCOORD;
-    float4 ColorW : COLOR;
     float3 TangentW : TANGENT;
     float3 BiNormalW : BINORMAL;
 };
@@ -57,8 +55,6 @@ VertexOut GBufferVS(VertexIn vin)
 
     // Transform to homogeneous clip space.
     vout.PosH = mul(posW, gViewProj);
-    
-    vout.ColorW = vin.ColorL;
     
     vout.TexC = vin.TexC;
     
@@ -101,15 +97,6 @@ GBufferInfo GBufferPS(VertexOut pin)
     
     res.Diffuse = gDiffuseMap.Sample(gsamLinearMirror, pin.TexC);
     res.Normal = float4(normalize(pin.NormalW), 1);
-    
-    return res;
-}
-
-GBufferInfo GBufferGridPS(VertexOut pin)
-{
-    GBufferInfo res;
-    res.Diffuse = float4(pin.ColorW);
-    res.Normal = float4(0, 1, 0, 1);
     
     return res;
 }

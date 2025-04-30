@@ -5,11 +5,15 @@
 #include "../../Common/UploadBuffer.h"
 #include "VertexData.h"
 
-struct ObjectConstants
+struct UnlitObjectConstants
 {
     DirectX::XMFLOAT4X4 World = MathHelper::Identity4x4();
+};
+
+struct OpaqueObjectConstants : public UnlitObjectConstants
+{
     DirectX::XMFLOAT4X4 WorldInvTranspose = MathHelper::Identity4x4();
-    DirectX::XMUINT2 normalMapSize = {0, 0};
+    DirectX::XMUINT2 normalMapSize = { 0, 0 };
     bool useNormalMap = false;
     bool padding[3] = { };
 };
@@ -41,13 +45,16 @@ struct FrameResource
 {
 public:
 
-    FrameResource(ID3D12Device* device, UINT passCount, UINT objectCount);
+    FrameResource(ID3D12Device* device, UINT passCount);
     FrameResource(const FrameResource& rhs) = delete;
     FrameResource& operator=(const FrameResource& rhs) = delete;
     ~FrameResource();
 
-    void addObjectBuffer(ID3D12Device* device, std::uint32_t uid);
-    void removeObjectBuffer(ID3D12Device* device, std::uint32_t uid);
+    void addOpaqueObjectBuffer(ID3D12Device* device, std::uint32_t uid);
+    void removeOpaqueObjectBuffer(ID3D12Device* device, std::uint32_t uid);
+
+    void addUnlitObjectBuffer(ID3D12Device* device, std::uint32_t uid);
+    void removeUnlitObjectBuffer(ID3D12Device* device, std::uint32_t uid);
 
     // We cannot reset the allocator until the GPU is done processing the commands.
     // So each frame needs their own allocator.
@@ -58,9 +65,13 @@ public:
    // std::unique_ptr<UploadBuffer<FrameConstants>> FrameCB = nullptr;
     std::unique_ptr<UploadBuffer<GBufferPassConstants>> GBufferPassCB = nullptr;
     std::unique_ptr<UploadBuffer<LightingPassConstants>> LightingPassCB = nullptr;
-    std::unordered_map<std::uint32_t, std::unique_ptr<UploadBuffer<ObjectConstants>>> ObjectsCB = {};
+
+    std::unordered_map<std::uint32_t, std::unique_ptr<UploadBuffer<OpaqueObjectConstants>>> OpaqueObjCB = {};
+    std::unordered_map<std::uint32_t, std::unique_ptr<UploadBuffer<UnlitObjectConstants>>> UnlitObjCB = {};
 
     // Fence value to mark commands up to this fence point.  This lets us
     // check if these frame resources are still in use by the GPU.
     UINT64 Fence = 0;
+
+    static std::vector<std::unique_ptr<FrameResource>>& frameResources();
 };

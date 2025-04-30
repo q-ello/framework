@@ -146,6 +146,8 @@
     <ClInclude Include="..\..\Common\UploadBuffer.h" />
     <ClInclude Include="BasicUtil.h" />
     <ClInclude Include="Controls.h" />
+    <ClInclude Include="GeometryManager.h" />
+    <ClInclude Include="UploadManager.h" />
     <ClInclude Include="FrameResource.h" />
     <ClInclude Include="DescriptorHeapAllocator.h" />
     <ClInclude Include="imgui\backends\imgui_impl_dx12.h" />
@@ -159,6 +161,9 @@
     <ClInclude Include="imgui\misc\cpp\imgui_stdlib.h" />
     <ClInclude Include="Model.h" />
     <ClInclude Include="MyApp.h" />
+    <ClInclude Include="ObjectManager.h" />
+    <ClInclude Include="RenderItem.h" />
+    <ClInclude Include="TextureManager.h" />
     <ClInclude Include="VertexData.h" />
   </ItemGroup>
   <ItemGroup>
@@ -171,6 +176,7 @@
     <ClCompile Include="..\..\Common\MathHelper.cpp" />
     <ClCompile Include="BasicUtil.cpp" />
     <ClCompile Include="FrameResource.cpp" />
+    <ClCompile Include="GeometryManager.cpp" />
     <ClCompile Include="imgui\backends\imgui_impl_dx12.cpp" />
     <ClCompile Include="imgui\backends\imgui_impl_win32.cpp" />
     <ClCompile Include="imgui\imgui.cpp" />
@@ -182,6 +188,9 @@
     <ClCompile Include="Model.cpp" />
     <ClCompile Include="MyApp.cpp" />
     <ClCompile Include="ObjectLoader.cpp" />
+    <ClCompile Include="ObjectManager.cpp" />
+    <ClCompile Include="TextureManager.cpp" />
+    <ClCompile Include="UploadManager.cpp" />
   </ItemGroup>
   <ItemGroup>
     <Font Include="imgui\misc\fonts\Cousine-Regular.ttf" />
