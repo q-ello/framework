@@ -129,15 +129,6 @@ void D3DApp::CreateRtvAndDsvDescriptorHeaps()
 	rtvHeapDesc.NodeMask = 0;
     ThrowIfFailed(md3dDevice->CreateDescriptorHeap(
         &rtvHeapDesc, IID_PPV_ARGS(mRtvHeap.GetAddressOf())));
-
-
-    D3D12_DESCRIPTOR_HEAP_DESC dsvHeapDesc;
-    dsvHeapDesc.NumDescriptors = 1;
-    dsvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
-    dsvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-	dsvHeapDesc.NodeMask = 0;
-    ThrowIfFailed(md3dDevice->CreateDescriptorHeap(
-        &dsvHeapDesc, IID_PPV_ARGS(mDsvHeap.GetAddressOf())));
 }
 
 void D3DApp::OnResize()
@@ -154,7 +145,6 @@ void D3DApp::OnResize()
 	// Release the previous resources we will be recreating.
 	for (int i = 0; i < SwapChainBufferCount; ++i)
 		mSwapChainBuffer[i].Reset();
-    mDepthStencilBuffer.Reset();
 	
 	// Resize the swap chain.
     ThrowIfFailed(mSwapChain->ResizeBuffers(
@@ -164,6 +154,8 @@ void D3DApp::OnResize()
 		DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH));
 
 	mCurrBackBuffer = 0;
+
+	_gBuffer->OnResize(mClientWidth, mClientHeight, mCommandList.Get());
  
 	CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHeapHandle(mRtvHeap->GetCPUDescriptorHandleForHeapStart());
 	for (UINT i = 0; i < SwapChainBufferCount; i++)
@@ -172,51 +164,6 @@ void D3DApp::OnResize()
 		md3dDevice->CreateRenderTargetView(mSwapChainBuffer[i].Get(), nullptr, rtvHeapHandle);
 		rtvHeapHandle.Offset(1, mRtvDescriptorSize);
 	}
-
-    // Create the depth/stencil buffer and view.
-    D3D12_RESOURCE_DESC depthStencilDesc;
-    depthStencilDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-    depthStencilDesc.Alignment = 0;
-    depthStencilDesc.Width = mClientWidth;
-    depthStencilDesc.Height = mClientHeight;
-    depthStencilDesc.DepthOrArraySize = 1;
-    depthStencilDesc.MipLevels = 1;
-
-	// Correction 11/12/2016: SSAO chapter requires an SRV to the depth buffer to read from 
-	// the depth buffer.  Therefore, because we need to create two views to the same resource:
-	//   1. SRV format: DXGI_FORMAT_R24_UNORM_X8_TYPELESS
-	//   2. DSV Format: DXGI_FORMAT_D24_UNORM_S8_UINT
-	// we need to create the depth buffer resource with a typeless format.  
-	depthStencilDesc.Format = DXGI_FORMAT_R24G8_TYPELESS;
-
-    depthStencilDesc.SampleDesc.Count = m4xMsaaState ? 4 : 1;
-    depthStencilDesc.SampleDesc.Quality = m4xMsaaState ? (m4xMsaaQuality - 1) : 0;
-    depthStencilDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
-    depthStencilDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
-
-    D3D12_CLEAR_VALUE optClear;
-    optClear.Format = mDepthStencilFormat;
-    optClear.DepthStencil.Depth = 1.0f;
-    optClear.DepthStencil.Stencil = 0;
-    ThrowIfFailed(md3dDevice->CreateCommittedResource(
-        &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
-		D3D12_HEAP_FLAG_NONE,
-        &depthStencilDesc,
-		D3D12_RESOURCE_STATE_COMMON,
-        &optClear,
-        IID_PPV_ARGS(mDepthStencilBuffer.GetAddressOf())));
-
-    // Create descriptor to mip level 0 of entire resource using the format of the resource.
-	D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc;
-	dsvDesc.Flags = D3D12_DSV_FLAG_NONE;
-	dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
-	dsvDesc.Format = mDepthStencilFormat;
-	dsvDesc.Texture2D.MipSlice = 0;
-    md3dDevice->CreateDepthStencilView(mDepthStencilBuffer.Get(), &dsvDesc, DepthStencilView());
-
-    // Transition the resource from its initial state to be used as a depth buffer.
-	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mDepthStencilBuffer.Get(),
-		D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_DEPTH_WRITE));
 	
     // Execute the resize commands.
     ThrowIfFailed(mCommandList->Close());
@@ -237,10 +184,6 @@ void D3DApp::OnResize()
 	mScissorRect = {0, 0, mClientWidth, mClientHeight };
 }
 
-void D3DApp::OnResizing()
-{
-}
- 
 LRESULT D3DApp::MsgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
 	if (checkForImGui(hwnd, msg, wParam, lParam))
@@ -305,7 +248,6 @@ LRESULT D3DApp::MsgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				}
 				else if (mResizing)
 				{
-					OnResizing();
 					// If user is dragging the resize bars, we do not resize 
 					// the buffers here because as the user continuously 
 					// drags the resize bars, a stream of WM_SIZE messages are
@@ -349,35 +291,6 @@ LRESULT D3DApp::MsgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	case WM_MENUCHAR:
 		// Don't beep when we alt-enter.
 		return MAKELRESULT(0, MNC_CLOSE);
-	case WM_INPUT:
-	{
-		UINT dwSize = 0;
-		GetRawInputData((HRAWINPUT)lParam, RID_INPUT, nullptr, &dwSize, sizeof(RAWINPUTHEADER));
-
-		std::vector<BYTE> lpb(dwSize);
-		if (GetRawInputData((HRAWINPUT)lParam, RID_INPUT, lpb.data(), &dwSize, sizeof(RAWINPUTHEADER)) != dwSize)
-		{
-			OutputDebugString(L"GetRawInputData failed\n");
-			break;
-		}
-
-		RAWINPUT* raw = reinterpret_cast<RAWINPUT*>(lpb.data());
-		if (raw->header.dwType == RIM_TYPEKEYBOARD)
-		{
-			UINT virtualKey = raw->data.keyboard.VKey; // This is your keycode
-			UINT scanCode = raw->data.keyboard.MakeCode;
-			BOOL keyUp = raw->data.keyboard.Flags & RI_KEY_BREAK; // 1 if key is released
-
-			if (!keyUp) // Key is pressed
-			{
-				if (onKeyDown(virtualKey))
-				{
-					return 0;
-				}
-			}
-		}
-		break;
-	}
 		// Catch this message so to prevent the window from becoming too small.
 	case WM_GETMINMAXINFO:
 		((MINMAXINFO*)lParam)->ptMinTrackSize.x = 200;
@@ -408,51 +321,6 @@ LRESULT D3DApp::MsgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		return 0;
 	case WM_ERASEBKGND:
 		return 1;
-	case WM_PAINT:
-	{
-		PAINTSTRUCT ps;
-		HDC hdc = BeginPaint(hwnd, &ps);
-
-		// Clear background to white (or any color you prefer)
-		HBRUSH hBrush = CreateSolidBrush(RGB(40, 40, 40));
-		FillRect(hdc, &ps.rcPaint, hBrush);
-		DeleteObject(hBrush);
-
-		handlePaint();
-
-		EndPaint(hwnd, &ps);
-
-		return 0;
-	}
-	case WM_CTLCOLOR:
-	case WM_CTLCOLORSTATIC:
-		return colorOtherData(hwnd, msg, wParam, lParam);
-	case WM_COMMAND:
-		if (handleControls(wParam))
-		{
-			return 0;
-		}
-		else
-		{
-			DefWindowProc(hwnd, msg, wParam, lParam);
-		}
-	case WM_CONTEXTMENU:
-	{
-		HWND hCtrl = (HWND)wParam; // The control that was right-clicked
-		int x = GET_X_LPARAM(lParam);
-		int y = GET_Y_LPARAM(lParam);
-
-		handleRightClickControls(hCtrl, x, y);
-		return 0;
-	}
-	case WM_DRAWITEM:
-	{
-		LPDRAWITEMSTRUCT pDIS = (LPDRAWITEMSTRUCT)lParam;
-
-		drawUI(pDIS);
-		return TRUE;
-		break;
-	}
 	}
 	return DefWindowProc(hwnd, msg, wParam, lParam);
 }
@@ -556,7 +424,6 @@ bool D3DApp::InitDirect3D()
 		IID_PPV_ARGS(&mFence)));
 
 	mRtvDescriptorSize = md3dDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
-	mDsvDescriptorSize = md3dDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
 	mCbvSrvUavDescriptorSize = md3dDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
     // Check 4X MSAA quality support for our back buffer format.
@@ -583,6 +450,8 @@ bool D3DApp::InitDirect3D()
 	CreateCommandObjects();
     CreateSwapChain();
     CreateRtvAndDsvDescriptorHeaps();
+
+	_gBuffer = std::make_unique<GBuffer>(md3dDevice.Get(), mClientWidth, mClientHeight);
 
 	return true;
 }
@@ -675,11 +544,6 @@ D3D12_CPU_DESCRIPTOR_HANDLE D3DApp::CurrentBackBufferView()const
 		mRtvHeap->GetCPUDescriptorHandleForHeapStart(),
 		mCurrBackBuffer,
 		mRtvDescriptorSize);
-}
-
-D3D12_CPU_DESCRIPTOR_HANDLE D3DApp::DepthStencilView()const
-{
-	return mDsvHeap->GetCPUDescriptorHandleForHeapStart();
 }
 
 void D3DApp::CalculateFrameStats()
@@ -788,8 +652,3 @@ void D3DApp::LogOutputDisplayModes(IDXGIOutput* output, DXGI_FORMAT format)
         ::OutputDebugString(text.c_str());
     }
 }
-
-void D3DApp::CreateControls()
-{
-}
-

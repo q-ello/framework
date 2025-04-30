@@ -11,6 +11,7 @@
 
 #include "d3dUtil.h"
 #include "GameTimer.h"
+#include "GBuffer.h"
 
 // Link necessary d3d12 libraries.
 #pragma comment(lib,"d3dcompiler.lib")
@@ -47,18 +48,13 @@ public:
 protected:
     virtual void CreateRtvAndDsvDescriptorHeaps();
 	virtual void OnResize(); 
-    virtual void OnResizing();
 	virtual void Update(const GameTimer& gt)=0;
     virtual void Draw(const GameTimer& gt)=0;
-    virtual bool onKeyDown(UINT wParam) { return false; };
 
 	// Convenience overrides for handling mouse input.
 	virtual void OnMouseDown(WPARAM btnState, int x, int y){ }
 	virtual void OnMouseUp(WPARAM btnState, int x, int y)  { }
 	virtual void OnMouseMove(WPARAM btnState, int x, int y){ }
-
-    virtual bool handleControls(WPARAM wParam) { return false; }
-
 protected:
 
 	virtual bool InitMainWindow();
@@ -70,15 +66,12 @@ protected:
 
 	ID3D12Resource* CurrentBackBuffer()const;
 	D3D12_CPU_DESCRIPTOR_HANDLE CurrentBackBufferView()const;
-	D3D12_CPU_DESCRIPTOR_HANDLE DepthStencilView()const;
 
 	void CalculateFrameStats();
 
     void LogAdapters();
     void LogAdapterOutputs(IDXGIAdapter* adapter);
     void LogOutputDisplayModes(IDXGIOutput* output, DXGI_FORMAT format);
-
-    virtual void CreateControls();
 
 protected:
 
@@ -113,16 +106,13 @@ protected:
 	static const int SwapChainBufferCount = 2;
 	int mCurrBackBuffer = 0;
     Microsoft::WRL::ComPtr<ID3D12Resource> mSwapChainBuffer[SwapChainBufferCount];
-    Microsoft::WRL::ComPtr<ID3D12Resource> mDepthStencilBuffer;
 
     Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> mRtvHeap;
-    Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> mDsvHeap;
 
     D3D12_VIEWPORT mScreenViewport; 
     D3D12_RECT mScissorRect;
 
 	UINT mRtvDescriptorSize = 0;
-	UINT mDsvDescriptorSize = 0;
 	UINT mCbvSrvUavDescriptorSize = 0;
 
 	// Derived class should set these in derived constructor to customize starting values.
@@ -133,10 +123,8 @@ protected:
 	int mClientWidth = 1000;
 	int mClientHeight = 600;
 
-    virtual void handleRightClickControls(HWND hCtrl, int x, int y) {};
-    virtual void drawUI(LPDRAWITEMSTRUCT lpdis) {};
-    virtual LRESULT colorOtherData(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) { return DefWindowProc(hwnd, msg, wParam, lParam); };
-    virtual void handlePaint() {};
+    std::unique_ptr<GBuffer> _gBuffer;
+
     virtual bool checkForImGui(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) { return false; };
 };
 

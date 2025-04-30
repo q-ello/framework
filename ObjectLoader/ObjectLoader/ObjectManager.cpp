@@ -181,6 +181,8 @@ void OpaqueObjectManager::Draw(ID3D12GraphicsCommandList* cmdList, FrameResource
 	cmdList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
 	cmdList->SetGraphicsRootSignature(_rootSignature.Get());
 	cmdList->SetPipelineState(_pso.Get());
+	auto passCB = currFrameResource->GBufferPassCB->Resource();
+	cmdList->SetGraphicsRootConstantBufferView(3, passCB->GetGPUVirtualAddress());
 
 	UINT objCBByteSize = d3dUtil::CalcConstantBufferByteSize(sizeof(OpaqueObjectConstants));
 
