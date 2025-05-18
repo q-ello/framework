@@ -3,37 +3,13 @@
 #include "FrameResource.h"
 #include "UploadManager.h"
 
-/*
-* TODOS:
-* - checkbox: turn on/off directional light
-* - the direction of directional light
-* - add ambience?
-* - add point/spot lights
-* - change transform? need to think. I guess radius and maybe the angle??
-* - change color
-* - add lightRenderItem for every light and do everything else, with analogy to object render items? store world matrix?
-* - draw it blending with indexed instanced
-* - everything else is a work in the shader, we'll get to that
-* - two draws: one for small lights and the other one for directional lighting
-*/
-
-struct Light
+struct LightRenderItem
 {
-    int type;
-    DirectX::XMFLOAT3 position;
-    float radius;
-    DirectX::XMFLOAT3 direction;
-    float angle;
-    DirectX::XMFLOAT3 color;
-    float intensity;
-    bool active;
+	Light LightData;
+	int NumFramesDirty = gNumFrameResources;
+	int LightIndex = -1;
 };
 
-struct LightGrid
-{
-	int offset = 0;
-	int lightCount = 0;
-};
 
 class LightingManager
 {
@@ -46,11 +22,15 @@ public:
 
 	void UpdateDirectionalLightCB(FrameResource* currFrameResource);
 	void UpdateLightCBs(FrameResource* currFrameResource);
-	void AddLightToResource(Microsoft::WRL::ComPtr<ID3D12Device> device, FrameResource* currFrameResource);
+	void UpdateWorld(int lightIndex);
+
 	int lightsCount();
-	Light* light(int i);
+	LightRenderItem* light(int i);
+
 	void Draw(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, D3D12_GPU_DESCRIPTOR_HANDLE descTable);
-	void Init(int srvAmount);
+	void Init(int srvAmount, ID3D12Device* device);
+	void OnResize(ID3D12Device* device, D3D12_CPU_DESCRIPTOR_HANDLE srvHandle);
+
 
 	bool* isMainLightOn()
 	{
@@ -73,7 +53,10 @@ private:
 	DirectX::XMFLOAT3 _dirLightColor = { 1.f, 1.f, 1.f };
 	DirectionalLightConstants _dirLightCB;
 
-	std::vector<std::unique_ptr<Light>> _localLights;
+	std::vector<std::unique_ptr<LightRenderItem>> _localLights;
+	std::vector<int> FreeLightIndices;
+	int NextAvailableIndex = 0;
+	const int MaxLights = 512;
 
 	std::uint32_t uidCount;
 
@@ -87,6 +70,7 @@ private:
 	std::vector<D3D12_INPUT_ELEMENT_DESC> _localLightsInputLayout;
 	Microsoft::WRL::ComPtr<ID3DBlob> _localLightsVSShader;
 	Microsoft::WRL::ComPtr<ID3DBlob> _localLightsPSShader;
+	Microsoft::WRL::ComPtr<ID3D12Resource> _lightBufferGPU;
 
 	void BuildInputLayout();
 	void BuildRootSignature(int srvAmount);

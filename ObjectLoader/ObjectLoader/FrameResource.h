@@ -39,6 +39,22 @@ struct DirectionalLightConstants
 };
 
 
+struct Light
+{
+    DirectX::XMMATRIX world = DirectX::XMMatrixIdentity();
+    int type = 0;
+    DirectX::XMFLOAT3 position = { 0.0f, 0.0f, 0.0f };
+    float radius = 1.f;
+    DirectX::XMFLOAT3 direction = { 0.0f, 0.0f, 0.0f };
+    float angle = 10.f;
+    DirectX::XMFLOAT3 color = { 0.0f, 0.0f, 0.0f };
+    float intensity = 10;
+    bool active = 1;
+    bool pad1 = false;
+    bool pad2 = false;
+    bool pad3 = false;
+};
+
 // Stores the resources needed for the CPU to build the command lists
 // for a frame.  
 struct FrameResource
@@ -66,6 +82,7 @@ public:
     std::unique_ptr<UploadBuffer<GBufferPassConstants>> GBufferPassCB = nullptr;
     std::unique_ptr<UploadBuffer<LightingPassConstants>> LightingPassCB = nullptr;
     std::unique_ptr<UploadBuffer<DirectionalLightConstants>> DirLightCB = nullptr;
+    std::unique_ptr<UploadBuffer<Light>> LocalLightCB = nullptr;
 
     std::unordered_map<std::uint32_t, std::unique_ptr<UploadBuffer<OpaqueObjectConstants>>> OpaqueObjCB = {};
     std::unordered_map<std::uint32_t, std::unique_ptr<UploadBuffer<UnlitObjectConstants>>> UnlitObjCB = {};

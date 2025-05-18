@@ -1,6 +1,7 @@
 #include "LightingManager.h"
 
 using namespace Microsoft::WRL;
+using namespace DirectX;
 
 LightingManager::LightingManager()
 {
@@ -13,10 +14,30 @@ LightingManager::~LightingManager()
 
 void LightingManager::addLight(ID3D12Device* device)
 {
+	int lightIndex;
+	if (!FreeLightIndices.empty()) {
+		lightIndex = FreeLightIndices.back();
+		FreeLightIndices.pop_back();
+	}
+	else {
+		if (NextAvailableIndex >= MaxLights) {
+			throw std::runtime_error("Maximum number of lights exceeded!");
+		}
+		lightIndex = NextAvailableIndex++;
+	}
+
+	auto lightItem = std::make_unique<LightRenderItem>();
+	lightItem->LightIndex = lightIndex;
+	lightItem->NumFramesDirty = gNumFrameResources;
+	lightItem->LightData = Light();
+
+	_localLights.push_back(std::move(lightItem));
 }
 
 void LightingManager::deleteLight(int deletedLight)
 {
+	FreeLightIndices.push_back(_localLights[deletedLight]->LightIndex);
+	_localLights.erase(_localLights.begin() + deletedLight);
 }
 
 void LightingManager::UpdateDirectionalLightCB(FrameResource* currFrameResource)
@@ -34,20 +55,51 @@ void LightingManager::UpdateDirectionalLightCB(FrameResource* currFrameResource)
 
 void LightingManager::UpdateLightCBs(FrameResource* currFrameResource)
 {
+	for (auto& light : _localLights)
+	{
+		if (light->NumFramesDirty == 0 || !light->LightData.active)
+		{
+			continue;
+		}
+		auto currLightCB = currFrameResource->LocalLightCB.get();
+		currLightCB->CopyData(light->LightIndex, light->LightData);
+		light->NumFramesDirty--;
+	}
 }
 
-void LightingManager::AddLightToResource(Microsoft::WRL::ComPtr<ID3D12Device> device, FrameResource* currFrameResource)
+void LightingManager::UpdateWorld(int lightIndex)
 {
+	Light data = _localLights[lightIndex]->LightData;
+	XMMATRIX world;
+	//if it is a sphere
+	if (data.type == 0)
+	{
+		XMMATRIX scale = XMMatrixScaling(data.radius, data.radius, data.radius);
+		XMMATRIX translation = XMMatrixTranslationFromVector(XMLoadFloat3(&data.position));
+
+		world = scale * translation;
+	}
+	//or it is a cone
+	else
+	{
+		float diameter = 2.f * data.radius * tanf(data.angle * XM_PI / 180.f);
+		XMMATRIX scale = XMMatrixScaling(diameter, data.radius, diameter);
+		XMVECTOR direction = XMVector3Normalize(XMLoadFloat3(&data.direction));
+		XMMATRIX rotation = XMMatrixRotationRollPitchYawFromVector(direction);
+		XMMATRIX translation = XMMatrixTranslationFromVector(direction * data.radius * .5f);
+		world = scale * rotation * translation;
+	}
+	_localLights[lightIndex]->LightData.world = XMMatrixTranspose(world);
 }
 
 int LightingManager::lightsCount()
 {
-	return 0;
+	return _localLights.size();
 }
 
-Light* LightingManager::light(int i)
+LightRenderItem* LightingManager::light(int i)
 {
-	return nullptr;
+	return _localLights[i].get();
 }
 
 void LightingManager::Draw(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, D3D12_GPU_DESCRIPTOR_HANDLE descTable)
@@ -69,8 +121,20 @@ void LightingManager::Draw(ID3D12GraphicsCommandList* cmdList, FrameResource* cu
 	cmdList->DrawInstanced( 3, 1, 0, 0);
 }
 
-void LightingManager::Init(int srvAmount)
+void LightingManager::Init(int srvAmount, ID3D12Device* device)
 {
+	// Create buffer on GPU
+	CD3DX12_HEAP_PROPERTIES defaultHeap(D3D12_HEAP_TYPE_DEFAULT);
+	CD3DX12_RESOURCE_DESC bufferDesc = CD3DX12_RESOURCE_DESC::Buffer(sizeof(Light) * _localLights.size());
+
+	device->CreateCommittedResource(
+		&defaultHeap,
+		D3D12_HEAP_FLAG_NONE,
+		&bufferDesc,
+		D3D12_RESOURCE_STATE_COPY_DEST,
+		nullptr,
+		IID_PPV_ARGS(&_lightBufferGPU));
+
 	BuildRootSignature(srvAmount);
 	BuildShaders();
 	BuildInputLayout();
@@ -90,7 +154,7 @@ void LightingManager::BuildRootSignature(int srvAmount)
 {
 	//lighting root signature
 	CD3DX12_DESCRIPTOR_RANGE lightingRange;
-	lightingRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, srvAmount, 0);
+	lightingRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, srvAmount + 1, 0);
 
 	CD3DX12_ROOT_PARAMETER lightingSlotRootParameter[3];
 
@@ -154,4 +218,18 @@ void LightingManager::BuildPSO()
 	lightingPSODesc.SampleDesc.Quality = 0;
 	lightingPSODesc.DSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
 	ThrowIfFailed(UploadManager::device ->CreateGraphicsPipelineState(&lightingPSODesc, IID_PPV_ARGS(&_dirLightPSO)));
+}
+
+void LightingManager::OnResize(ID3D12Device* device, D3D12_CPU_DESCRIPTOR_HANDLE srvHandle)
+{
+	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+	srvDesc.Format = DXGI_FORMAT_UNKNOWN;
+	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	srvDesc.Buffer.FirstElement = 0;
+	srvDesc.Buffer.NumElements = 1024;
+	srvDesc.Buffer.StructureByteStride = sizeof(Light);
+	srvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
+
+	device->CreateShaderResourceView(_lightBufferGPU.Get(), &srvDesc, srvHandle);
 }

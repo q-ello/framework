@@ -1,8 +1,22 @@
 #include "LightingUtil.hlsl"
 
+struct Light
+{
+    float4x4 world;
+    int type;
+    float3 position;
+    float radius;
+    float3 direction;
+    float angle;
+    float3 color;
+    float intensity;
+    bool active;
+};
+
 Texture2D gDiffuse : register(t0);
 Texture2D gNormal : register(t1);
 Texture2D gDepth : register(t2);
+StructuredBuffer<Light> lights : register(t3);
 
 cbuffer cbLightingPass : register(b0)
 {

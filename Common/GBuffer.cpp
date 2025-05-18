@@ -63,6 +63,8 @@ void GBuffer::OnResize(int width, int height, ID3D12GraphicsCommandList* cmdList
 			srvHandle.Offset(1, _srvDescriptorSize);
 
 	}
+
+	_srvHandleForLighting = srvHandle;
 }
 
 void GBuffer::CreateGBufferTexture(int i, CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHeapHandle, CD3DX12_CPU_DESCRIPTOR_HANDLE srvHeapHandle,

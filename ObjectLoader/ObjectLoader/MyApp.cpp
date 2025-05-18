@@ -92,6 +92,10 @@ void MyApp::OnResize()
 {
 	//resizing the render window
 	D3DApp::OnResize();
+	if (_lightingManager)
+	{
+		_lightingManager->OnResize(md3dDevice.Get(), _gBuffer->lightingHandle());
+	}
 
 	// The window resized, so update the aspect ratio and recompute the projection matrix.
 	XMMATRIX P = XMMatrixPerspectiveFovLH(0.25f * MathHelper::Pi, AspectRatio(), 1.0f, 1000.0f);
@@ -455,16 +459,47 @@ void MyApp::DrawLocalLightData(int* btnId, int lightIndex)
 	if (ImGui::Button("Light " + lightIndex))
 	{
 		auto light = _lightingManager->light(lightIndex);
-		ImGui::Checkbox("Enabled", &light->active);
-		ImGui::DragFloat3("Position", &light->position.x, 0.1f);
-		ImGui::ColorEdit3("Color", &light->color.x);
-		ImGui::SliderFloat("Intensity", &light->intensity, 0.0f, 10.0f);
-		ImGui::SliderFloat("Radius", &light->radius, 0.1f, 50.0f);
 
-		if (light->type == 1)
+		if (ImGui::RadioButton("Point Light", light->LightData.type == 0) && light->LightData.type != 0)
 		{
-			ImGui::DragFloat3("Direction", &light->direction.x, 0.1f);
-			ImGui::SliderAngle("Angle", &light->angle, 1.0f, 90.0f);
+			light->LightData.type = 0;
+			_lightingManager->UpdateWorld(lightIndex);
+		}
+		if (ImGui::RadioButton("Spotlight", light->LightData.type == 1) && light->LightData.type != 1)
+		{
+			light->LightData.type = 1;
+			_lightingManager->UpdateWorld(lightIndex);
+		}
+		if (ImGui::Checkbox("Enabled", &light->LightData.active))
+		{
+			light->NumFramesDirty = gNumFrameResources;
+		}
+		if (ImGui::DragFloat3("Position", &light->LightData.position.x, 0.1f))
+		{
+			_lightingManager->UpdateWorld(lightIndex);
+		}
+		if (ImGui::ColorEdit3("Color", &light->LightData.color.x))
+		{
+			light->NumFramesDirty = gNumFrameResources;
+		}
+		if (ImGui::SliderFloat("Intensity", &light->LightData.intensity, 0.0f, 10.0f))
+		{
+			light->NumFramesDirty = gNumFrameResources;
+		}
+		if (ImGui::SliderFloat("Radius", &light->LightData.radius, 0.1f, 50.0f))
+		{
+			_lightingManager->UpdateWorld(lightIndex);
+		}
+		if (light->LightData.type == 1)
+		{
+			if (ImGui::DragFloat3("Direction", &light->LightData.direction.x, 0.1f))
+			{
+				_lightingManager->UpdateWorld(lightIndex);
+			}
+			if (ImGui::SliderAngle("Angle", &light->LightData.angle, 1.0f, 90.0f))
+			{
+				_lightingManager->UpdateWorld(lightIndex);
+			}
 		}
 	}
 }
@@ -623,7 +658,7 @@ void MyApp::InitManagers()
 	_objectManagers[PSO::Unlit]->Init();
 	
 	_lightingManager = std::make_unique<LightingManager>();
-	_lightingManager->Init(_gBuffer->InfoCount(false));
+	_lightingManager->Init(_gBuffer->InfoCount(false), md3dDevice.Get());
 }
 
 void MyApp::GBufferPass()

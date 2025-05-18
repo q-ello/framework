@@ -60,6 +60,11 @@ public:
 	DXGI_FORMAT_R24G8_TYPELESS         // Depth
 	};
 
+	D3D12_CPU_DESCRIPTOR_HANDLE lightingHandle()
+	{
+		return _srvHandleForLighting;
+	}
+
 private:
 	int _height;
 	int _width;
@@ -72,6 +77,7 @@ private:
 	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> _infoRTVHeap;
 	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> _infoSRVHeap;
 	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> _infoDSVHeap;
+	D3D12_CPU_DESCRIPTOR_HANDLE _srvHandleForLighting;
 
 	Microsoft::WRL::ComPtr<ID3D12Device> _device;
 };
