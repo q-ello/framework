@@ -8,6 +8,7 @@ FrameResource::FrameResource(ID3D12Device* device, UINT passCount)
 
     GBufferPassCB = std::make_unique<UploadBuffer<GBufferPassConstants>>(device, passCount, true);
     LightingPassCB = std::make_unique < UploadBuffer <LightingPassConstants>> (device, passCount, true);
+    DirLightCB = std::make_unique<UploadBuffer<DirectionalLightConstants>>(device, passCount, true);
 }
 
 FrameResource::~FrameResource()

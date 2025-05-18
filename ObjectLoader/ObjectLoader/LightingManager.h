@@ -1,9 +1,10 @@
 #pragma once
 #include "../../Common/d3dUtil.h"
+#include "FrameResource.h"
+#include "UploadManager.h"
 
 /*
 * TODOS:
-* - build geometry: cube
 * - checkbox: turn on/off directional light
 * - the direction of directional light
 * - add ambience?
@@ -38,6 +39,57 @@ class LightingManager
 {
 public:
 	LightingManager();
-private:
+	~LightingManager();
 
+	void addLight(ID3D12Device* device);
+	void deleteLight(int deletedLight);
+
+	void UpdateDirectionalLightCB(FrameResource* currFrameResource);
+	void UpdateLightCBs(FrameResource* currFrameResource);
+	void AddLightToResource(Microsoft::WRL::ComPtr<ID3D12Device> device, FrameResource* currFrameResource);
+	int lightsCount();
+	Light* light(int i);
+	void Draw(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, D3D12_GPU_DESCRIPTOR_HANDLE descTable);
+	void Init(int srvAmount);
+
+	bool* isMainLightOn()
+	{
+		return &_isMainLightOn;
+	}
+
+	float* mainLightDirection()
+	{
+		return _mainLightDirection;
+	}
+
+	float* mainLightColor()
+	{
+		return _dirLightColor;
+	}
+
+private:
+	float _mainLightDirection[3] = { 1.f, -1.f, 0.f };
+	bool _isMainLightOn = true;
+	float _dirLightColor[3] = { 1.f, 1.f, 1.f };
+	DirectionalLightConstants _dirLightCB;
+
+	std::vector<std::unique_ptr<Light>> _localLights;
+
+	std::uint32_t uidCount;
+
+	Microsoft::WRL::ComPtr<ID3D12RootSignature> _rootSignature;
+
+	Microsoft::WRL::ComPtr<ID3D12PipelineState> _dirLightPSO;
+	Microsoft::WRL::ComPtr<ID3DBlob> _dirLightVSShader;
+	Microsoft::WRL::ComPtr<ID3DBlob> _dirLightPSShader;
+
+	Microsoft::WRL::ComPtr<ID3D12PipelineState> _localLightsPSO;
+	std::vector<D3D12_INPUT_ELEMENT_DESC> _localLightsInputLayout;
+	Microsoft::WRL::ComPtr<ID3DBlob> _localLightsVSShader;
+	Microsoft::WRL::ComPtr<ID3DBlob> _localLightsPSShader;
+
+	void BuildInputLayout();
+	void BuildRootSignature(int srvAmount);
+	void BuildShaders();
+	void BuildPSO();
 };

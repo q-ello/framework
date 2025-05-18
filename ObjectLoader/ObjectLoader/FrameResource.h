@@ -26,16 +26,16 @@ struct GBufferPassConstants
 
 struct LightingPassConstants
 {
-    DirectX::XMFLOAT3 gLightPosW = { 0.0f, 5.0f, 0.0f };
-    float gLightRange = 100.f; 
-    DirectX::XMFLOAT3 gLightColor = { 1.0f, 1.0f, 1.0f };
-    float gPad0;
-
     DirectX::XMFLOAT4X4 InvViewProj;
-
     DirectX::XMFLOAT2 RenderTargetSize = { 0.0f, 0.0f };
     DirectX::XMFLOAT3 EyePosW = { 0.0f, 0.0f, 0.0f };
-    float gPad1;
+};
+
+struct DirectionalLightConstants
+{
+    DirectX::XMFLOAT3 mainLightDirection = { 0.0f, 0.0f, 0.0f };
+    int mainLightIsOn = 1;
+    DirectX::XMFLOAT3 gLightColor = { 1.0f, 1.0f, 1.0f };
 };
 
 
@@ -65,6 +65,7 @@ public:
    // std::unique_ptr<UploadBuffer<FrameConstants>> FrameCB = nullptr;
     std::unique_ptr<UploadBuffer<GBufferPassConstants>> GBufferPassCB = nullptr;
     std::unique_ptr<UploadBuffer<LightingPassConstants>> LightingPassCB = nullptr;
+    std::unique_ptr<UploadBuffer<DirectionalLightConstants>> DirLightCB = nullptr;
 
     std::unordered_map<std::uint32_t, std::unique_ptr<UploadBuffer<OpaqueObjectConstants>>> OpaqueObjCB = {};
     std::unordered_map<std::uint32_t, std::unique_ptr<UploadBuffer<UnlitObjectConstants>>> UnlitObjCB = {};

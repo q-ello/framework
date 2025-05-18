@@ -234,7 +234,10 @@ void MyApp::OnKeyboardInput(const GameTimer& gt)
 	if (GetAsyncKeyState('E') & 0x8000)
 	{
 		//since view matrix is transponed I'm taking z-column
-		_mainLightDirection = { mView._13, mView._23, mView._33 };
+		auto lightDir = _lightingManager->mainLightDirection();
+		lightDir[0] = mView._13;
+		lightDir[1] = mView._23;
+		lightDir[2] = mView._33;
 	}
 }
 
@@ -280,41 +283,16 @@ void MyApp::UpdateMainPassCBs(const GameTimer& gt)
 	XMStoreFloat4x4(&_lightingCB.InvViewProj, XMMatrixTranspose(invViewProj));
 	_lightingCB.EyePosW = mEyePos;
 	_lightingCB.RenderTargetSize = XMFLOAT2((float)mClientWidth, (float)mClientHeight);
-	_lightingCB.gLightPosW = XMFLOAT3(sin(gt.TotalTime()), 0.0f, cos(gt.TotalTime()));
 
 	auto currLightingCB = mCurrFrameResource->LightingPassCB.get();
 	currLightingCB->CopyData(0, _lightingCB);
+
+	_lightingManager->UpdateDirectionalLightCB(mCurrFrameResource);
 }
 
 void MyApp::BuildRootSignatures()
 {
-	//lighting root signature
-	CD3DX12_DESCRIPTOR_RANGE lightingRange;
-	lightingRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, _gBuffer->InfoCount(false), 0);
-
-	CD3DX12_ROOT_PARAMETER lightingSlotRootParameter[2];
-
-	lightingSlotRootParameter[0].InitAsDescriptorTable(1, &lightingRange);
-	lightingSlotRootParameter[1].InitAsConstantBufferView(0);
-
-	CD3DX12_ROOT_SIGNATURE_DESC lightingRootSigDesc(2, lightingSlotRootParameter);
-
-	ComPtr<ID3DBlob> serializedRootSig = nullptr;
-	ComPtr<ID3DBlob> errorBlob = nullptr;
-	HRESULT hr = D3D12SerializeRootSignature(&lightingRootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1,
-		serializedRootSig.GetAddressOf(), errorBlob.GetAddressOf());
-
-	if (errorBlob != nullptr)
-	{
-		::OutputDebugStringA((char*)errorBlob->GetBufferPointer());
-	}
-	ThrowIfFailed(hr);
-
-	ThrowIfFailed(md3dDevice->CreateRootSignature(
-		0,
-		serializedRootSig->GetBufferPointer(),
-		serializedRootSig->GetBufferSize(),
-		IID_PPV_ARGS(_lightingRootSignature.GetAddressOf())));
+	
 }
 
 void MyApp::BuildDescriptorHeaps()
@@ -336,34 +314,7 @@ void MyApp::BuildShadersAndInputLayout()
 
 void MyApp::BuildPSOs()
 {
-	//lighting pso
-	D3D12_GRAPHICS_PIPELINE_STATE_DESC lightingPSODesc;
-
-	ZeroMemory(&lightingPSODesc, sizeof(D3D12_GRAPHICS_PIPELINE_STATE_DESC));
-	lightingPSODesc.pRootSignature = _lightingRootSignature.Get();
-	lightingPSODesc.VS =
-	{
-		reinterpret_cast<BYTE*>(mShaders["LightingVS"]->GetBufferPointer()),
-		mShaders["LightingVS"]->GetBufferSize()
-	};
-	lightingPSODesc.PS =
-	{
-		reinterpret_cast<BYTE*>(mShaders["LightingPS"]->GetBufferPointer()),
-		mShaders["LightingPS"]->GetBufferSize()
-	};
-	lightingPSODesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
-	lightingPSODesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
-	lightingPSODesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
-	lightingPSODesc.SampleMask = UINT_MAX;
-	lightingPSODesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-	lightingPSODesc.NumRenderTargets = 1;
-	lightingPSODesc.RTVFormats[0] = mBackBufferFormat;
-	lightingPSODesc.DepthStencilState.DepthEnable = false;
-	lightingPSODesc.DepthStencilState.StencilEnable = false;
-	lightingPSODesc.SampleDesc.Count = 1;
-	lightingPSODesc.SampleDesc.Quality = 0;
-	lightingPSODesc.DSVFormat = mDepthStencilFormat;
-	ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&lightingPSODesc, IID_PPV_ARGS(&_lightingPSO)));
+	
 }
 
 void MyApp::BuildFrameResources()
@@ -382,17 +333,41 @@ void MyApp::BuildFrameResources()
 
 void MyApp::DrawInterface()
 {
-	int buttonId = 0;
+	int* buttonId = new int(0);
 
-	//debug window
-	ImGui::Begin("Debug info");
+	ImGui::SetNextWindowPos({ 0.f, 0.f }, ImGuiCond_Once, { 0.f, 0.f });
+	ImGui::SetNextWindowSize({ 250.f, 500.f }, ImGuiCond_Once);
+
+	ImGui::Begin("Data");
+	ImGui::BeginTabBar("#data");
+	
+	if (ImGui::BeginTabItem("Objects"))
+	{
+		DrawObjectsList(buttonId);
+		ImGui::EndTabItem();
+	}
+
+	if (ImGui::BeginTabItem("Lights"))
+	{
+		DrawLightData(buttonId);
+		ImGui::EndTabItem();
+	}
+
+	ImGui::EndTabBar();
 	ImGui::End();
 
-	//objects window
-	ImGui::SetNextWindowPos({ 0.f, 0.f }, ImGuiCond_Once, { 0.f, 0.f });
-	ImGui::SetNextWindowSize({ 200.f, 500.f }, ImGuiCond_Once);
 
-	ImGui::Begin("Objects");                          // Create a window called "Hello, world!" and append into it.
+	//object info
+
+	if (_selectedObject != -1)
+	{
+		DrawObjectInfo(buttonId);
+	}
+	delete buttonId;
+}
+
+void MyApp::DrawObjectsList(int* btnId)
+{
 	if (ImGui::CollapsingHeader("Opaque Objects", ImGuiTreeNodeFlags_DefaultOpen))
 	{
 		if (ImGui::Button("Add New"))
@@ -410,7 +385,8 @@ void MyApp::DrawInterface()
 
 		for (int i = 0; i < _objectManagers[PSO::Opaque]->objectsCount(); i++)
 		{
-			ImGui::PushID(buttonId++);
+			ImGui::PushID((*btnId)++);
+
 			std::string name = BasicUtil::trimName(_objectManagers[PSO::Opaque]->objectName(i), 15);
 			if (ImGui::Button(name.c_str()))
 			{
@@ -419,7 +395,7 @@ void MyApp::DrawInterface()
 			}
 			ImGui::SameLine();
 			ImGui::PopID();
-			ImGui::PushID(buttonId++);
+			ImGui::PushID((*btnId)++);
 			if (ImGui::Button("delete"))
 			{
 				_selectedObject = i;
@@ -433,135 +409,146 @@ void MyApp::DrawInterface()
 			ImGui::PopID();
 		}
 	}
-	ImGui::End();
+}
 
-	//object info
-
-	if (_selectedObject != -1)
+void MyApp::DrawLightData(int* btnId)
+{
+	if (ImGui::CollapsingHeader("DirectionalLight", ImGuiTreeNodeFlags_DefaultOpen))
 	{
-		ImGui::SetNextWindowPos({ static_cast<float>(mClientWidth) - 300.f, 50.f }, ImGuiCond_Once, { 0.f, 0.f });
-		ImGui::SetNextWindowSize({ 250.f, 350.f }, ImGuiCond_Once);
+		ImGui::Checkbox("Turn on", _lightingManager->isMainLightOn());
 
-		RenderItem* selectedObject = _objectManagers[_selectedType]->object(_selectedObject);
+		ImGui::Text("Direction");
+		ImGui::SameLine();
+		ImGui::PushID((*btnId)++);
+		ImGui::InputFloat3("", _lightingManager->mainLightDirection());
+		ImGui::PopID();
 
-		ImGui::Begin((selectedObject->Name + " Info").c_str());
-		if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen))
-		{
-			ImGui::Text("Location: ");
-			ImGui::SameLine();
+		ImVec4 color;
 
-			ImGui::PushID(buttonId++);
-			if (ImGui::InputFloat3("", selectedObject->transform[0]))
-			{
-				selectedObject->NumFramesDirty = gNumFrameResources;
-			}
-			ImGui::PopID();
-
-			ImGui::Text("Rotation: ");
-			ImGui::SameLine();
-			ImGui::PushID(buttonId++);
-			if (ImGui::InputFloat3("", selectedObject->transform[1]))
-			{
-				selectedObject->NumFramesDirty = gNumFrameResources;
-			}
-			ImGui::PopID();
-
-			ImGui::Text("Scale:");
-			ImGui::SameLine();
-			ImGui::PushID(buttonId++);
-			ImGui::Checkbox("", &selectedObject->lockedScale);
-			ImGui::SameLine();
-			ImGui::PopID();
-
-			float before[3] = { selectedObject->transform[2][0], 
-				selectedObject->transform[2][1], 
-				selectedObject->transform[2][2] };
-
-			ImGui::PushID(buttonId++);
-			if (ImGui::InputFloat3("", selectedObject->transform[2]))
-			{
-				if (selectedObject->lockedScale)
-				{
-					float difference = 1.f;
-
-					for (int i = 0; i < 3; i++)
-					{
-
-						difference *= selectedObject->transform[2][i] / before[i];
-					}
-
-					for (int i = 0; i < 3; i++)
-					{
-						selectedObject->transform[2][i] = before[i] * difference;
-					}
-				}
-				selectedObject->NumFramesDirty = gNumFrameResources;
-			}
-			ImGui::PopID();
-
-		}
-
-		//textures
-		if (ImGui::CollapsingHeader("Textures", ImGuiTreeNodeFlags_DefaultOpen))
-		{
-			//diffuse button
-			ImGui::Text("Diffuse");
-			ImGui::SameLine();
-			ImGui::PushID(buttonId++);
-			std::string name = BasicUtil::trimName(selectedObject->diffuseHandle.name, 15);
-			if (ImGui::Button(name.c_str()))
-			{
-				WCHAR* texturePath;
-				if (BasicUtil::TryToOpenFile(L"DDS Textures", L"*.dds", texturePath))
-				{
-					selectedObject->diffuseHandle 
-						= TextureManager::LoadTexture(texturePath, selectedObject->diffuseHandle.index);
-					CoTaskMemFree(texturePath);
-				}
-			}
-			ImGui::PopID();
-			ImGui::SameLine();
-			ImGui::PushID(buttonId++);
-			if (ImGui::Button("delete") && name != "load")
-			{
-				const std::string diffName = selectedObject->diffuseHandle.name;
-				TextureManager::deleteTexture(std::wstring(diffName.begin(), diffName.end()));
-				selectedObject->diffuseHandle = TextureHandle();
-			}
-			ImGui::PopID();
-
-			//normal map 
-			ImGui::Text("Normal");
-			ImGui::SameLine();
-			ImGui::PushID(buttonId++);
-			name = BasicUtil::trimName(selectedObject->normalHandle.name, 15);
-			if (ImGui::Button(name.c_str()))
-			{
-				WCHAR* texturePath;
-				if (BasicUtil::TryToOpenFile(L"DDS Textures", L"*.dds", texturePath))
-				{
-					selectedObject->normalHandle
-						= TextureManager::LoadTexture(texturePath, selectedObject->normalHandle.index);
-					CoTaskMemFree(texturePath);
-					selectedObject->NumFramesDirty = gNumFrameResources;
-				}
-			}
-			ImGui::PopID();
-			ImGui::SameLine();
-			ImGui::PushID(buttonId++);
-			if (ImGui::Button("delete") && selectedObject->normalHandle.isRelevant == true)
-			{
-				const std::string normalName = selectedObject->normalHandle.name;
-				TextureManager::deleteTexture(std::wstring(normalName.begin(), normalName.end()));
-				selectedObject->normalHandle = TextureHandle();
-				selectedObject->NumFramesDirty = gNumFrameResources;
-			}
-			ImGui::PopID();
-		}
-
-
-		ImGui::End();
+		ImGui::Text("ColorEdit");
+		ImGui::SameLine();
+		ImGui::PushID((*btnId)++);
+		ImGui::ColorEdit3("", _lightingManager->mainLightColor());
+		ImGui::PopID();
 	}
+}
+
+void MyApp::DrawObjectInfo(int* btnId)
+{
+
+	ImGui::SetNextWindowPos({ static_cast<float>(mClientWidth) - 300.f, 50.f }, ImGuiCond_Once, { 0.f, 0.f });
+	ImGui::SetNextWindowSize({ 250.f, 350.f }, ImGuiCond_Once);
+
+	RenderItem* selectedObject = _objectManagers[_selectedType]->object(_selectedObject);
+
+	ImGui::Begin((selectedObject->Name + " Info").c_str());
+	if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen))
+	{
+		DrawObjectTransform(selectedObject, btnId);
+	}
+
+	//textures
+	if (ImGui::CollapsingHeader("Textures", ImGuiTreeNodeFlags_DefaultOpen))
+	{
+		DrawObjectTextures(selectedObject, btnId);
+	}
+
+	ImGui::End();
+}
+
+void MyApp::DrawObjectTransform(RenderItem* selectedObject, int* btnId)
+{
+	DrawTransformInput("Location: ", (*btnId)++, 0, selectedObject);
+	DrawTransformInput("Rotation: ", (*btnId)++, 1, selectedObject);
+
+	ImGui::Text("Scale:");
+	ImGui::SameLine();
+	ImGui::PushID((*btnId)++);
+	ImGui::Checkbox("", &selectedObject->lockedScale);
+	ImGui::SameLine();
+	ImGui::PopID();
+
+	float before[3] = { selectedObject->transform[2][0],
+		selectedObject->transform[2][1],
+		selectedObject->transform[2][2] };
+
+	ImGui::PushID((*btnId)++);
+	if (ImGui::InputFloat3("", selectedObject->transform[2]))
+	{
+		if (selectedObject->lockedScale)
+		{
+			float difference = 1.f;
+
+			for (int i = 0; i < 3; i++)
+			{
+
+				difference *= selectedObject->transform[2][i] / before[i];
+			}
+
+			for (int i = 0; i < 3; i++)
+			{
+				selectedObject->transform[2][i] = before[i] * difference;
+			}
+		}
+		selectedObject->NumFramesDirty = gNumFrameResources;
+	}
+	ImGui::PopID();
+}
+
+void MyApp::DrawObjectTextures(RenderItem* selectedObject, int* btnId)
+{
+	//diffuse button
+	DrawTextureButton("Diffuse", btnId, selectedObject->diffuseHandle);
+	if (DrawTextureButton("Normal", btnId, selectedObject->normalHandle))
+	{
+		selectedObject->NumFramesDirty = gNumFrameResources;
+	}
+}
+
+bool MyApp::DrawTextureButton(const std::string& label, int* btnId, TextureHandle& texHandle)
+{
+	ImGui::Text(label.c_str());
+	ImGui::SameLine();
+	ImGui::PushID((*btnId)++);
+	std::string name = BasicUtil::trimName(texHandle.name, 15);
+	if (ImGui::Button(name.c_str()))
+	{
+		WCHAR* texturePath;
+		if (BasicUtil::TryToOpenFile(L"DDS Textures", L"*.dds", texturePath))
+		{
+			texHandle
+				= TextureManager::LoadTexture(texturePath, texHandle.index);
+			CoTaskMemFree(texturePath);
+			ImGui::PopID();
+			return true;
+		}
+	}
+	ImGui::PopID();
+	ImGui::SameLine();
+	ImGui::PushID((*btnId)++);
+	if (ImGui::Button("delete") && texHandle.isRelevant == true)
+	{
+		const std::string texName = texHandle.name;
+		TextureManager::deleteTexture(std::wstring(texName.begin(), texName.end()));
+		texHandle = TextureHandle();
+		ImGui::PopID();
+		return true;
+	}
+	ImGui::PopID();
+	return false;
+}
+
+void MyApp::DrawTransformInput(const std::string& label, int btnId, int transformIndex, RenderItem* object)
+{
+	ImGui::Text(label.c_str());
+	ImGui::SameLine();
+
+	ImGui::PushID(btnId);
+	if (ImGui::InputFloat3("", object->transform[transformIndex]))
+	{
+		object->NumFramesDirty = gNumFrameResources;
+	}
+	ImGui::PopID();
 }
 
 void MyApp::ClearData()
@@ -586,6 +573,9 @@ void MyApp::InitManagers()
 	_objectManagers[PSO::Opaque]->Init();
 	_objectManagers[PSO::Unlit] = std::make_unique<UnlitObjectManager>();
 	_objectManagers[PSO::Unlit]->Init();
+	
+	_lightingManager = std::make_unique<LightingManager>();
+	_lightingManager->Init(_gBuffer->InfoCount(false));
 }
 
 void MyApp::GBufferPass()
@@ -616,17 +606,7 @@ void MyApp::LightingPass()
 	ID3D12DescriptorHeap* descriptorHeaps[] = { _gBuffer->SRVHeap() };
 	mCommandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
 
-	mCommandList->SetGraphicsRootSignature(_lightingRootSignature.Get());
-
-	mCommandList->SetPipelineState(_lightingPSO.Get());
-	mCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-	
-	mCommandList->SetGraphicsRootDescriptorTable(0, _gBuffer->SRVHeap()->GetGPUDescriptorHandleForHeapStart());
-
-	auto lightingPassCB = mCurrFrameResource->LightingPassCB->Resource();
-	mCommandList->SetGraphicsRootConstantBufferView(1, lightingPassCB->GetGPUVirtualAddress());
-
-	mCommandList->DrawInstanced(3, 1, 0, 0);
+	_lightingManager->Draw(mCommandList.Get(), mCurrFrameResource, _gBuffer->SRVHeap()->GetGPUDescriptorHandleForHeapStart());
 }
 
 //some wndproc stuff

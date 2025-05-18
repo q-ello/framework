@@ -14,6 +14,7 @@
 #include "ObjectManager.h"
 #include "TextureManager.h"
 #include "GeometryManager.h"
+#include "LightingManager.h"
 
 #define DELETE_ID 333
 
@@ -59,28 +60,33 @@ private:
 	void BuildShadersAndInputLayout();
 	void BuildPSOs();
 	void BuildFrameResources();
-	void DrawInterface();
 	void ClearData();
+
+	//imgui staff
+	void DrawInterface();
+	void DrawObjectsList(int* btnId);
+	void DrawLightData(int* btnId);
+	void DrawObjectInfo(int* btnId);
+	void DrawObjectTransform(RenderItem* selectedObject, int* btnId);
+	void DrawObjectTextures(RenderItem* selectedObject, int* btnId);
+	bool DrawTextureButton(const std::string& label, int* btnId, TextureHandle& texHandle);
+	void DrawTransformInput(const std::string& label, int btnId, int transformIndex, RenderItem* object);
 
 	void InitManagers();
 
 	//drawing
 	void GBufferPass();
 	void LightingPass();
-private:
+
 	FrameResource* mCurrFrameResource = nullptr;
 	int mCurrFrameResourceIndex = 0;
-
-	ComPtr<ID3D12RootSignature> _gBufferRootSignature = nullptr;
-	ComPtr<ID3D12RootSignature> _lightingRootSignature = nullptr;
 
 	ComPtr<ID3D12DescriptorHeap> _imGuiDescriptorHeap = nullptr;
 
 	std::unordered_map<std::string, ComPtr<ID3DBlob>> mShaders;
 
 	std::unordered_map<PSO, std::unique_ptr<ObjectManager>> _objectManagers;
-
-	ComPtr<ID3D12PipelineState> _lightingPSO;
+	std::unique_ptr<LightingManager> _lightingManager = nullptr;
 
 	GBufferPassConstants _GBufferCB;
 	LightingPassConstants _lightingCB;
@@ -89,8 +95,6 @@ private:
 	XMFLOAT3 _targetPos = { 0.0f, 0.0f, 0.0f };
 	XMFLOAT4X4 mView = MathHelper::Identity4x4();
 	XMFLOAT4X4 mProj = MathHelper::Identity4x4();
-	//light
-	XMFLOAT3 _mainLightDirection = { 0.577f, -0.577f, 0.577f };
 
 	float mTheta = .5f * XM_PI;
 	float mPhi = .5f * XM_PI;

@@ -6,17 +6,18 @@ Texture2D gDepth : register(t2);
 
 cbuffer cbLightingPass : register(b0)
 {
-    float3 gLightPosW; // Light world position
-    float gLightRange; // Light range
-    float3 gLightColor; // Light color (RGB)
-    float gPad0;
-    
     float4x4 gInvViewProj;
-    
     float2 gRTSize;
     float3 gEyePosW;
     float gPad1;
 };
+
+cbuffer cbDirLight : register(b1)
+{
+    float3 mainLightDirection;
+    int mainLightIsOn;
+    float3 mainLightColor;
+}
 
 struct VertexOut
 {
@@ -52,37 +53,18 @@ float3 ComputeWorldPos(float2 texcoord)
 
 float4 LightingPS(VertexOut pin) : SV_Target
 {
-    float4 albedo = gDiffuse.Load(int3(pin.TexC * gRTSize, 0));
+    if (!mainLightIsOn)
+    {
+        return float4(0, 0, 0, 1);
+    }
     
-    if (albedo.a <= 0.01f)
-        discard;
+    float4 albedo = gDiffuse.Load(int3(pin.TexC * gRTSize, 0));
     
     float3 normal = gNormal.Load(int3(pin.TexC * gRTSize, 0)).xyz;
     
     float3 posW = ComputeWorldPos(pin.TexC);
     
-    float3 lightVec = gLightPosW - posW;
-    float dist = length(lightVec);
-    lightVec /= dist;
-    
-    float atten = saturate(1.f - dist / gLightRange);
-    
-    float diff = saturate(dot(normal, lightVec));
-    
-    float3 finalColor = albedo.rgb * gLightColor * diff * atten;
-    
-    uint tileIndex = ComputeTileIndex(screenCoord);
-    uint offset = gTileLightOffsets[tileIndex];
-    uint count = gTileLightCounts[tileIndex];
-
-    for (uint i = 0; i < count; ++i)
-    {
-        uint lightIndex = gLightIndexList[offset + i];
-        Light light = gLights[lightIndex];
-    // Apply lighting
-    }
-
-    
+    float3 finalColor = albedo.rgb * mainLightColor * dot(normal, -mainLightDirection);
     
     return float4(finalColor, albedo.a);
 }
