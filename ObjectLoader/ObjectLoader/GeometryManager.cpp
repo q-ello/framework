@@ -6,32 +6,46 @@ std::unordered_map<std::wstring, std::unique_ptr<MeshGeometry>>& GeometryManager
 	return geometries;
 }
 
-void GeometryManager::BuildGridGeometry()
+void GeometryManager::BuildNecessaryGeometry()
 {
 	UploadManager::Reset();
 	GeometryGenerator geoGen;
 	GeometryGenerator::MeshData grid = geoGen.CreateGrid(20.f, 20.f, 0.1f);
+	GeometryGenerator::MeshData box = geoGen.CreateBox(1.0f, 1.0f, 1.0f, 0);
 
 	SubmeshGeometry gridSubmesh;
 	gridSubmesh.IndexCount = (UINT)grid.Indices32.size();
 	gridSubmesh.StartIndexLocation = 0;
 	gridSubmesh.BaseVertexLocation = 0;
 
-	std::vector<LightVertex> vertices(grid.Vertices.size());
+	SubmeshGeometry boxSubmesh;
+	boxSubmesh.IndexCount = (UINT)box.Indices32.size();
+	boxSubmesh.StartIndexLocation = gridSubmesh.IndexCount;
+	boxSubmesh.BaseVertexLocation = grid.Vertices.size();
 
-	for (size_t i = 0; i < grid.Vertices.size(); ++i)
+	const size_t gridVerticesCount = grid.Vertices.size();
+
+	std::vector<LightVertex> vertices(gridVerticesCount + box.Vertices.size());
+
+	for (size_t i = 0; i < gridVerticesCount; ++i)
 	{
 		vertices[i].Pos = grid.Vertices[i].Position;
 		vertices[i].Color = grid.Vertices[i].Color;
 	}
 
+	for (size_t i = 0; i < box.Vertices.size(); ++i)
+	{
+		vertices[gridVerticesCount + i].Pos = box.Vertices[i].Position;
+	}
+
 	std::vector<std::uint16_t> indices = grid.GetIndices16();
+	indices.insert(indices.end(), box.GetIndices16().begin(), box.GetIndices16().end());
 
 	const UINT vbByteSize = (UINT)vertices.size() * sizeof(LightVertex);
 	const UINT ibByteSize = (UINT)indices.size() * sizeof(std::uint16_t);
 
 	auto geo = std::make_unique<MeshGeometry>();
-	geo->Name = L"grid";
+	geo->Name = L"shapeGeo";
 
 	ThrowIfFailed(D3DCreateBlob(vbByteSize, &geo->VertexBufferCPU));
 	CopyMemory(geo->VertexBufferCPU->GetBufferPointer(), vertices.data(), vbByteSize);
@@ -51,6 +65,7 @@ void GeometryManager::BuildGridGeometry()
 	geo->IndexBufferByteSize = ibByteSize;
 
 	geo->DrawArgs[L"grid"] = gridSubmesh;
+	geo->DrawArgs[L"box"] = boxSubmesh;
 
 	geometries()[geo->Name] = std::move(geo);
 }

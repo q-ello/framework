@@ -71,6 +71,18 @@ float4 LightingPS(VertexOut pin) : SV_Target
     
     float3 finalColor = albedo.rgb * gLightColor * diff * atten;
     
+    uint tileIndex = ComputeTileIndex(screenCoord);
+    uint offset = gTileLightOffsets[tileIndex];
+    uint count = gTileLightCounts[tileIndex];
+
+    for (uint i = 0; i < count; ++i)
+    {
+        uint lightIndex = gLightIndexList[offset + i];
+        Light light = gLights[lightIndex];
+    // Apply lighting
+    }
+
+    
     
     return float4(finalColor, albedo.a);
 }

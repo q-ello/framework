@@ -147,6 +147,7 @@
     <ClInclude Include="BasicUtil.h" />
     <ClInclude Include="Controls.h" />
     <ClInclude Include="GeometryManager.h" />
+    <ClInclude Include="LightingManager.h" />
     <ClInclude Include="UploadManager.h" />
     <ClInclude Include="FrameResource.h" />
     <ClInclude Include="DescriptorHeapAllocator.h" />
@@ -185,6 +186,7 @@
     <ClCompile Include="imgui\imgui_widgets.cpp" />
     <ClCompile Include="imgui\misc\cpp\imgui_stdlib.cpp" />
     <ClCompile Include="imgui\misc\fonts\binary_to_compressed_c.cpp" />
+    <ClCompile Include="LightingManager.cpp" />
     <ClCompile Include="Model.cpp" />
     <ClCompile Include="MyApp.cpp" />
     <ClCompile Include="ObjectLoader.cpp" />

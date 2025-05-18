@@ -41,7 +41,7 @@ bool MyApp::Initialize()
 	BuildRootSignatures();
 	BuildDescriptorHeaps();
 	BuildShadersAndInputLayout();
-	GeometryManager::BuildGridGeometry();
+	GeometryManager::BuildNecessaryGeometry();
 	_selectedType = PSO::Opaque;
 	_selectedObject = _objectManagers[PSO::Opaque]->addRenderItem(md3dDevice.Get(), GeometryManager::BuildModelGeometry());
 	_objectManagers[PSO::Unlit]->addRenderItem(md3dDevice.Get(), L"grid");
@@ -152,6 +152,7 @@ void MyApp::Draw(const GameTimer& gt)
 	mCommandList->OMSetRenderTargets(1, &CurrentBackBufferView(), true, &_gBuffer->DepthStencilView());
 	_objectManagers[PSO::Unlit]->Draw(mCommandList.Get(), mCurrFrameResource);
 
+	//ImGui draw
 	ID3D12DescriptorHeap* descriptorHeaps[] = {_imGuiDescriptorHeap.Get()};
 	mCommandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
 

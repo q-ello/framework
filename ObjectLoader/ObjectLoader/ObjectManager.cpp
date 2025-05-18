@@ -293,7 +293,7 @@ int UnlitObjectManager::addRenderItem(ID3D12Device* device, const std::wstring& 
 
 	renderItem->Name = name;
 	renderItem->nameCount = _objectCounters[itemName]++;
-	renderItem->Geo = GeometryManager::geometries()[itemName].get();
+	renderItem->Geo = GeometryManager::geometries()[L"shapeGeo"].get();
 	renderItem->PrimitiveType = D3D11_PRIMITIVE_TOPOLOGY_LINELIST;
 	renderItem->IndexCount = renderItem->Geo->DrawArgs[itemName].IndexCount;
 

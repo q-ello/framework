@@ -13,7 +13,7 @@ class GeometryManager
 public:
 	static std::unordered_map<std::wstring, std::unique_ptr<MeshGeometry>>& geometries();
 
-	static void BuildGridGeometry();
+	static void BuildNecessaryGeometry();
 	static std::wstring GeometryManager::BuildModelGeometry(WCHAR* filename = L"obj\\african_head.obj");
 	static void UnloadModel(const std::wstring& modelName);
 };
