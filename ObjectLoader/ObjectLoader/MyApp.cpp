@@ -92,10 +92,6 @@ void MyApp::OnResize()
 {
 	//resizing the render window
 	D3DApp::OnResize();
-	if (_lightingManager)
-	{
-		_lightingManager->OnResize(md3dDevice.Get(), _gBuffer->lightingHandle());
-	}
 
 	// The window resized, so update the aspect ratio and recompute the projection matrix.
 	XMMATRIX P = XMMatrixPerspectiveFovLH(0.25f * MathHelper::Pi, AspectRatio(), 1.0f, 1000.0f);
@@ -123,6 +119,7 @@ void MyApp::Update(const GameTimer& gt)
 
 	UpdateObjectCBs(gt);
 	UpdateMainPassCBs(gt);
+	_lightingManager->UpdateLightCBs(mCurrFrameResource);
 }
 
 void MyApp::Draw(const GameTimer& gt)
@@ -287,6 +284,7 @@ void MyApp::UpdateMainPassCBs(const GameTimer& gt)
 	XMStoreFloat4x4(&_lightingCB.InvViewProj, XMMatrixTranspose(invViewProj));
 	_lightingCB.EyePosW = mEyePos;
 	_lightingCB.RenderTargetSize = XMFLOAT2((float)mClientWidth, (float)mClientHeight);
+	XMStoreFloat4x4(&_lightingCB.ViewProj, XMMatrixTranspose(viewProj));
 
 	auto currLightingCB = mCurrFrameResource->LightingPassCB.get();
 	currLightingCB->CopyData(0, _lightingCB);
@@ -312,8 +310,6 @@ void MyApp::BuildDescriptorHeaps()
 
 void MyApp::BuildShadersAndInputLayout()
 {
-	mShaders["LightingVS"] = d3dUtil::CompileShader(L"Shaders\\Lighting.hlsl", nullptr, "LightingVS", "vs_5_1");
-	mShaders["LightingPS"] = d3dUtil::CompileShader(L"Shaders\\Lighting.hlsl", nullptr, "LightingPS", "ps_5_1");
 }
 
 void MyApp::BuildPSOs()
@@ -456,8 +452,19 @@ void MyApp::DrawLightData(int* btnId)
 
 void MyApp::DrawLocalLightData(int* btnId, int lightIndex)
 {
-	if (ImGui::Button("Light " + lightIndex))
+	if (ImGui::CollapsingHeader(("Light " + std::to_string(lightIndex)).c_str()))
 	{
+		if (ImGui::BeginPopupContextItem())
+		{
+			ImGui::PushID((*btnId)++);
+			if (ImGui::Button("delete"))
+			{
+				_lightingManager->deleteLight(lightIndex);
+			}
+			ImGui::PopID();
+			ImGui::EndPopup();
+			return;
+		}
 		auto light = _lightingManager->light(lightIndex);
 
 		if (ImGui::RadioButton("Point Light", light->LightData.type == 0) && light->LightData.type != 0)
@@ -658,7 +665,7 @@ void MyApp::InitManagers()
 	_objectManagers[PSO::Unlit]->Init();
 	
 	_lightingManager = std::make_unique<LightingManager>();
-	_lightingManager->Init(_gBuffer->InfoCount(false), md3dDevice.Get());
+	_lightingManager->Init(_gBuffer->InfoCount(false), md3dDevice.Get(), _gBuffer->lightingHandle());
 }
 
 void MyApp::GBufferPass()

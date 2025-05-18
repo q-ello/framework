@@ -21,6 +21,7 @@ StructuredBuffer<Light> lights : register(t3);
 cbuffer cbLightingPass : register(b0)
 {
     float4x4 gInvViewProj;
+    float4x4 gViewProj;
     float2 gRTSize;
     float3 gEyePosW;
     float gPad1;
@@ -33,13 +34,19 @@ cbuffer cbDirLight : register(b1)
     float3 mainLightColor;
 }
 
+struct VertexIn
+{
+    float3 PosL : POSITION;
+};
+
 struct VertexOut
 {
     float4 PosH : SV_POSITION;
     float2 TexC : TEXCOORD;
+    int InstanceId : SV_InstanceID;
 };
 
-VertexOut LightingVS(uint id : SV_VertexID)
+VertexOut DirLightingVS(uint id : SV_VertexID)
 {
     VertexOut vout;
 	
@@ -49,6 +56,7 @@ VertexOut LightingVS(uint id : SV_VertexID)
     
     vout.PosH = float4(positions[id], 0, 1);
     vout.TexC = texcoords[id];
+    vout.InstanceId = 0;
     
     return vout;
 }
@@ -65,7 +73,7 @@ float3 ComputeWorldPos(float2 texcoord)
     return viewPos.xyz;
 }
 
-float4 LightingPS(VertexOut pin) : SV_Target
+float4 DirLightingPS(VertexOut pin) : SV_Target
 {
     if (!mainLightIsOn)
     {
@@ -79,6 +87,57 @@ float4 LightingPS(VertexOut pin) : SV_Target
     float3 posW = ComputeWorldPos(pin.TexC);
     
     float3 finalColor = albedo.rgb * mainLightColor * dot(normal, -mainLightDirection);
+    
+    return float4(finalColor, albedo.a);
+}
+
+
+VertexOut LocalLightingVS(VertexIn vin, uint id : SV_InstanceID)
+{
+    VertexOut vout;
+    
+    float4 posW = mul(float4(vin.PosL, 1), lights[id].world);
+    vout.PosH = mul(posW, gViewProj);
+    vout.TexC = (vout.PosH / vout.PosH.w).xy * .5f + .5f;
+    vout.InstanceId = id;
+    
+    return vout;
+}
+
+float4 LocalLightingPS(VertexOut pin) : SV_Target
+{
+    Light light = lights[pin.InstanceId];
+    if (!light.active)
+    {
+        discard;
+    }
+    
+    float4 albedo = gDiffuse.Load(int3(pin.TexC * gRTSize, 0));
+    
+    float3 normal = gNormal.Load(int3(pin.TexC * gRTSize, 0)).xyz;
+    
+    float3 posW = ComputeWorldPos(pin.TexC);
+    
+    if (length(light.position - posW) > light.radius)
+    {
+        discard;
+    }
+    
+    float3 lightDir = normalize(posW - light.position);
+    
+    if (light.type == 1)
+    {
+        float angle = dot(lightDir, normalize(light.direction));
+        if (angle < cos(light.angle))
+        {
+            discard;
+        }
+    }
+    
+    float diff = saturate(dot(normal, lightDir));
+    float attenuation = saturate(1.0f - length(lightDir) / light.radius);
+    
+    float3 finalColor = albedo.rgb * light.color * diff * attenuation * light.intensity;
     
     return float4(finalColor, albedo.a);
 }

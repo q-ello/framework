@@ -26,7 +26,8 @@ struct GBufferPassConstants
 
 struct LightingPassConstants
 {
-    DirectX::XMFLOAT4X4 InvViewProj;
+    DirectX::XMFLOAT4X4 InvViewProj = MathHelper::Identity4x4();
+    DirectX::XMFLOAT4X4 ViewProj = MathHelper::Identity4x4();
     DirectX::XMFLOAT2 RenderTargetSize = { 0.0f, 0.0f };
     DirectX::XMFLOAT3 EyePosW = { 0.0f, 0.0f, 0.0f };
 };
@@ -47,7 +48,7 @@ struct Light
     float radius = 1.f;
     DirectX::XMFLOAT3 direction = { 0.0f, 0.0f, 0.0f };
     float angle = 10.f;
-    DirectX::XMFLOAT3 color = { 0.0f, 0.0f, 0.0f };
+    DirectX::XMFLOAT3 color = { 1.0f, 1.0f, 1.0f };
     float intensity = 10;
     bool active = 1;
     bool pad1 = false;

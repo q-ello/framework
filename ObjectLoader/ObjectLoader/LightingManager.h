@@ -2,6 +2,7 @@
 #include "../../Common/d3dUtil.h"
 #include "FrameResource.h"
 #include "UploadManager.h"
+#include "GeometryManager.h"
 
 struct LightRenderItem
 {
@@ -28,9 +29,7 @@ public:
 	LightRenderItem* light(int i);
 
 	void Draw(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, D3D12_GPU_DESCRIPTOR_HANDLE descTable);
-	void Init(int srvAmount, ID3D12Device* device);
-	void OnResize(ID3D12Device* device, D3D12_CPU_DESCRIPTOR_HANDLE srvHandle);
-
+	void Init(int srvAmount, ID3D12Device* device, D3D12_CPU_DESCRIPTOR_HANDLE srvHandle);
 
 	bool* isMainLightOn()
 	{
@@ -57,8 +56,6 @@ private:
 	std::vector<int> FreeLightIndices;
 	int NextAvailableIndex = 0;
 	const int MaxLights = 512;
-
-	std::uint32_t uidCount;
 
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> _rootSignature;
 

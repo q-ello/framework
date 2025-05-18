@@ -118,14 +118,27 @@ void LightingManager::Draw(ID3D12GraphicsCommandList* cmdList, FrameResource* cu
 	auto dirLightCB = currFrameResource->DirLightCB->Resource();
 	cmdList->SetGraphicsRootConstantBufferView(2, dirLightCB->GetGPUVirtualAddress());
 
+	//draw directional light
 	cmdList->DrawInstanced( 3, 1, 0, 0);
+
+	//draw local lights
+	auto geo = GeometryManager::geometries()[L"shapeGeo"].get();
+
+	cmdList->IASetVertexBuffers(0, 1, &geo->VertexBufferView());
+	cmdList->IASetIndexBuffer(&geo->IndexBufferView());
+
+	cmdList->SetPipelineState(_localLightsPSO.Get());
+
+	SubmeshGeometry mesh = geo->DrawArgs[L"box"];
+	cmdList->DrawIndexedInstanced(mesh.IndexCount, _localLights.size(), mesh.StartIndexLocation,
+		mesh.BaseVertexLocation, 0);
 }
 
-void LightingManager::Init(int srvAmount, ID3D12Device* device)
+void LightingManager::Init(int srvAmount, ID3D12Device* device, D3D12_CPU_DESCRIPTOR_HANDLE srvHandle)
 {
 	// Create buffer on GPU
 	CD3DX12_HEAP_PROPERTIES defaultHeap(D3D12_HEAP_TYPE_DEFAULT);
-	CD3DX12_RESOURCE_DESC bufferDesc = CD3DX12_RESOURCE_DESC::Buffer(sizeof(Light) * _localLights.size());
+	CD3DX12_RESOURCE_DESC bufferDesc = CD3DX12_RESOURCE_DESC::Buffer(sizeof(Light) * MaxLights);
 
 	device->CreateCommittedResource(
 		&defaultHeap,
@@ -139,6 +152,17 @@ void LightingManager::Init(int srvAmount, ID3D12Device* device)
 	BuildShaders();
 	BuildInputLayout();
 	BuildPSO();
+
+	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+	srvDesc.Format = DXGI_FORMAT_UNKNOWN;
+	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	srvDesc.Buffer.FirstElement = 0;
+	srvDesc.Buffer.NumElements = MaxLights;
+	srvDesc.Buffer.StructureByteStride = sizeof(Light);
+	srvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
+
+	device->CreateShaderResourceView(_lightBufferGPU.Get(), &srvDesc, srvHandle);
 }
 
 void LightingManager::BuildInputLayout()
@@ -162,7 +186,7 @@ void LightingManager::BuildRootSignature(int srvAmount)
 	lightingSlotRootParameter[1].InitAsConstantBufferView(0);
 	lightingSlotRootParameter[2].InitAsConstantBufferView(1);
 
-	CD3DX12_ROOT_SIGNATURE_DESC lightingRootSigDesc(3, lightingSlotRootParameter);
+	CD3DX12_ROOT_SIGNATURE_DESC lightingRootSigDesc(3, lightingSlotRootParameter, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 
 	ComPtr<ID3DBlob> serializedRootSig = nullptr;
 	ComPtr<ID3DBlob> errorBlob = nullptr;
@@ -184,13 +208,15 @@ void LightingManager::BuildRootSignature(int srvAmount)
 
 void LightingManager::BuildShaders()
 {
-	_dirLightVSShader = d3dUtil::CompileShader(L"Shaders\\Lighting.hlsl", nullptr, "LightingVS", "vs_5_1");
-	_dirLightPSShader = d3dUtil::CompileShader(L"Shaders\\Lighting.hlsl", nullptr, "LightingPS", "ps_5_1");
+	_dirLightVSShader = d3dUtil::CompileShader(L"Shaders\\Lighting.hlsl", nullptr, "DirLightingVS", "vs_5_1");
+	_dirLightPSShader = d3dUtil::CompileShader(L"Shaders\\Lighting.hlsl", nullptr, "DirLightingPS", "ps_5_1");
+	_localLightsVSShader = d3dUtil::CompileShader(L"Shaders\\Lighting.hlsl", nullptr, "LocalLightingVS", "vs_5_1");
+	_localLightsPSShader = d3dUtil::CompileShader(L"Shaders\\Lighting.hlsl", nullptr, "LocalLightingPS", "ps_5_1");
 }
 
 void LightingManager::BuildPSO()
 {
-	//lighting pso
+	//directional light pso
 	D3D12_GRAPHICS_PIPELINE_STATE_DESC lightingPSODesc;
 
 	ZeroMemory(&lightingPSODesc, sizeof(D3D12_GRAPHICS_PIPELINE_STATE_DESC));
@@ -218,18 +244,26 @@ void LightingManager::BuildPSO()
 	lightingPSODesc.SampleDesc.Quality = 0;
 	lightingPSODesc.DSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
 	ThrowIfFailed(UploadManager::device ->CreateGraphicsPipelineState(&lightingPSODesc, IID_PPV_ARGS(&_dirLightPSO)));
-}
 
-void LightingManager::OnResize(ID3D12Device* device, D3D12_CPU_DESCRIPTOR_HANDLE srvHandle)
-{
-	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
-	srvDesc.Format = DXGI_FORMAT_UNKNOWN;
-	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-	srvDesc.Buffer.FirstElement = 0;
-	srvDesc.Buffer.NumElements = 1024;
-	srvDesc.Buffer.StructureByteStride = sizeof(Light);
-	srvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
+	//local lights pso
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC localLightsPSODesc = lightingPSODesc;
+	localLightsPSODesc.InputLayout = { _localLightsInputLayout.data(), (UINT)_localLightsInputLayout.size() };
 
-	device->CreateShaderResourceView(_lightBufferGPU.Get(), &srvDesc, srvHandle);
+	localLightsPSODesc.VS =
+	{
+		reinterpret_cast<BYTE*>(_localLightsVSShader->GetBufferPointer()),
+		_localLightsVSShader->GetBufferSize()
+	};
+	localLightsPSODesc.PS =
+	{
+		reinterpret_cast<BYTE*>(_localLightsPSShader->GetBufferPointer()),
+		_localLightsPSShader->GetBufferSize()
+	};
+
+	localLightsPSODesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+	localLightsPSODesc.BlendState.RenderTarget[0].BlendEnable = TRUE;
+	localLightsPSODesc.BlendState.RenderTarget[0].SrcBlend = D3D12_BLEND_ONE;
+	localLightsPSODesc.BlendState.RenderTarget[0].DestBlend = D3D12_BLEND_ONE;
+	localLightsPSODesc.BlendState.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
+	ThrowIfFailed(UploadManager::device->CreateGraphicsPipelineState(&localLightsPSODesc, IID_PPV_ARGS(&_localLightsPSO)));
 }
