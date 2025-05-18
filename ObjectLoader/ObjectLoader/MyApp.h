@@ -66,6 +66,7 @@ private:
 	void DrawInterface();
 	void DrawObjectsList(int* btnId);
 	void DrawLightData(int* btnId);
+	void DrawLocalLightData(int* btnId, int lightIndex);
 	void DrawObjectInfo(int* btnId);
 	void DrawObjectTransform(RenderItem* selectedObject, int* btnId);
 	void DrawObjectTextures(RenderItem* selectedObject, int* btnId);

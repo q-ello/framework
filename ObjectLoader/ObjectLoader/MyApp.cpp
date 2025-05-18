@@ -393,27 +393,32 @@ void MyApp::DrawObjectsList(int* btnId)
 				_selectedObject = i;
 				_selectedType = PSO::Opaque;
 			}
-			ImGui::SameLine();
 			ImGui::PopID();
-			ImGui::PushID((*btnId)++);
-			if (ImGui::Button("delete"))
+
+			if (ImGui::BeginPopupContextItem())
 			{
-				_selectedObject = i;
-				_selectedType = PSO::Opaque;
-				if (_objectManagers[PSO::Opaque]->deleteObject(_selectedObject))
+				ImGui::PushID((*btnId)++);
+				if (ImGui::Button("delete"))
 				{
-					ClearData();
+					_selectedObject = i;
+					_selectedType = PSO::Opaque;
+					if (_objectManagers[PSO::Opaque]->deleteObject(_selectedObject))
+					{
+						ClearData();
+					}
+					_selectedObject = -1;
 				}
-				_selectedObject = -1;
+				ImGui::PopID();
+				ImGui::EndPopup();
 			}
-			ImGui::PopID();
+			
 		}
 	}
 }
 
 void MyApp::DrawLightData(int* btnId)
 {
-	if (ImGui::CollapsingHeader("DirectionalLight", ImGuiTreeNodeFlags_DefaultOpen))
+	if (ImGui::CollapsingHeader("Directional Light", ImGuiTreeNodeFlags_DefaultOpen))
 	{
 		ImGui::Checkbox("Turn on", _lightingManager->isMainLightOn());
 
@@ -430,6 +435,37 @@ void MyApp::DrawLightData(int* btnId)
 		ImGui::PushID((*btnId)++);
 		ImGui::ColorEdit3("", _lightingManager->mainLightColor());
 		ImGui::PopID();
+	}
+	if (ImGui::CollapsingHeader("Local lights"))
+	{
+		if (ImGui::Button("Add light"))
+		{
+			_lightingManager->addLight(md3dDevice.Get());
+		}
+		
+		for (int i = 0; i < _lightingManager->lightsCount(); i++)
+		{
+			DrawLocalLightData(btnId, i);
+		}
+	}
+}
+
+void MyApp::DrawLocalLightData(int* btnId, int lightIndex)
+{
+	if (ImGui::Button("Light " + lightIndex))
+	{
+		auto light = _lightingManager->light(lightIndex);
+		ImGui::Checkbox("Enabled", &light->active);
+		ImGui::DragFloat3("Position", &light->position.x, 0.1f);
+		ImGui::ColorEdit3("Color", &light->color.x);
+		ImGui::SliderFloat("Intensity", &light->intensity, 0.0f, 10.0f);
+		ImGui::SliderFloat("Radius", &light->radius, 0.1f, 50.0f);
+
+		if (light->type == 1)
+		{
+			ImGui::DragFloat3("Direction", &light->direction.x, 0.1f);
+			ImGui::SliderAngle("Angle", &light->angle, 1.0f, 90.0f);
+		}
 	}
 }
 
@@ -532,17 +568,21 @@ bool MyApp::DrawTextureButton(const std::string& label, int* btnId, TextureHandl
 		}
 	}
 	ImGui::PopID();
-	ImGui::SameLine();
-	ImGui::PushID((*btnId)++);
-	if (ImGui::Button("delete") && texHandle.isRelevant == true)
+	if (ImGui::BeginPopupContextItem())
 	{
-		const std::string texName = texHandle.name;
-		TextureManager::deleteTexture(std::wstring(texName.begin(), texName.end()));
-		texHandle = TextureHandle();
+		ImGui::PushID((*btnId)++);
+		if (ImGui::Button("delete") && texHandle.isRelevant == true)
+		{
+			const std::string texName = texHandle.name;
+			TextureManager::deleteTexture(std::wstring(texName.begin(), texName.end()));
+			texHandle = TextureHandle();
+			ImGui::PopID();
+			ImGui::EndPopup();
+			return true;
+		}
 		ImGui::PopID();
-		return true;
+		ImGui::EndPopup();
 	}
-	ImGui::PopID();
 	return false;
 }
 
