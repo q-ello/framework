@@ -12,11 +12,9 @@ void OpaqueObjectManager::UpdateObjectCBs(FrameResource* currFrameResource)
 		auto& ri = _objects[i];
 		if (ri->NumFramesDirty > 0)
 		{
-			XMMATRIX scale = XMMatrixScaling(ri->transform[2][0], ri->transform[2][1], ri->transform[2][2]);
-			XMMATRIX rotation = XMMatrixRotationRollPitchYaw(ri->transform[1][0] * XM_PI / 180.f,
-				ri->transform[1][1] * XM_PI / 180.f,
-				ri->transform[1][2] * XM_PI / 180.f);
-			XMMATRIX translation = XMMatrixTranslation(ri->transform[0][0], ri->transform[0][1], ri->transform[0][2]);
+			XMMATRIX scale = XMMatrixScalingFromVector(XMLoadFloat3(&ri->transform[2]));
+			XMMATRIX rotation = XMMatrixRotationRollPitchYawFromVector(XMLoadFloat3(&ri->transform[1]) * XM_PI / 180.f);
+			XMMATRIX translation = XMMatrixTranslationFromVector(XMLoadFloat3(&ri->transform[0]));
 
 			XMMATRIX world = scale * rotation * translation;
 			XMStoreFloat4x4(&ri->World, world);
@@ -220,11 +218,9 @@ void UnlitObjectManager::UpdateObjectCBs(FrameResource* currFrameResource)
 		auto& ri = _objects[i];
 		if (ri->NumFramesDirty > 0)
 		{
-			XMMATRIX scale = XMMatrixScaling(ri->transform[2][0], ri->transform[2][1], ri->transform[2][2]);
-			XMMATRIX rotation = XMMatrixRotationRollPitchYaw(ri->transform[1][0] * XM_PI / 180.f,
-				ri->transform[1][1] * XM_PI / 180.f,
-				ri->transform[1][2] * XM_PI / 180.f);
-			XMMATRIX translation = XMMatrixTranslation(ri->transform[0][0], ri->transform[0][1], ri->transform[0][2]);
+			XMMATRIX scale = XMMatrixScalingFromVector(XMLoadFloat3(&ri->transform[2]));
+			XMMATRIX rotation = XMMatrixRotationRollPitchYawFromVector(XMLoadFloat3(&ri->transform[1]) * XM_PI / 180.f);
+			XMMATRIX translation = XMMatrixTranslationFromVector(XMLoadFloat3(&ri->transform[0]));
 
 			XMMATRIX world = scale * rotation * translation;
 			XMStoreFloat4x4(&ri->World, world);

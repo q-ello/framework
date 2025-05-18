@@ -70,7 +70,7 @@ private:
 	void DrawObjectTransform(RenderItem* selectedObject, int* btnId);
 	void DrawObjectTextures(RenderItem* selectedObject, int* btnId);
 	bool DrawTextureButton(const std::string& label, int* btnId, TextureHandle& texHandle);
-	void DrawTransformInput(const std::string& label, int btnId, int transformIndex, RenderItem* object);
+	void DrawTransformInput(const std::string& label, int btnId, int transformIndex, RenderItem* object, float speed);
 
 	void InitManagers();
 

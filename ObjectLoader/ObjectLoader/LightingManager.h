@@ -59,18 +59,18 @@ public:
 
 	float* mainLightDirection()
 	{
-		return _mainLightDirection;
+		return &_mainLightDirection.x;
 	}
 
 	float* mainLightColor()
 	{
-		return _dirLightColor;
+		return &_dirLightColor.x;
 	}
 
 private:
-	float _mainLightDirection[3] = { 1.f, -1.f, 0.f };
+	DirectX::XMFLOAT3 _mainLightDirection = { 1.f, -1.f, 0.f };
 	bool _isMainLightOn = true;
-	float _dirLightColor[3] = { 1.f, 1.f, 1.f };
+	DirectX::XMFLOAT3 _dirLightColor = { 1.f, 1.f, 1.f };
 	DirectionalLightConstants _dirLightCB;
 
 	std::vector<std::unique_ptr<Light>> _localLights;

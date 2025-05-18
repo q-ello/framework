@@ -420,7 +420,7 @@ void MyApp::DrawLightData(int* btnId)
 		ImGui::Text("Direction");
 		ImGui::SameLine();
 		ImGui::PushID((*btnId)++);
-		ImGui::InputFloat3("", _lightingManager->mainLightDirection());
+		ImGui::DragFloat3("", _lightingManager->mainLightDirection(), 0.1f);
 		ImGui::PopID();
 
 		ImVec4 color;
@@ -458,8 +458,8 @@ void MyApp::DrawObjectInfo(int* btnId)
 
 void MyApp::DrawObjectTransform(RenderItem* selectedObject, int* btnId)
 {
-	DrawTransformInput("Location: ", (*btnId)++, 0, selectedObject);
-	DrawTransformInput("Rotation: ", (*btnId)++, 1, selectedObject);
+	DrawTransformInput("Location: ", (*btnId)++, 0, selectedObject, 0.1f);
+	DrawTransformInput("Rotation: ", (*btnId)++, 1, selectedObject, 1.f);
 
 	ImGui::Text("Scale:");
 	ImGui::SameLine();
@@ -468,27 +468,35 @@ void MyApp::DrawObjectTransform(RenderItem* selectedObject, int* btnId)
 	ImGui::SameLine();
 	ImGui::PopID();
 
-	float before[3] = { selectedObject->transform[2][0],
-		selectedObject->transform[2][1],
-		selectedObject->transform[2][2] };
+	DirectX::XMFLOAT3 before = selectedObject->transform[2];
 
 	ImGui::PushID((*btnId)++);
-	if (ImGui::InputFloat3("", selectedObject->transform[2]))
+	if (ImGui::DragFloat3("", &selectedObject->transform[2].x, 0.1f))
 	{
 		if (selectedObject->lockedScale)
 		{
+			DirectX::XMFLOAT3 after = selectedObject->transform[2];
 			float difference = 1.f;
 
-			for (int i = 0; i < 3; i++)
-			{
+			float ratio = 1.0f;
+			int changedAxis = -1;
+			if (after.x != before.x && after.x != 0) { ratio = after.x / before.x; changedAxis = 0; }
+			else if (after.y != before.y && after.y != 0) { ratio = after.y / before.y; changedAxis = 1; }
+			else if (after.z != before.z && after.z != 0) { ratio = after.z / before.z; changedAxis = 2; }
 
-				difference *= selectedObject->transform[2][i] / before[i];
-			}
-
-			for (int i = 0; i < 3; i++)
+			if (changedAxis != -1)
 			{
-				selectedObject->transform[2][i] = before[i] * difference;
+				after.x = before.x * ratio;
+				after.y = before.y * ratio;
+				after.z = before.z * ratio;
 			}
+			else
+			{
+				after.x = before.x;
+				after.y = before.y;
+				after.z = before.z;
+			}
+			selectedObject->transform[2] = after;
 		}
 		selectedObject->NumFramesDirty = gNumFrameResources;
 	}
@@ -538,13 +546,13 @@ bool MyApp::DrawTextureButton(const std::string& label, int* btnId, TextureHandl
 	return false;
 }
 
-void MyApp::DrawTransformInput(const std::string& label, int btnId, int transformIndex, RenderItem* object)
+void MyApp::DrawTransformInput(const std::string& label, int btnId, int transformIndex, RenderItem* object, float speed)
 {
 	ImGui::Text(label.c_str());
 	ImGui::SameLine();
 
 	ImGui::PushID(btnId);
-	if (ImGui::InputFloat3("", object->transform[transformIndex]))
+	if (ImGui::DragFloat3("", &object->transform[transformIndex].x, speed))
 	{
 		object->NumFramesDirty = gNumFrameResources;
 	}

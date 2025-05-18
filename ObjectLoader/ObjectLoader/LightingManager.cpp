@@ -22,9 +22,9 @@ void LightingManager::deleteLight(int deletedLight)
 void LightingManager::UpdateDirectionalLightCB(FrameResource* currFrameResource)
 {
 	_dirLightCB.mainLightIsOn = _isMainLightOn;
-	_dirLightCB.gLightColor = DirectX::XMFLOAT3(_dirLightColor[0], _dirLightColor[1], _dirLightColor[2]);
+	_dirLightCB.gLightColor = _dirLightColor;
 
-	DirectX::XMVECTOR direction = DirectX::XMVectorSet(_mainLightDirection[0], _mainLightDirection[1], _mainLightDirection[2], 0);
+	DirectX::XMVECTOR direction = DirectX::XMLoadFloat3(&_mainLightDirection);
 	direction = DirectX::XMVector3Normalize(direction);
 	DirectX::XMStoreFloat3(&_dirLightCB.mainLightDirection, direction);
 

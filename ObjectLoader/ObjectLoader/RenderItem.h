@@ -22,7 +22,7 @@ struct RenderItem
 	std::string Name;
 	int nameCount = 0;
 
-	float transform[3][3] = { {0., 0., 0.}, {0., 0., 0.}, {1., 1., 1.} };
+	DirectX::XMFLOAT3 transform[3] = { {0., 0., 0.}, {0., 0., 0.}, {1., 1., 1.} };
 	bool lockedScale = true;
 
 	int NumFramesDirty = gNumFrameResources;
