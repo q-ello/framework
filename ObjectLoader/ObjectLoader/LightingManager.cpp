@@ -260,7 +260,7 @@ void LightingManager::BuildPSO()
 	lightingPSODesc.SampleDesc.Count = 1;
 	lightingPSODesc.SampleDesc.Quality = 0;
 	lightingPSODesc.DSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
-	ThrowIfFailed(UploadManager::device ->CreateGraphicsPipelineState(&lightingPSODesc, IID_PPV_ARGS(&_dirLightPSO)));
+	ThrowIfFailed(UploadManager::device->CreateGraphicsPipelineState(&lightingPSODesc, IID_PPV_ARGS(&_dirLightPSO)));
 
 	//local lights pso
 	D3D12_GRAPHICS_PIPELINE_STATE_DESC localLightsPSODesc = lightingPSODesc;
@@ -277,7 +277,7 @@ void LightingManager::BuildPSO()
 		_localLightsPSShader->GetBufferSize()
 	};
 
-	localLightsPSODesc.RasterizerState.CullMode = D3D12_CULL_MODE_FRONT;
+	localLightsPSODesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
 	localLightsPSODesc.BlendState.RenderTarget[0].BlendEnable = TRUE;
 	localLightsPSODesc.BlendState.RenderTarget[0].SrcBlend = D3D12_BLEND_ONE;
 	localLightsPSODesc.BlendState.RenderTarget[0].DestBlend = D3D12_BLEND_ONE;
