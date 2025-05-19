@@ -477,8 +477,10 @@ void MyApp::DrawLocalLightData(int* btnId, int lightIndex)
 			light->LightData.type = 1;
 			_lightingManager->UpdateWorld(lightIndex);
 		}
-		if (ImGui::Checkbox("Enabled", &light->LightData.active))
+		bool lightEnabled = light->LightData.active == 1;
+		if (ImGui::Checkbox("Enabled", &lightEnabled))
 		{
+			light->LightData.active = (int)lightEnabled;
 			light->NumFramesDirty = gNumFrameResources;
 		}
 		if (ImGui::DragFloat3("Position", &light->LightData.position.x, 0.1f))
@@ -691,7 +693,7 @@ void MyApp::LightingPass()
 
 	mCommandList->ClearRenderTargetView(CurrentBackBufferView(), Colors::LightSteelBlue, 0, nullptr);
 
-	mCommandList->OMSetRenderTargets(1, &CurrentBackBufferView(), true, nullptr);
+	mCommandList->OMSetRenderTargets(1, &CurrentBackBufferView(), true, &_gBuffer->DepthStencilView());
 
 	ID3D12DescriptorHeap* descriptorHeaps[] = { _gBuffer->SRVHeap() };
 	mCommandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);

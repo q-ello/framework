@@ -43,17 +43,14 @@ struct DirectionalLightConstants
 struct Light
 {
     DirectX::XMMATRIX world = DirectX::XMMatrixIdentity();
-    int type = 0;
     DirectX::XMFLOAT3 position = { 0.0f, 0.0f, 0.0f };
+    int type = 0;
+    DirectX::XMFLOAT3 direction = { 0.0f, -1.0f, 0.0f };
     float radius = 1.f;
-    DirectX::XMFLOAT3 direction = { 0.0f, 0.0f, 0.0f };
-    float angle = 10.f;
     DirectX::XMFLOAT3 color = { 1.0f, 1.0f, 1.0f };
-    float intensity = 10;
-    bool active = 1;
-    bool pad1 = false;
-    bool pad2 = false;
-    bool pad3 = false;
+    float angle = 10.f;
+    int active = 1;
+    float intensity = 10.f;
 };
 
 // Stores the resources needed for the CPU to build the command lists

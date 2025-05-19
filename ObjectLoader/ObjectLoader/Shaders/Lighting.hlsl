@@ -3,20 +3,20 @@
 struct Light
 {
     float4x4 world;
-    int type;
     float3 position;
-    float radius;
+    int type;
     float3 direction;
-    float angle;
+    float radius;
     float3 color;
+    float angle;
+    int active;
     float intensity;
-    bool active;
 };
 
 Texture2D gDiffuse : register(t0);
 Texture2D gNormal : register(t1);
 Texture2D gDepth : register(t2);
-StructuredBuffer<Light> lights : register(t3);
+StructuredBuffer<Light> lights : register(t0, space1);
 
 cbuffer cbLightingPass : register(b0)
 {
@@ -65,12 +65,9 @@ float3 ComputeWorldPos(float2 texcoord)
 {
     float depth = gDepth.Load(int3(texcoord * gRTSize, 0)).r;
     
-    float4 ndc;
-    ndc = float4(texcoord * 2.f - 1.f, depth, 1);
-    
+    float4 ndc = float4(texcoord * 2.f - 1.f, depth, 1.0f); // now full NDC space
     float4 viewPos = mul(ndc, gInvViewProj);
-    
-    return viewPos.xyz;
+    return viewPos.xyz / viewPos.w;
 }
 
 float4 DirLightingPS(VertexOut pin) : SV_Target
@@ -98,7 +95,7 @@ VertexOut LocalLightingVS(VertexIn vin, uint id : SV_InstanceID)
     
     float4 posW = mul(float4(vin.PosL, 1), lights[id].world);
     vout.PosH = mul(posW, gViewProj);
-    vout.TexC = (vout.PosH / vout.PosH.w).xy * .5f + .5f;
+    vout.TexC = vout.PosH.xy * .5f + .5f;
     vout.InstanceId = id;
     
     return vout;
@@ -107,7 +104,7 @@ VertexOut LocalLightingVS(VertexIn vin, uint id : SV_InstanceID)
 float4 LocalLightingPS(VertexOut pin) : SV_Target
 {
     Light light = lights[pin.InstanceId];
-    if (!light.active)
+    if (light.active == 0)
     {
         discard;
     }
@@ -118,10 +115,15 @@ float4 LocalLightingPS(VertexOut pin) : SV_Target
     
     float3 posW = ComputeWorldPos(pin.TexC);
     
+    float depth = gDepth.Load(int3(pin.TexC * gRTSize, 0)).r;
+    
+    return float4(depth, depth, depth, 1);
+    
     if (length(light.position - posW) > light.radius)
     {
         discard;
     }
+    
     
     float3 lightDir = normalize(posW - light.position);
     

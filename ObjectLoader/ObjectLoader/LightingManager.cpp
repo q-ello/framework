@@ -57,7 +57,7 @@ void LightingManager::UpdateLightCBs(FrameResource* currFrameResource)
 {
 	for (auto& light : _localLights)
 	{
-		if (light->NumFramesDirty == 0 || !light->LightData.active)
+		if (light->NumFramesDirty == 0)
 		{
 			continue;
 		}
@@ -90,6 +90,7 @@ void LightingManager::UpdateWorld(int lightIndex)
 		world = scale * rotation * translation;
 	}
 	_localLights[lightIndex]->LightData.world = XMMatrixTranspose(world);
+	_localLights[lightIndex]->NumFramesDirty = gNumFrameResources;
 }
 
 int LightingManager::lightsCount()
@@ -108,15 +109,24 @@ void LightingManager::Draw(ID3D12GraphicsCommandList* cmdList, FrameResource* cu
 	
 	cmdList->SetGraphicsRootSignature(_rootSignature.Get());
 
+	//update buffer with light data
+	cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(_lightBufferGPU.Get(),
+		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST));
+	cmdList->CopyBufferRegion(_lightBufferGPU.Get(), 0, currFrameResource->LocalLightCB.get()->Resource(), 0, sizeof(Light) * _localLights.size());
+	cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(_lightBufferGPU.Get(),
+		D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE));
+
 	cmdList->SetGraphicsRootDescriptorTable(0, descTable);
+	cmdList->SetGraphicsRootShaderResourceView(1, _lightBufferGPU->GetGPUVirtualAddress());
+
 	cmdList->SetPipelineState(_dirLightPSO.Get());
 	cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
 	auto lightingPassCB = currFrameResource->LightingPassCB->Resource();
-	cmdList->SetGraphicsRootConstantBufferView(1, lightingPassCB->GetGPUVirtualAddress());
+	cmdList->SetGraphicsRootConstantBufferView(2, lightingPassCB->GetGPUVirtualAddress());
 
 	auto dirLightCB = currFrameResource->DirLightCB->Resource();
-	cmdList->SetGraphicsRootConstantBufferView(2, dirLightCB->GetGPUVirtualAddress());
+	cmdList->SetGraphicsRootConstantBufferView(3, dirLightCB->GetGPUVirtualAddress());
 
 	//draw directional light
 	cmdList->DrawInstanced( 3, 1, 0, 0);
@@ -128,6 +138,11 @@ void LightingManager::Draw(ID3D12GraphicsCommandList* cmdList, FrameResource* cu
 	cmdList->IASetIndexBuffer(&geo->IndexBufferView());
 
 	cmdList->SetPipelineState(_localLightsPSO.Get());
+
+	if (_localLights.size() > 0)
+	{
+		geo = geo;
+	}
 
 	SubmeshGeometry mesh = geo->DrawArgs[L"box"];
 	cmdList->DrawIndexedInstanced(mesh.IndexCount, _localLights.size(), mesh.StartIndexLocation,
@@ -152,6 +167,7 @@ void LightingManager::Init(int srvAmount, ID3D12Device* device, D3D12_CPU_DESCRI
 	BuildShaders();
 	BuildInputLayout();
 	BuildPSO();
+
 
 	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
@@ -178,15 +194,16 @@ void LightingManager::BuildRootSignature(int srvAmount)
 {
 	//lighting root signature
 	CD3DX12_DESCRIPTOR_RANGE lightingRange;
-	lightingRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, srvAmount + 1, 0);
+	lightingRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, srvAmount, 0);
 
-	CD3DX12_ROOT_PARAMETER lightingSlotRootParameter[3];
+	CD3DX12_ROOT_PARAMETER lightingSlotRootParameter[4];
 
 	lightingSlotRootParameter[0].InitAsDescriptorTable(1, &lightingRange);
-	lightingSlotRootParameter[1].InitAsConstantBufferView(0);
-	lightingSlotRootParameter[2].InitAsConstantBufferView(1);
+	lightingSlotRootParameter[1].InitAsShaderResourceView(0, 1);
+	lightingSlotRootParameter[2].InitAsConstantBufferView(0);
+	lightingSlotRootParameter[3].InitAsConstantBufferView(1);
 
-	CD3DX12_ROOT_SIGNATURE_DESC lightingRootSigDesc(3, lightingSlotRootParameter, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+	CD3DX12_ROOT_SIGNATURE_DESC lightingRootSigDesc(4, lightingSlotRootParameter, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 
 	ComPtr<ID3DBlob> serializedRootSig = nullptr;
 	ComPtr<ID3DBlob> errorBlob = nullptr;
@@ -265,5 +282,12 @@ void LightingManager::BuildPSO()
 	localLightsPSODesc.BlendState.RenderTarget[0].SrcBlend = D3D12_BLEND_ONE;
 	localLightsPSODesc.BlendState.RenderTarget[0].DestBlend = D3D12_BLEND_ONE;
 	localLightsPSODesc.BlendState.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
+	localLightsPSODesc.BlendState.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+
+	localLightsPSODesc.DepthStencilState.DepthEnable = TRUE;
+	localLightsPSODesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
+	localLightsPSODesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
+
+
 	ThrowIfFailed(UploadManager::device->CreateGraphicsPipelineState(&localLightsPSODesc, IID_PPV_ARGS(&_localLightsPSO)));
 }
