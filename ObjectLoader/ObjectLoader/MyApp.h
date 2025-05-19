@@ -97,7 +97,7 @@ private:
 	XMFLOAT4X4 mView = MathHelper::Identity4x4();
 	XMFLOAT4X4 mProj = MathHelper::Identity4x4();
 
-	float mTheta = .5f * XM_PI;
+	float mTheta = -.5f * XM_PI;
 	float mPhi = .5f * XM_PI;
 	float mRadius = 2.5f;
 

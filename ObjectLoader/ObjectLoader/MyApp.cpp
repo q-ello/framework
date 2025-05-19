@@ -274,7 +274,7 @@ void MyApp::UpdateMainPassCBs(const GameTimer& gt)
 	XMMATRIX proj = XMLoadFloat4x4(&mProj);
 
 	XMMATRIX viewProj = XMMatrixMultiply(view, proj);
-	XMMATRIX invViewProj = XMMatrixInverse(&XMMatrixDeterminant(viewProj), viewProj);
+	XMMATRIX invViewProj = XMMatrixInverse(nullptr, viewProj);
 
 	XMStoreFloat4x4(&_GBufferCB.ViewProj, XMMatrixTranspose(viewProj));
 	_GBufferCB.DeltaTime = gt.DeltaTime();
@@ -283,8 +283,9 @@ void MyApp::UpdateMainPassCBs(const GameTimer& gt)
 
 	XMStoreFloat4x4(&_lightingCB.InvViewProj, XMMatrixTranspose(invViewProj));
 	_lightingCB.EyePosW = mEyePos;
-	_lightingCB.RenderTargetSize = XMFLOAT2((float)mClientWidth, (float)mClientHeight);
 	XMStoreFloat4x4(&_lightingCB.ViewProj, XMMatrixTranspose(viewProj));
+	XMStoreFloat4x4(&_lightingCB.Proj, XMMatrixTranspose(proj));
+	XMStoreFloat4x4(&_lightingCB.InvView, XMMatrixTranspose(XMMatrixInverse(nullptr, view)));
 
 	auto currLightingCB = mCurrFrameResource->LightingPassCB.get();
 	currLightingCB->CopyData(0, _lightingCB);
@@ -693,7 +694,7 @@ void MyApp::LightingPass()
 
 	mCommandList->ClearRenderTargetView(CurrentBackBufferView(), Colors::LightSteelBlue, 0, nullptr);
 
-	mCommandList->OMSetRenderTargets(1, &CurrentBackBufferView(), true, &_gBuffer->DepthStencilView());
+	mCommandList->OMSetRenderTargets(1, &CurrentBackBufferView(), true, &_gBuffer->DepthStencilReadOnly());
 
 	ID3D12DescriptorHeap* descriptorHeaps[] = { _gBuffer->SRVHeap() };
 	mCommandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);

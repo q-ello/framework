@@ -65,6 +65,16 @@ void GBuffer::OnResize(int width, int height, ID3D12GraphicsCommandList* cmdList
 
 	}
 
+	D3D12_DEPTH_STENCIL_VIEW_DESC dsvReadOnlyDesc = {};
+	dsvReadOnlyDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+	dsvReadOnlyDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+	dsvReadOnlyDesc.Texture2D.MipSlice = 0;
+	dsvReadOnlyDesc.Flags = D3D12_DSV_FLAG_READ_ONLY_DEPTH;
+	_readOnlyDSV = dsvHandle;
+
+	_device->CreateDepthStencilView(_info[(int)GBufferInfo::Depth].Resource.Get(), &dsvReadOnlyDesc, dsvHandle);
+	
+
 	_srvHandleForLighting = srvHandle;
 }
 
@@ -139,7 +149,7 @@ void GBuffer::CreateGBufferTexture(int i, CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHeapH
 
 	_device->CreateShaderResourceView(_info[i].Resource.Get(), &srvDesc, srvHeapHandle);
 
-	_info[i].RtvHandle = rtvHeapHandle;
+	_info[i].RtvHandle = isDSV ? dsvHeapHandle : rtvHeapHandle;
 	_info[i].SrvHandle = srvHeapHandle;
 }
 

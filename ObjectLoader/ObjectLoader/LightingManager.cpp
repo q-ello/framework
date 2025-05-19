@@ -277,7 +277,7 @@ void LightingManager::BuildPSO()
 		_localLightsPSShader->GetBufferSize()
 	};
 
-	localLightsPSODesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+	localLightsPSODesc.RasterizerState.CullMode = D3D12_CULL_MODE_FRONT;
 	localLightsPSODesc.BlendState.RenderTarget[0].BlendEnable = TRUE;
 	localLightsPSODesc.BlendState.RenderTarget[0].SrcBlend = D3D12_BLEND_ONE;
 	localLightsPSODesc.BlendState.RenderTarget[0].DestBlend = D3D12_BLEND_ONE;
@@ -288,6 +288,6 @@ void LightingManager::BuildPSO()
 	localLightsPSODesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
 	localLightsPSODesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
 
-
 	ThrowIfFailed(UploadManager::device->CreateGraphicsPipelineState(&localLightsPSODesc, IID_PPV_ARGS(&_localLightsPSO)));
+
 }
