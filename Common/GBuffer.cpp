@@ -19,7 +19,7 @@ GBuffer::GBuffer(ID3D12Device* device, int width, int height)
 		&rtvHeapDesc, IID_PPV_ARGS(_infoRTVHeap.GetAddressOf())));
 
 	D3D12_DESCRIPTOR_HEAP_DESC srvHeapDesc = rtvHeapDesc;
-	srvHeapDesc.NumDescriptors++;
+	srvHeapDesc.NumDescriptors = (int)GBufferInfo::Count + 1;
 	srvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 	srvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 	ThrowIfFailed(_device->CreateDescriptorHeap(
@@ -57,23 +57,12 @@ void GBuffer::OnResize(int width, int height, ID3D12GraphicsCommandList* cmdList
 	for (int i = 0; i < (int)GBufferInfo::Count; i++)
 	{
 		CreateGBufferTexture(i, rtvHandle, srvHandle, dsvHandle);
-		rtvHandle.Offset(1, _rtvDescriptorSize);
+		srvHandle.Offset(1, _srvDescriptorSize);
 		if (i == (int)GBufferInfo::Depth)
 			dsvHandle.Offset(1, _dsvDescriptorSize);
 		else
-			srvHandle.Offset(1, _srvDescriptorSize);
-
+			rtvHandle.Offset(1, _rtvDescriptorSize);
 	}
-
-	D3D12_DEPTH_STENCIL_VIEW_DESC dsvReadOnlyDesc = {};
-	dsvReadOnlyDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
-	dsvReadOnlyDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
-	dsvReadOnlyDesc.Texture2D.MipSlice = 0;
-	dsvReadOnlyDesc.Flags = D3D12_DSV_FLAG_READ_ONLY_DEPTH;
-	_readOnlyDSV = dsvHandle;
-
-	_device->CreateDepthStencilView(_info[(int)GBufferInfo::Depth].Resource.Get(), &dsvReadOnlyDesc, dsvHandle);
-	
 
 	_srvHandleForLighting = srvHandle;
 }
@@ -113,7 +102,6 @@ void GBuffer::CreateGBufferTexture(int i, CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHeapH
 		clearValue.Color[3] = 0.0f;
 	}
 	
-
 	CD3DX12_HEAP_PROPERTIES heapProps(D3D12_HEAP_TYPE_DEFAULT);
 
 	ThrowIfFailed(_device->CreateCommittedResource(

@@ -36,10 +36,6 @@ public:
 		CD3DX12_CPU_DESCRIPTOR_HANDLE dsvHeapHandle);
 
 	D3D12_CPU_DESCRIPTOR_HANDLE DepthStencilView();
-	D3D12_CPU_DESCRIPTOR_HANDLE DepthStencilReadOnly()
-	{
-		return _readOnlyDSV;
-	}
 
 	void ClearInfo(ID3D12GraphicsCommandList* cmdList, const FLOAT* color);
 
@@ -84,5 +80,4 @@ private:
 	D3D12_CPU_DESCRIPTOR_HANDLE _srvHandleForLighting;
 
 	Microsoft::WRL::ComPtr<ID3D12Device> _device;
-	D3D12_CPU_DESCRIPTOR_HANDLE _readOnlyDSV;
 };
