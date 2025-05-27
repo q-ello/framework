@@ -10,7 +10,7 @@ void GeometryManager::BuildNecessaryGeometry()
 {
 	UploadManager::Reset();
 	GeometryGenerator geoGen;
-	GeometryGenerator::MeshData grid = geoGen.CreateGrid(20.f, 20.f, 0.1f);
+	GeometryGenerator::MeshData grid = geoGen.CreateGrid(1000.f, 1000.f, 10.f);
 	GeometryGenerator::MeshData box = geoGen.CreateBox(1.0f, 1.0f, 1.0f, 0);
 
 	SubmeshGeometry gridSubmesh;
