@@ -28,10 +28,10 @@ struct LightingPassConstants
 {
 
     DirectX::XMFLOAT4X4 InvViewProj = MathHelper::Identity4x4();
-    DirectX::XMFLOAT4X4 Proj = MathHelper::Identity4x4();
     DirectX::XMFLOAT4X4 ViewProj = MathHelper::Identity4x4();
-    DirectX::XMFLOAT4X4 InvView = MathHelper::Identity4x4();
     DirectX::XMFLOAT3 EyePosW = { 0.0f, 0.0f, 0.0f };
+    float pad1;
+    DirectX::XMFLOAT2 RTSize = { 1.0f, 1.0f };
 };
 
 struct DirectionalLightConstants

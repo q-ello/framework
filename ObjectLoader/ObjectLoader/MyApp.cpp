@@ -284,8 +284,7 @@ void MyApp::UpdateMainPassCBs(const GameTimer& gt)
 	XMStoreFloat4x4(&_lightingCB.InvViewProj, XMMatrixTranspose(invViewProj));
 	_lightingCB.EyePosW = mEyePos;
 	XMStoreFloat4x4(&_lightingCB.ViewProj, XMMatrixTranspose(viewProj));
-	XMStoreFloat4x4(&_lightingCB.Proj, XMMatrixTranspose(proj));
-	XMStoreFloat4x4(&_lightingCB.InvView, XMMatrixTranspose(XMMatrixInverse(nullptr, view)));
+	_lightingCB.RTSize = { (float)mClientWidth, (float)mClientHeight };
 
 	auto currLightingCB = mCurrFrameResource->LightingPassCB.get();
 	currLightingCB->CopyData(0, _lightingCB);
@@ -493,11 +492,11 @@ void MyApp::DrawLocalLightData(int* btnId, int lightIndex)
 		{
 			light->NumFramesDirty = gNumFrameResources;
 		}
-		if (ImGui::SliderFloat("Intensity", &light->LightData.intensity, 0.0f, 10.0f))
+		if (ImGui::DragFloat("Intensity", &light->LightData.intensity, 0.1f, 0.0f))
 		{
 			light->NumFramesDirty = gNumFrameResources;
 		}
-		if (ImGui::SliderFloat("Radius", &light->LightData.radius, 0.1f, 50.0f))
+		if (ImGui::DragFloat("Radius", &light->LightData.radius, 0.1f, 0.0f, 10.0f))
 		{
 			_lightingManager->UpdateWorld(lightIndex);
 		}
@@ -695,7 +694,7 @@ void MyApp::LightingPass()
 
 	mCommandList->ClearRenderTargetView(CurrentBackBufferView(), Colors::LightSteelBlue, 0, nullptr);
 
-	mCommandList->OMSetRenderTargets(1, &CurrentBackBufferView(), true, &_gBuffer->DepthStencilReadOnly());
+	mCommandList->OMSetRenderTargets(1, &CurrentBackBufferView(), true, &_gBuffer->DepthStencilView());
 
 	ID3D12DescriptorHeap* descriptorHeaps[] = { _gBuffer->SRVHeap() };
 	mCommandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
