@@ -46,9 +46,10 @@ private:
 	virtual void Update(const GameTimer& gt)override;
 	virtual void Draw(const GameTimer& gt)override;
 
-	virtual void OnMouseDown(WPARAM btnState, int x, int y)override;
-	virtual void OnMouseUp(WPARAM btnState, int x, int y)override;
-	virtual void OnMouseMove(WPARAM btnState, int x, int y)override;
+	virtual void OnMouseDown(WPARAM btnState, int x, int y) override;
+	virtual void OnMouseUp(WPARAM btnState, int x, int y) override;
+	virtual void OnMouseMove(WPARAM btnState, int x, int y) override;
+	virtual void OnMouseWheel(WPARAM btnState) override;
 
 	void OnKeyboardInput(const GameTimer& gt);
 	void UpdateCamera(const GameTimer& gt);
@@ -72,6 +73,7 @@ private:
 	void DrawObjectTextures(RenderItem* selectedObject, int* btnId);
 	bool DrawTextureButton(const std::string& label, int* btnId, TextureHandle& texHandle);
 	void DrawTransformInput(const std::string& label, int btnId, int transformIndex, RenderItem* object, float speed);
+	void DrawCameraSpeed();
 
 	void InitManagers();
 
@@ -92,14 +94,14 @@ private:
 	GBufferPassConstants _GBufferCB;
 	LightingPassConstants _lightingCB;
 
-	XMFLOAT3 mEyePos = { 0.0f, 0.0f, 5.0f };
-	XMFLOAT3 _targetPos = { 0.0f, 0.0f, 0.0f };
 	XMFLOAT4X4 mView = MathHelper::Identity4x4();
 	XMFLOAT4X4 mProj = MathHelper::Identity4x4();
 
-	float mTheta = -.5f * XM_PI;
-	float mPhi = .5f * XM_PI;
-	float mRadius = 2.5f;
+	float _yaw = XM_PI / 2.f;
+	float _pitch = 0.f;
+	XMFLOAT3 _eyePos = { 0.0f, 0.0f, -5.0f };
+	float _cameraSpeed = 0.01f;
+	float _mbDown = false;
 
 	POINT mLastMousePos;
 
