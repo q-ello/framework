@@ -149,7 +149,7 @@ void MyApp::Draw(const GameTimer& gt)
 	LightingPass();
 
 	//drawing grid
-	_gBuffer->ChangeDSVState(mCommandList.Get(), D3D12_RESOURCE_STATE_DEPTH_WRITE);
+	_gBuffer->ChangeDSVState(D3D12_RESOURCE_STATE_DEPTH_WRITE);
 	mCommandList->OMSetRenderTargets(1, &CurrentBackBufferView(), true, &_gBuffer->DepthStencilView());
 	_objectManagers[PSO::Unlit]->Draw(mCommandList.Get(), mCurrFrameResource);
 
@@ -418,7 +418,6 @@ void MyApp::DrawObjectsList(int* btnId)
 
 void MyApp::DrawLightData(int* btnId)
 {
-	ImGui::Checkbox("Debug", _lightingManager->debugEnabled());
 	if (ImGui::CollapsingHeader("Directional Light", ImGuiTreeNodeFlags_DefaultOpen))
 	{
 		ImGui::Checkbox("Turn on", _lightingManager->isMainLightOn());
@@ -439,6 +438,7 @@ void MyApp::DrawLightData(int* btnId)
 	}
 	if (ImGui::CollapsingHeader("Local lights"))
 	{
+		ImGui::Checkbox("Debug", _lightingManager->debugEnabled());
 		if (ImGui::Button("Add light"))
 		{
 			_lightingManager->addLight(md3dDevice.Get());
@@ -468,48 +468,66 @@ void MyApp::DrawLocalLightData(int* btnId, int lightIndex)
 		}
 		auto light = _lightingManager->light(lightIndex);
 
+		ImGui::PushID((*btnId)++);
 		if (ImGui::RadioButton("Point Light", light->LightData.type == 0) && light->LightData.type != 0)
 		{
 			light->LightData.type = 0;
 			_lightingManager->UpdateWorld(lightIndex);
 		}
+		ImGui::PopID();
+		ImGui::PushID((*btnId)++);
 		if (ImGui::RadioButton("Spotlight", light->LightData.type == 1) && light->LightData.type != 1)
 		{
 			light->LightData.type = 1;
 			_lightingManager->UpdateWorld(lightIndex);
 		}
 		bool lightEnabled = light->LightData.active == 1;
+		ImGui::PopID();
+		ImGui::PushID((*btnId)++);
 		if (ImGui::Checkbox("Enabled", &lightEnabled))
 		{
 			light->LightData.active = (int)lightEnabled;
 			light->NumFramesDirty = gNumFrameResources;
 		}
+		ImGui::PopID();
+		ImGui::PushID((*btnId)++);
 		if (ImGui::DragFloat3("Position", &light->LightData.position.x, 0.1f))
 		{
 			_lightingManager->UpdateWorld(lightIndex);
 		}
+		ImGui::PopID();
+		ImGui::PushID((*btnId)++);
 		if (ImGui::ColorEdit3("Color", &light->LightData.color.x))
 		{
 			light->NumFramesDirty = gNumFrameResources;
 		}
-		if (ImGui::DragFloat("Intensity", &light->LightData.intensity, 0.1f, 0.0f))
+		ImGui::PopID();
+		ImGui::PushID((*btnId)++);
+		if (ImGui::DragFloat("Intensity", &light->LightData.intensity, 0.1f, 0.0f, 10.0f))
 		{
 			light->NumFramesDirty = gNumFrameResources;
 		}
+		ImGui::PopID();
+		ImGui::PushID((*btnId)++);
 		if (ImGui::DragFloat("Radius", &light->LightData.radius, 0.1f, 0.0f, 10.0f))
 		{
 			_lightingManager->UpdateWorld(lightIndex);
 		}
+		ImGui::PopID();
 		if (light->LightData.type == 1)
 		{
+			ImGui::PushID((*btnId)++);
 			if (ImGui::DragFloat3("Direction", &light->LightData.direction.x, 0.1f))
 			{
 				_lightingManager->UpdateWorld(lightIndex);
 			}
-			if (ImGui::SliderAngle("Angle", &light->LightData.angle, 1.0f, 90.0f))
+			ImGui::PopID();
+			ImGui::PushID((*btnId)++);
+			if (ImGui::DragFloat("Angle", &light->LightData.angle, 1.0f, 90.0f))
 			{
 				_lightingManager->UpdateWorld(lightIndex);
 			}
+			ImGui::PopID();
 		}
 	}
 }
@@ -651,7 +669,7 @@ void MyApp::ClearData()
 	ThrowIfFailed(mCommandList->Reset(mDirectCmdListAlloc.Get(), nullptr));
 
 	mCommandList->ClearRenderTargetView(CurrentBackBufferView(), Colors::LightSteelBlue, 0, nullptr);
-	_gBuffer->ClearInfo(mCommandList.Get(), Colors::Transparent);
+	_gBuffer->ClearInfo(Colors::Transparent);
 
 	ThrowIfFailed(mCommandList->Close());
 	ID3D12CommandList* cmdsLists[] = { mCommandList.Get() };
@@ -674,10 +692,10 @@ void MyApp::InitManagers()
 void MyApp::GBufferPass()
 {
 	//deferred rendering: writing in gbuffer first
-	_gBuffer->ChangeRTVsState(mCommandList.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET);
-	_gBuffer->ChangeDSVState(mCommandList.Get(), D3D12_RESOURCE_STATE_DEPTH_WRITE);
+	_gBuffer->ChangeRTVsState(D3D12_RESOURCE_STATE_RENDER_TARGET);
+	_gBuffer->ChangeDSVState(D3D12_RESOURCE_STATE_DEPTH_WRITE);
 	
-	_gBuffer->ClearInfo(mCommandList.Get(), Colors::Transparent);
+	_gBuffer->ClearInfo(Colors::Transparent);
 	mCommandList->OMSetRenderTargets(_gBuffer->InfoCount(), _gBuffer->RTVs().data(),
 		false, &_gBuffer->DepthStencilView());
 	_objectManagers[PSO::Opaque]->Draw(mCommandList.Get(), mCurrFrameResource);
@@ -689,8 +707,8 @@ void MyApp::LightingPass()
 	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(CurrentBackBuffer(),
 		D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET));
 
-	_gBuffer->ChangeRTVsState(mCommandList.Get(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-	_gBuffer->ChangeDSVState(mCommandList.Get(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+	_gBuffer->ChangeRTVsState(D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+	_gBuffer->ChangeDSVState(D3D12_RESOURCE_STATE_DEPTH_READ);
 
 	mCommandList->ClearRenderTargetView(CurrentBackBufferView(), Colors::LightSteelBlue, 0, nullptr);
 
@@ -699,7 +717,20 @@ void MyApp::LightingPass()
 	ID3D12DescriptorHeap* descriptorHeaps[] = { _gBuffer->SRVHeap() };
 	mCommandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
 
-	_lightingManager->Draw(mCommandList.Get(), mCurrFrameResource, _gBuffer->SRVHeap()->GetGPUDescriptorHandleForHeapStart());
+	_lightingManager->DrawDirLight(mCommandList.Get(), mCurrFrameResource, _gBuffer->SRVHeap()->GetGPUDescriptorHandleForHeapStart());
+
+	if (_lightingManager->lightsCount() > 0)
+	{
+		_gBuffer->ChangeDSVState(D3D12_RESOURCE_STATE_DEPTH_READ);
+		_lightingManager->DrawLocalLights(mCommandList.Get(), mCurrFrameResource);
+
+		if (*_lightingManager->debugEnabled())
+		{
+			_lightingManager->DrawDebug(mCommandList.Get(), mCurrFrameResource);
+		}
+	}
+
+	
 }
 
 //some wndproc stuff

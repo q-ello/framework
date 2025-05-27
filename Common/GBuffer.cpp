@@ -1,10 +1,11 @@
 #include "GBuffer.h"
 
-GBuffer::GBuffer(ID3D12Device* device, int width, int height)
+GBuffer::GBuffer(ID3D12Device* device, ID3D12GraphicsCommandList* cmdList, int width, int height)
 {
 	_device = device;
 	_width = width;
 	_height = height;
+	_cmdList = cmdList;
 	_rtvDescriptorSize = _device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 	_srvDescriptorSize = _device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 	_dsvDescriptorSize = _device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
@@ -40,7 +41,7 @@ GBuffer::~GBuffer()
 		tex.Reset();
 }
 
-void GBuffer::OnResize(int width, int height, ID3D12GraphicsCommandList* cmdList)
+void GBuffer::OnResize(int width, int height)
 {
 	_width = width;
 	_height = height;
@@ -146,21 +147,21 @@ D3D12_CPU_DESCRIPTOR_HANDLE GBuffer::DepthStencilView()
 	return _infoDSVHeap->GetCPUDescriptorHandleForHeapStart();
 }
 
-void GBuffer::ClearInfo(ID3D12GraphicsCommandList* cmdList, const FLOAT* color)
+void GBuffer::ClearInfo(const FLOAT* color)
 {
-	ChangeDSVState(cmdList, D3D12_RESOURCE_STATE_DEPTH_WRITE);
+	ChangeDSVState(D3D12_RESOURCE_STATE_DEPTH_WRITE);
 
-	cmdList->ClearDepthStencilView(DepthStencilView(), D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
+	_cmdList->ClearDepthStencilView(DepthStencilView(), D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
 
 	for (int i = 0; i < (int)GBufferInfo::Count; i++)
 	{
 		if (i == (int)GBufferInfo::Depth)
 			continue;
-		cmdList->ClearRenderTargetView(_info[i].RtvHandle, color, 0, nullptr);
+		_cmdList->ClearRenderTargetView(_info[i].RtvHandle, color, 0, nullptr);
 	}
 }
 
-void GBuffer::ChangeRTVsState(ID3D12GraphicsCommandList* cmdList, D3D12_RESOURCE_STATES stateAfter)
+void GBuffer::ChangeRTVsState(D3D12_RESOURCE_STATES stateAfter)
 {
 	std::vector<CD3DX12_RESOURCE_BARRIER> barriers;
 	for (int i = 0; i < (int)GBufferInfo::Count; i++)
@@ -171,15 +172,15 @@ void GBuffer::ChangeRTVsState(ID3D12GraphicsCommandList* cmdList, D3D12_RESOURCE
 		barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(_info[i].Resource.Get(), _info[i].prevState, stateAfter));
 		_info[i].prevState = stateAfter;
 	}
-	cmdList->ResourceBarrier((UINT)barriers.size(), barriers.data());
+	_cmdList->ResourceBarrier((UINT)barriers.size(), barriers.data());
 }
 
-void GBuffer::ChangeDSVState(ID3D12GraphicsCommandList* cmdList, D3D12_RESOURCE_STATES stateAfter)
+void GBuffer::ChangeDSVState(D3D12_RESOURCE_STATES stateAfter)
 {
 	GBufferTexture* depthTex = &_info[(int)GBufferInfo::Depth];
 	if (depthTex->prevState == stateAfter)
 		return;
-	cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(depthTex->Resource.Get(), 
+	_cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(depthTex->Resource.Get(), 
 		depthTex->prevState, stateAfter));
 	depthTex->prevState = stateAfter;
 }

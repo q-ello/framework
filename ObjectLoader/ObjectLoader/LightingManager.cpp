@@ -74,7 +74,8 @@ void LightingManager::UpdateWorld(int lightIndex)
 	//if it is a sphere
 	if (data.type == 0)
 	{
-		XMMATRIX scale = XMMatrixScaling(data.radius, data.radius, data.radius);
+		float diameter = data.radius * 2.f;
+		XMMATRIX scale = XMMatrixScaling(diameter, diameter, diameter);
 		XMMATRIX translation = XMMatrixTranslationFromVector(XMLoadFloat3(&data.position));
 
 		world = scale * translation;
@@ -103,10 +104,10 @@ LightRenderItem* LightingManager::light(int i)
 	return _localLights[i].get();
 }
 
-void LightingManager::Draw(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, D3D12_GPU_DESCRIPTOR_HANDLE descTable)
+void LightingManager::DrawDirLight(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, D3D12_GPU_DESCRIPTOR_HANDLE descTable)
 {
 	// Indicate a state transition on the resource usage.
-	
+
 	cmdList->SetGraphicsRootSignature(_rootSignature.Get());
 
 	//update buffer with light data
@@ -129,8 +130,11 @@ void LightingManager::Draw(ID3D12GraphicsCommandList* cmdList, FrameResource* cu
 	cmdList->SetGraphicsRootConstantBufferView(3, dirLightCB->GetGPUVirtualAddress());
 
 	//draw directional light
-	cmdList->DrawInstanced( 3, 1, 0, 0);
+	cmdList->DrawInstanced(3, 1, 0, 0);
+}
 
+void LightingManager::DrawLocalLights(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource)
+{
 	//draw local lights
 	auto geo = GeometryManager::geometries()[L"shapeGeo"].get();
 
@@ -139,20 +143,17 @@ void LightingManager::Draw(ID3D12GraphicsCommandList* cmdList, FrameResource* cu
 
 	cmdList->SetPipelineState(_localLightsPSO.Get());
 
-	if (_localLights.size() > 0)
-	{
-		geo = geo;
-	}
-
 	SubmeshGeometry mesh = geo->DrawArgs[L"box"];
 	cmdList->DrawIndexedInstanced(mesh.IndexCount, _localLights.size(), mesh.StartIndexLocation,
 		mesh.BaseVertexLocation, 0);
+}
 
-	if (_debugEnabled)
-	{
-		cmdList->SetPipelineState(_localLightsWireframePSO.Get());
-		cmdList->DrawIndexedInstanced(mesh.IndexCount, _localLights.size(), mesh.StartIndexLocation, mesh.BaseVertexLocation, 0);
-	}
+void LightingManager::DrawDebug(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource)
+{
+	auto geo = GeometryManager::geometries()[L"shapeGeo"].get();
+	SubmeshGeometry mesh = geo->DrawArgs[L"box"];
+	cmdList->SetPipelineState(_localLightsWireframePSO.Get());
+	cmdList->DrawIndexedInstanced(mesh.IndexCount, _localLights.size(), mesh.StartIndexLocation, mesh.BaseVertexLocation, 0);
 }
 
 void LightingManager::Init(int srvAmount, ID3D12Device* device, D3D12_CPU_DESCRIPTOR_HANDLE srvHandle)

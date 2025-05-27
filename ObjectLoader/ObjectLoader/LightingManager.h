@@ -28,7 +28,9 @@ public:
 	int lightsCount();
 	LightRenderItem* light(int i);
 
-	void Draw(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, D3D12_GPU_DESCRIPTOR_HANDLE descTable);
+	void DrawDirLight(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, D3D12_GPU_DESCRIPTOR_HANDLE descTable);
+	void DrawLocalLights(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource);
+	void DrawDebug(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource);
 	void Init(int srvAmount, ID3D12Device* device, D3D12_CPU_DESCRIPTOR_HANDLE srvHandle);
 
 	bool* isMainLightOn()

@@ -155,7 +155,7 @@ void D3DApp::OnResize()
 
 	mCurrBackBuffer = 0;
 
-	_gBuffer->OnResize(mClientWidth, mClientHeight, mCommandList.Get());
+	_gBuffer->OnResize(mClientWidth, mClientHeight);
  
 	CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHeapHandle(mRtvHeap->GetCPUDescriptorHandleForHeapStart());
 	for (UINT i = 0; i < SwapChainBufferCount; i++)
@@ -451,7 +451,7 @@ bool D3DApp::InitDirect3D()
     CreateSwapChain();
     CreateRtvAndDsvDescriptorHeaps();
 
-	_gBuffer = std::make_unique<GBuffer>(md3dDevice.Get(), mClientWidth, mClientHeight);
+	_gBuffer = std::make_unique<GBuffer>(md3dDevice.Get(), mCommandList.Get(), mClientWidth, mClientHeight);
 
 	return true;
 }

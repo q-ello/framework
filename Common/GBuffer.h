@@ -27,25 +27,25 @@ struct GBufferTexture
 class GBuffer
 {
 public:
-	GBuffer(ID3D12Device* device, int width, int height);
+	GBuffer(ID3D12Device* device, ID3D12GraphicsCommandList* cmdList, int width, int height);
 	~GBuffer();
 	//onresize
-	void OnResize(int width, int height, ID3D12GraphicsCommandList* cmdList);
+	void OnResize(int width, int height);
 
 	void CreateGBufferTexture(int i, CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHeapHandle, CD3DX12_CPU_DESCRIPTOR_HANDLE srvHeapHandle,
 		CD3DX12_CPU_DESCRIPTOR_HANDLE dsvHeapHandle);
 
 	D3D12_CPU_DESCRIPTOR_HANDLE DepthStencilView();
 
-	void ClearInfo(ID3D12GraphicsCommandList* cmdList, const FLOAT* color);
+	void ClearInfo(const FLOAT* color);
 
 	static int InfoCount(bool forRTVS = true)
 	{
 		return (int)GBufferInfo::Count - (int)forRTVS;
 	}
 
-	void ChangeRTVsState(ID3D12GraphicsCommandList* cmdList, D3D12_RESOURCE_STATES stateAfter);
-	void ChangeDSVState(ID3D12GraphicsCommandList* cmdList, D3D12_RESOURCE_STATES stateAfter);
+	void ChangeRTVsState(D3D12_RESOURCE_STATES stateAfter);
+	void ChangeDSVState(D3D12_RESOURCE_STATES stateAfter);
 
 	std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> RTVs() const;
 
@@ -78,6 +78,8 @@ private:
 	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> _infoSRVHeap;
 	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> _infoDSVHeap;
 	D3D12_CPU_DESCRIPTOR_HANDLE _srvHandleForLighting;
+
+	Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> _cmdList;
 
 	Microsoft::WRL::ComPtr<ID3D12Device> _device;
 };

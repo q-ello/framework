@@ -1,14 +1,15 @@
 struct Light
 {
-float4x4 world;
-float3 position;
-int type;
-float3 direction;
-float radius;
-float3 color;
-float angle;
-int active;
-float intensity;
+    float4x4 world;
+    float3 position;
+    int type;
+    float3 direction;
+    float radius;
+    float3 color;
+    float angle;
+    int active;
+    float intensity;
+    float2 pad;
 };
 
 Texture2D gDiffuse : register(t0);
@@ -87,7 +88,9 @@ float3 ComputeWorldPos(float3 texcoord)
 {
     float depth = gDepth.Load(texcoord).r;
     
-    float4 ndc = float4((texcoord.xy / gRTSize) * 2.f - 1.f, depth, 1.0f);
+    float2 uv = texcoord.xy / gRTSize;
+    
+    float4 ndc = float4( uv.x * 2.f - 1.f, 1.f - uv.y * 2.f, depth, 1.0f);
     float4 viewPos = mul(ndc, gInvViewProj);
     return viewPos.xyz / viewPos.w;
 }
@@ -100,33 +103,32 @@ float4 LocalLightingPS(VertexOut pin) : SV_Target
         discard;
     }
     
-    int3 uv = pin.PosH.xyz;
+    float3 coords = pin.PosH.xyz;
     
-    float4 albedo = gDiffuse.Load(uv);
+    float4 albedo = gDiffuse.Load(coords);
     
-    return albedo;
+    float3 normal = gNormal.Load(coords).xyz;
     
-    float3 normal = gNormal.Load(uv).xyz;
+    float3 posW = ComputeWorldPos(coords);
     
-    float3 posW = ComputeWorldPos(uv);
+    float3 lightDir = posW - light.position;
+    float3 normalizedLightDir = normalize(lightDir);
     
-    if (length(light.position - posW) > light.radius)
+    if (length(lightDir) > light.radius)
     {
         discard;
     }
     
-    float3 lightDir = normalize(posW - light.position);
-    
     if (light.type == 1)
     {
-        float angle = dot(lightDir, normalize(light.direction));
+        float angle = dot(normalizedLightDir, normalize(light.direction));
         if (angle < cos(light.angle))
         {
             discard;
         }
     }
     
-    float diff = saturate(dot(normal, lightDir));
+    float diff = saturate(dot(normal, -normalizedLightDir));
     
     float attenuation = saturate(1.0f - length(lightDir) / light.radius);
     
@@ -135,7 +137,14 @@ float4 LocalLightingPS(VertexOut pin) : SV_Target
     return float4(finalColor, albedo.a);
 }
 
+
+
 float4 LocalLightingWireframePS(VertexOut pin) : SV_Target
 {
-    return float4(lights[pin.InstanceId].color, 1);
+    Light light = lights[pin.InstanceId];
+    if (light.active == 0)
+    {
+        discard;
+    }
+    return float4(light.color, 1);
 }
