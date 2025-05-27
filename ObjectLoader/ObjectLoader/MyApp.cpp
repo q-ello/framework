@@ -523,7 +523,7 @@ void MyApp::DrawLocalLightData(int* btnId, int lightIndex)
 			}
 			ImGui::PopID();
 			ImGui::PushID((*btnId)++);
-			if (ImGui::DragFloat("Angle", &light->LightData.angle, 1.0f, 90.0f))
+			if (ImGui::SliderAngle("Angle", &light->LightData.angle, 1.0f, 90.0f))
 			{
 				_lightingManager->UpdateWorld(lightIndex);
 			}

@@ -83,11 +83,26 @@ void LightingManager::UpdateWorld(int lightIndex)
 	//or it is a cone
 	else
 	{
-		float diameter = 2.f * data.radius * tanf(data.angle * XM_PI / 180.f);
-		XMMATRIX scale = XMMatrixScaling(diameter, data.radius, diameter);
-		XMVECTOR direction = XMVector3Normalize(XMLoadFloat3(&data.direction));
-		XMMATRIX rotation = XMMatrixRotationRollPitchYawFromVector(direction);
-		XMMATRIX translation = XMMatrixTranslationFromVector(direction * data.radius * .5f);
+		float diameter = 2.f * data.radius * tanf(data.angle);
+		XMMATRIX scale = XMMatrixScaling(diameter, diameter, data.radius);
+		XMVECTOR dir = XMLoadFloat3(&data.direction);
+		if (XMVector3Less(XMVector3LengthSq(dir), XMVectorReplicate(1e-6f)))
+		{
+			return;
+		}
+		XMVECTOR direction = XMVector3Normalize(dir);
+
+		XMVECTOR position = XMLoadFloat3(&data.position);
+		XMMATRIX translation = XMMatrixTranslationFromVector(position + direction * data.radius * .5f);
+		
+		XMVECTOR up = XMVectorSet(0.f, 1.f, 0.f, 0.f);
+		if (fabs(XMVectorGetX(XMVector3Dot(direction, up))) > 0.999f)
+		{
+			// If direction is parallel or opposite to up, choose another up
+			up = XMVectorSet(0.f, 0.f, 1.f, 0.f);
+		}
+
+		XMMATRIX rotation = XMMatrixTranspose(XMMatrixLookToLH(XMVectorZero(), direction, up));
 		world = scale * rotation * translation;
 	}
 	_localLights[lightIndex]->LightData.world = XMMatrixTranspose(world);
