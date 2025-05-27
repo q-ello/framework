@@ -419,6 +419,7 @@ void MyApp::DrawObjectsList(int* btnId)
 
 void MyApp::DrawLightData(int* btnId)
 {
+	ImGui::Checkbox("Debug", _lightingManager->debugEnabled());
 	if (ImGui::CollapsingHeader("Directional Light", ImGuiTreeNodeFlags_DefaultOpen))
 	{
 		ImGui::Checkbox("Turn on", _lightingManager->isMainLightOn());

@@ -147,6 +147,12 @@ void LightingManager::Draw(ID3D12GraphicsCommandList* cmdList, FrameResource* cu
 	SubmeshGeometry mesh = geo->DrawArgs[L"box"];
 	cmdList->DrawIndexedInstanced(mesh.IndexCount, _localLights.size(), mesh.StartIndexLocation,
 		mesh.BaseVertexLocation, 0);
+
+	if (_debugEnabled)
+	{
+		cmdList->SetPipelineState(_localLightsWireframePSO.Get());
+		cmdList->DrawIndexedInstanced(mesh.IndexCount, _localLights.size(), mesh.StartIndexLocation, mesh.BaseVertexLocation, 0);
+	}
 }
 
 void LightingManager::Init(int srvAmount, ID3D12Device* device, D3D12_CPU_DESCRIPTOR_HANDLE srvHandle)
@@ -229,6 +235,7 @@ void LightingManager::BuildShaders()
 	_dirLightPSShader = d3dUtil::CompileShader(L"Shaders\\Lighting.hlsl", nullptr, "DirLightingPS", "ps_5_1");
 	_localLightsVSShader = d3dUtil::CompileShader(L"Shaders\\Lighting.hlsl", nullptr, "LocalLightingVS", "vs_5_1");
 	_localLightsPSShader = d3dUtil::CompileShader(L"Shaders\\Lighting.hlsl", nullptr, "LocalLightingPS", "ps_5_1");
+	_localLightsWireframePSShader = d3dUtil::CompileShader(L"Shaders\\Lighting.hlsl", nullptr, "LocalLightingWireframePS", "ps_5_1");
 }
 
 void LightingManager::BuildPSO()
@@ -290,4 +297,14 @@ void LightingManager::BuildPSO()
 
 	ThrowIfFailed(UploadManager::device->CreateGraphicsPipelineState(&localLightsPSODesc, IID_PPV_ARGS(&_localLightsPSO)));
 
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC wireframePSO = localLightsPSODesc;
+	wireframePSO.PS =
+	{
+		reinterpret_cast<BYTE*>(_localLightsWireframePSShader->GetBufferPointer()),
+		_localLightsWireframePSShader->GetBufferSize()
+	};
+	wireframePSO.RasterizerState.FillMode = D3D12_FILL_MODE_WIREFRAME;
+	wireframePSO.RasterizerState.CullMode = D3D12_CULL_MODE_BACK;
+
+	ThrowIfFailed(UploadManager::device->CreateGraphicsPipelineState(&wireframePSO, IID_PPV_ARGS(&_localLightsWireframePSO)));
 }

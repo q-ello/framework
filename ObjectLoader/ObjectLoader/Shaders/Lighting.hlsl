@@ -139,3 +139,8 @@ float4 LocalLightingPS(VertexOut pin) : SV_Target
     
     return float4(finalColor, albedo.a);
 }
+
+float4 LocalLightingWireframePS(VertexOut pin) : SV_Target
+{
+    return float4(lights[pin.InstanceId].color, 1);
+}

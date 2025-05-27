@@ -46,11 +46,17 @@ public:
 		return &_dirLightColor.x;
 	}
 
+	bool* debugEnabled()
+	{
+		return &_debugEnabled;
+	}
+
 private:
 	DirectX::XMFLOAT3 _mainLightDirection = { 1.f, -1.f, 0.f };
 	bool _isMainLightOn = true;
 	DirectX::XMFLOAT3 _dirLightColor = { 1.f, 1.f, 1.f };
 	DirectionalLightConstants _dirLightCB;
+	bool _debugEnabled = false;
 
 	std::vector<std::unique_ptr<LightRenderItem>> _localLights;
 	std::vector<int> FreeLightIndices;
@@ -68,6 +74,9 @@ private:
 	Microsoft::WRL::ComPtr<ID3DBlob> _localLightsVSShader;
 	Microsoft::WRL::ComPtr<ID3DBlob> _localLightsPSShader;
 	Microsoft::WRL::ComPtr<ID3D12Resource> _lightBufferGPU;
+
+	Microsoft::WRL::ComPtr<ID3D12PipelineState> _localLightsWireframePSO;
+	Microsoft::WRL::ComPtr<ID3DBlob> _localLightsWireframePSShader;
 
 	void BuildInputLayout();
 	void BuildRootSignature(int srvAmount);
