@@ -66,6 +66,7 @@ private:
 	//imgui staff
 	void DrawInterface();
 	void DrawObjectsList(int* btnId);
+	void DrawHandSpotlight(int* buttonId);
 	void DrawLightData(int* btnId);
 	void DrawLocalLightData(int* btnId, int lightIndex);
 	void DrawObjectInfo(int* btnId);

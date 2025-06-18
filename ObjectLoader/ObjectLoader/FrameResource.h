@@ -32,13 +32,7 @@ struct LightingPassConstants
     DirectX::XMFLOAT3 EyePosW = { 0.0f, 0.0f, 0.0f };
     float pad1;
     DirectX::XMFLOAT2 RTSize = { 1.0f, 1.0f };
-};
-
-struct DirectionalLightConstants
-{
-    DirectX::XMFLOAT3 mainLightDirection = { 0.0f, 0.0f, 0.0f };
-    int mainLightIsOn = 1;
-    DirectX::XMFLOAT3 gLightColor = { 1.0f, 1.0f, 1.0f };
+    DirectX::XMFLOAT2 mousePosition = { 0.0f, 0.0f };
 };
 
 
@@ -54,6 +48,15 @@ struct Light
     int active = 1;
     float intensity = 10.f;
     float padding[2];
+};
+
+struct DirectionalLightConstants
+{
+    DirectX::XMFLOAT3 mainLightDirection = { 0.0f, 0.0f, 0.0f };
+    int mainLightIsOn = 1;
+    DirectX::XMFLOAT3 gLightColor = { 1.0f, 1.0f, 1.0f };
+    float pad = 0.0f;
+    Light mainSpotlight = Light();
 };
 
 // Stores the resources needed for the CPU to build the command lists

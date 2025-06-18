@@ -314,11 +314,11 @@ void MyApp::UpdateMainPassCBs(const GameTimer& gt)
 	_GBufferCB.DeltaTime = gt.DeltaTime();
 	auto currGBufferCB = mCurrFrameResource->GBufferPassCB.get();
 	currGBufferCB->CopyData(0, _GBufferCB);
-
 	XMStoreFloat4x4(&_lightingCB.InvViewProj, XMMatrixTranspose(invViewProj));
 	_lightingCB.EyePosW = _eyePos;
 	XMStoreFloat4x4(&_lightingCB.ViewProj, XMMatrixTranspose(viewProj));
 	_lightingCB.RTSize = { (float)mClientWidth, (float)mClientHeight };
+	_lightingCB.mousePosition = {(float)mLastMousePos.x, (float)mLastMousePos.y};
 
 	auto currLightingCB = mCurrFrameResource->LightingPassCB.get();
 	currLightingCB->CopyData(0, _lightingCB);
@@ -452,6 +452,35 @@ void MyApp::DrawObjectsList(int* btnId)
 	}
 }
 
+void MyApp::DrawHandSpotlight(int* btnId)
+{
+	auto light = _lightingManager->mainSpotlight();
+
+	bool lightEnabled = light->active == 1;
+	ImGui::PushID((*btnId)++);
+	if (ImGui::Checkbox("Enabled", &lightEnabled))
+	{
+		light->active = (int)lightEnabled;
+	}
+	ImGui::PopID();
+
+	ImGui::PushID((*btnId)++);
+	ImGui::ColorEdit3("Color", &light->color.x);
+	ImGui::PopID();
+
+	ImGui::PushID((*btnId)++);
+	ImGui::DragFloat("Intensity", &light->intensity, 0.1f, 0.0f, 10.0f);
+	ImGui::PopID();
+
+	ImGui::PushID((*btnId)++);
+	ImGui::DragFloat("Radius", &light->radius, 0.1f, 0.0f, 100.0f);
+	ImGui::PopID();
+
+	ImGui::PushID((*btnId)++);
+	ImGui::SliderAngle("Angle", &light->angle, 1.0f, 89.f);
+	ImGui::PopID();
+}
+
 void MyApp::DrawLightData(int* btnId)
 {
 	if (ImGui::CollapsingHeader("Directional Light", ImGuiTreeNodeFlags_DefaultOpen))
@@ -471,6 +500,10 @@ void MyApp::DrawLightData(int* btnId)
 		ImGui::PushID((*btnId)++);
 		ImGui::ColorEdit3("", _lightingManager->mainLightColor());
 		ImGui::PopID();
+	}
+	if (ImGui::CollapsingHeader("Spotlight in hand", ImGuiTreeNodeFlags_DefaultOpen))
+	{
+		DrawHandSpotlight(btnId);
 	}
 	if (ImGui::CollapsingHeader("Local lights"))
 	{
@@ -559,7 +592,7 @@ void MyApp::DrawLocalLightData(int* btnId, int lightIndex)
 			}
 			ImGui::PopID();
 			ImGui::PushID((*btnId)++);
-			if (ImGui::SliderAngle("Angle", &light->LightData.angle, 1.0f, 90.0f))
+			if (ImGui::SliderAngle("Angle", &light->LightData.angle, 1.0f, 89.f))
 			{
 				_lightingManager->UpdateWorld(lightIndex);
 			}

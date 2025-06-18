@@ -48,6 +48,7 @@ void LightingManager::UpdateDirectionalLightCB(FrameResource* currFrameResource)
 	DirectX::XMVECTOR direction = DirectX::XMLoadFloat3(&_mainLightDirection);
 	direction = DirectX::XMVector3Normalize(direction);
 	DirectX::XMStoreFloat3(&_dirLightCB.mainLightDirection, direction);
+	_dirLightCB.mainSpotlight = _handSpotlight;
 
 	auto currDirLightCB = currFrameResource->DirLightCB.get();
 	currDirLightCB->CopyData(0, _dirLightCB);
@@ -300,7 +301,7 @@ void LightingManager::BuildPSO()
 		_localLightsPSShader->GetBufferSize()
 	};
 
-	localLightsPSODesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+	localLightsPSODesc.RasterizerState.CullMode = D3D12_CULL_MODE_BACK;
 	localLightsPSODesc.BlendState.RenderTarget[0].BlendEnable = TRUE;
 	localLightsPSODesc.BlendState.RenderTarget[0].SrcBlend = D3D12_BLEND_ONE;
 	localLightsPSODesc.BlendState.RenderTarget[0].DestBlend = D3D12_BLEND_ONE;
@@ -320,7 +321,6 @@ void LightingManager::BuildPSO()
 		_localLightsWireframePSShader->GetBufferSize()
 	};
 	wireframePSO.RasterizerState.FillMode = D3D12_FILL_MODE_WIREFRAME;
-	wireframePSO.RasterizerState.CullMode = D3D12_CULL_MODE_BACK;
 
 	ThrowIfFailed(UploadManager::device->CreateGraphicsPipelineState(&wireframePSO, IID_PPV_ARGS(&_localLightsWireframePSO)));
 }
