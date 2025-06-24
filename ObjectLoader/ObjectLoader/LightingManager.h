@@ -53,6 +53,11 @@ public:
 		return &_debugEnabled;
 	}
 
+	Light* mainSpotlight()
+	{
+		return &_handSpotlight;
+	}
+
 private:
 	DirectX::XMFLOAT3 _mainLightDirection = { 1.f, -1.f, 0.f };
 	bool _isMainLightOn = true;
@@ -64,6 +69,9 @@ private:
 	std::vector<int> FreeLightIndices;
 	int NextAvailableIndex = 0;
 	const int MaxLights = 512;
+
+	//hand spotlight
+	Light _handSpotlight;
 
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> _rootSignature;
 

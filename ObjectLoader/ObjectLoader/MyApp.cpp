@@ -94,7 +94,7 @@ void MyApp::OnResize()
 	D3DApp::OnResize();
 
 	// The window resized, so update the aspect ratio and recompute the projection matrix.
-	XMMATRIX P = XMMatrixPerspectiveFovLH(0.25f * MathHelper::Pi, AspectRatio(), 1.0f, 1000.0f);
+	XMMATRIX P = XMMatrixPerspectiveFovLH(0.25f * MathHelper::Pi, AspectRatio(), 1.0f, 2000.0f);
 	XMStoreFloat4x4(&mProj, P);
 }
 
@@ -190,11 +190,13 @@ void MyApp::OnMouseDown(WPARAM btnState, int x, int y)
 	mLastMousePos.x = x;
 	mLastMousePos.y = y;
 	SetCapture(mhMainWnd);
+	_mbDown = true;
 }
 
 void MyApp::OnMouseUp(WPARAM btnState, int x, int y)
 {
 	ReleaseCapture();
+	_mbDown = false;
 }
 
 void MyApp::OnMouseMove(WPARAM btnState, int x, int y)
@@ -203,31 +205,41 @@ void MyApp::OnMouseMove(WPARAM btnState, int x, int y)
 	if ((btnState & MK_LBUTTON) != 0 && !io.WantCaptureMouse)
 	{
 		// Make each pixel correspond to a quarter of a degree.
-		float dx = XMConvertToRadians(0.25f * static_cast<float>(x - mLastMousePos.x));
-		float dy = XMConvertToRadians(0.25f * static_cast<float>(y - mLastMousePos.y));
+		float dx = 0.005f * static_cast<float>(x - mLastMousePos.x);
+		float dy = _cameraSpeed * static_cast<float>(y - mLastMousePos.y);
 
-		// Update angles based on input to orbit camera around box.
-		mTheta += dx;
-		mPhi += dy;
+		XMVECTOR position = XMLoadFloat3(&_eyePos);
+		XMVECTOR forward = XMVector3Normalize(XMVectorSet(mView._13, 0, mView._33, 0));
 
-		// Restrict the angle mPhi.
-		mPhi = MathHelper::Clamp(mPhi, 0.1f, MathHelper::Pi - 0.1f);
+		_yaw += dx;
+		position -= dy * forward;
+		XMStoreFloat3(&_eyePos, position);
 	}
 	else if ((btnState & MK_RBUTTON) != 0 && !io.WantCaptureMouse)
 	{
 		// Make each pixel correspond to 0.2 unit in the scene.
-		float dx = 0.05f * static_cast<float>(x - mLastMousePos.x);
-		float dy = 0.05f * static_cast<float>(y - mLastMousePos.y);
+		float dx = 0.005f * static_cast<float>(x - mLastMousePos.x);
+		float dy = 0.005f * static_cast<float>(y - mLastMousePos.y);
 
-		// Update the camera radius based on input.
-		mRadius += dx - dy;
+		_yaw += dx;
+		_pitch += dy;
 
-		// Restrict the radius.
-		mRadius = MathHelper::Clamp(mRadius, 5.0f, 150.0f);
+		// Clamp pitch to avoid flipping (e.g., straight up/down)
+		_pitch = MathHelper::Clamp(_pitch, -XM_PIDIV2 + 0.1f, XM_PIDIV2 - 0.1f);
+
 	}
 
 	mLastMousePos.x = x;
 	mLastMousePos.y = y;
+}
+
+void MyApp::OnMouseWheel(WPARAM btnState)
+{
+	if (_mbDown)
+	{
+		_cameraSpeed += (float)GET_WHEEL_DELTA_WPARAM(btnState)/(float)WHEEL_DELTA * 0.01f;
+		_cameraSpeed = MathHelper::Clamp(_cameraSpeed, 0.f, 25.f);
+	}
 }
 
 void MyApp::OnKeyboardInput(const GameTimer& gt)
@@ -240,18 +252,40 @@ void MyApp::OnKeyboardInput(const GameTimer& gt)
 		lightDir[1] = mView._23;
 		lightDir[2] = mView._33;
 	}
+
+	//moving camera
+	XMVECTOR forward = XMVectorSet(mView._13, mView._23, mView._33, 0);
+	XMVECTOR right = XMVectorSet(mView._11, mView._21, mView._31, 0);
+	XMVECTOR direction = XMVectorZero();
+
+	if (_mbDown && GetAsyncKeyState('W') & 0x8000)
+	{
+		direction += forward * _cameraSpeed;
+	}
+	if (_mbDown && GetAsyncKeyState('A') & 0x8000)
+	{
+		direction -= right * _cameraSpeed;
+	}
+	if (_mbDown && GetAsyncKeyState('S') & 0x8000)
+	{
+		direction -= forward * _cameraSpeed;
+	}
+	if (_mbDown && GetAsyncKeyState('D') & 0x8000)
+	{
+		direction += right * _cameraSpeed;
+	}
+
+	XMVECTOR position = XMLoadFloat3(&_eyePos);
+	XMStoreFloat3(&_eyePos, position + direction);
 }
 
 void MyApp::UpdateCamera(const GameTimer& gt)
 {
-	// Convert Spherical to Cartesian coordinates.
-	mEyePos.x = mRadius * sinf(mPhi) * cosf(mTheta);
-	mEyePos.z = mRadius * sinf(mPhi) * sinf(mTheta);
-	mEyePos.y = mRadius * cosf(mPhi);
+	XMVECTOR forward = XMVectorSet(cosf(_pitch) * cosf(_yaw), sinf(_pitch), cosf(_pitch) * sinf(_yaw), 1);
 
 	// Build the view matrix.
-	XMVECTOR pos = XMVectorSet(mEyePos.x, mEyePos.y, mEyePos.z, 1.0f);
-	XMVECTOR target = XMVectorZero();
+	XMVECTOR pos = XMLoadFloat3(&_eyePos);
+	XMVECTOR target = pos + forward;
 	XMVECTOR up = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
 
 	XMMATRIX view = XMMatrixLookAtLH(pos, target, up);
@@ -280,11 +314,11 @@ void MyApp::UpdateMainPassCBs(const GameTimer& gt)
 	_GBufferCB.DeltaTime = gt.DeltaTime();
 	auto currGBufferCB = mCurrFrameResource->GBufferPassCB.get();
 	currGBufferCB->CopyData(0, _GBufferCB);
-
 	XMStoreFloat4x4(&_lightingCB.InvViewProj, XMMatrixTranspose(invViewProj));
-	_lightingCB.EyePosW = mEyePos;
+	_lightingCB.EyePosW = _eyePos;
 	XMStoreFloat4x4(&_lightingCB.ViewProj, XMMatrixTranspose(viewProj));
 	_lightingCB.RTSize = { (float)mClientWidth, (float)mClientHeight };
+	_lightingCB.mousePosition = {(float)mLastMousePos.x, (float)mLastMousePos.y};
 
 	auto currLightingCB = mCurrFrameResource->LightingPassCB.get();
 	currLightingCB->CopyData(0, _lightingCB);
@@ -364,6 +398,8 @@ void MyApp::DrawInterface()
 		DrawObjectInfo(buttonId);
 	}
 	delete buttonId;
+
+	DrawCameraSpeed();
 }
 
 void MyApp::DrawObjectsList(int* btnId)
@@ -416,6 +452,35 @@ void MyApp::DrawObjectsList(int* btnId)
 	}
 }
 
+void MyApp::DrawHandSpotlight(int* btnId)
+{
+	auto light = _lightingManager->mainSpotlight();
+
+	bool lightEnabled = light->active == 1;
+	ImGui::PushID((*btnId)++);
+	if (ImGui::Checkbox("Enabled", &lightEnabled))
+	{
+		light->active = (int)lightEnabled;
+	}
+	ImGui::PopID();
+
+	ImGui::PushID((*btnId)++);
+	ImGui::ColorEdit3("Color", &light->color.x);
+	ImGui::PopID();
+
+	ImGui::PushID((*btnId)++);
+	ImGui::DragFloat("Intensity", &light->intensity, 0.1f, 0.0f, 10.0f);
+	ImGui::PopID();
+
+	ImGui::PushID((*btnId)++);
+	ImGui::DragFloat("Radius", &light->radius, 0.1f, 0.0f, 100.0f);
+	ImGui::PopID();
+
+	ImGui::PushID((*btnId)++);
+	ImGui::SliderAngle("Angle", &light->angle, 1.0f, 89.f);
+	ImGui::PopID();
+}
+
 void MyApp::DrawLightData(int* btnId)
 {
 	if (ImGui::CollapsingHeader("Directional Light", ImGuiTreeNodeFlags_DefaultOpen))
@@ -435,6 +500,10 @@ void MyApp::DrawLightData(int* btnId)
 		ImGui::PushID((*btnId)++);
 		ImGui::ColorEdit3("", _lightingManager->mainLightColor());
 		ImGui::PopID();
+	}
+	if (ImGui::CollapsingHeader("Spotlight in hand", ImGuiTreeNodeFlags_DefaultOpen))
+	{
+		DrawHandSpotlight(btnId);
 	}
 	if (ImGui::CollapsingHeader("Local lights"))
 	{
@@ -509,7 +578,7 @@ void MyApp::DrawLocalLightData(int* btnId, int lightIndex)
 		}
 		ImGui::PopID();
 		ImGui::PushID((*btnId)++);
-		if (ImGui::DragFloat("Radius", &light->LightData.radius, 0.1f, 0.0f, 10.0f))
+		if (ImGui::DragFloat("Radius", &light->LightData.radius, 0.1f, 0.0f, 30.0f))
 		{
 			_lightingManager->UpdateWorld(lightIndex);
 		}
@@ -523,7 +592,7 @@ void MyApp::DrawLocalLightData(int* btnId, int lightIndex)
 			}
 			ImGui::PopID();
 			ImGui::PushID((*btnId)++);
-			if (ImGui::SliderAngle("Angle", &light->LightData.angle, 1.0f, 90.0f))
+			if (ImGui::SliderAngle("Angle", &light->LightData.angle, 1.0f, 89.f))
 			{
 				_lightingManager->UpdateWorld(lightIndex);
 			}
@@ -660,6 +729,15 @@ void MyApp::DrawTransformInput(const std::string& label, int btnId, int transfor
 		object->NumFramesDirty = gNumFrameResources;
 	}
 	ImGui::PopID();
+}
+
+void MyApp::DrawCameraSpeed()
+{
+	ImGui::SetNextWindowPos({ mClientWidth / 2.f, 0.f }, ImGuiCond_Once, { 0.f, 0.f });
+
+	ImGui::Begin("Camera info");
+	ImGui::Text(("Speed: " + std::to_string(_cameraSpeed)).c_str());
+	ImGui::End();
 }
 
 void MyApp::ClearData()
