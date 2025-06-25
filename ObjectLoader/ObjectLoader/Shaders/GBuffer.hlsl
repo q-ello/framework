@@ -93,7 +93,7 @@ float TessEdge(float3 p0, float3 p1, float2 s0, float2 s1)
 {
     //distance from camera tess factor
     const float d0 = 10.0f;
-    const float d1 = 50.0f;
+    const float d1 = 30.0f;
     const float distWeight = 0.3f;
     
     float3 mid = 0.5f * (p0 + p1);
@@ -111,19 +111,20 @@ float TessEdge(float3 p0, float3 p1, float2 s0, float2 s1)
     
     if (screenTess <= 1.f)
     {
-        return 1;
+        return 1.f;
     }
     
-    float maxTess = 16.0f;
+    float maxTess = 64.0f;
     
     screenTess = clamp(screenTess, 1.0f, maxTess);
-    screenTess *= screenWeight;
+    //screenTess *= screenWeight;
     
-    float tess = maxTess * distTess + screenTess;
+    //I just didn't like that
+    //float tess = maxTess * distTess + screenTess;
     
-    tess = maxTess * distTess;
+    //return floor(clamp(tess, 1.0f, maxTess));
     
-    return pow(2, floor(log2(clamp(tess, 1.0f, maxTess))));
+    return screenTess;
 }
 
 PatchTess ConstantHS(InputPatch<VertexIn, 3> patch, uint patchID : SV_PrimitiveID)
@@ -182,7 +183,7 @@ PatchTess ConstantHS(InputPatch<VertexIn, 3> patch, uint patchID : SV_PrimitiveI
 
 [domain("tri")]
 [outputtopology("triangle_cw")]
-[partitioning("fractional_even")]
+[partitioning("integer")]
 [outputcontrolpoints(3)]
 [patchconstantfunc("ConstantHS")]
 [maxtessfactor(64.0f)]
