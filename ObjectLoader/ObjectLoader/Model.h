@@ -12,6 +12,7 @@ public:
 
 	std::vector<Vertex> vertices() const;
 	std::vector<std::int32_t> indices() const;
+	bool isTesselated = false;
 private:
 	std::vector<Vertex> _vertices;
 	std::vector<std::int32_t> _indices;

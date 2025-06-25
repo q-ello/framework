@@ -11,7 +11,7 @@ class TextureManager
 public:
 	static std::unordered_map<std::wstring, std::unique_ptr<Texture>>& textures();
 
-	static TextureHandle LoadTexture(WCHAR* filename = L"..\\..\\Textures\\tile.dds", int prevIndex = 0);
+	static TextureHandle LoadTexture(WCHAR* filename = L"..\\..\\objects data\\Textures\\tile.dds", int prevIndex = 0);
 	static void deleteTexture(std::wstring name);
 
 	static void Init(ID3D12Device* device);

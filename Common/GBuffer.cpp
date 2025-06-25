@@ -153,12 +153,16 @@ void GBuffer::ClearInfo(const FLOAT* color)
 
 	_cmdList->ClearDepthStencilView(DepthStencilView(), D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
 
+	auto prevState = _info[0].prevState;
+
+	ChangeRTVsState(D3D12_RESOURCE_STATE_RENDER_TARGET);
 	for (int i = 0; i < (int)GBufferInfo::Count; i++)
 	{
 		if (i == (int)GBufferInfo::Depth)
 			continue;
 		_cmdList->ClearRenderTargetView(_info[i].RtvHandle, color, 0, nullptr);
 	}
+	ChangeRTVsState(prevState);
 }
 
 void GBuffer::ChangeRTVsState(D3D12_RESOURCE_STATES stateAfter)
@@ -171,6 +175,10 @@ void GBuffer::ChangeRTVsState(D3D12_RESOURCE_STATES stateAfter)
 
 		barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(_info[i].Resource.Get(), _info[i].prevState, stateAfter));
 		_info[i].prevState = stateAfter;
+	}
+	if (barriers.size() == 0)
+	{
+		return;
 	}
 	_cmdList->ResourceBarrier((UINT)barriers.size(), barriers.data());
 }

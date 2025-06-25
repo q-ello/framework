@@ -7,6 +7,8 @@
 #include "imgui/imgui.h"
 #include "imgui/backends/imgui_impl_dx12.h"
 #include "imgui/backends/imgui_impl_win32.h"
+#include "OpaqueObjectManager.h"
+#include "UnlitObjectManager.h"
 
 #pragma comment(lib, "ComCtl32.lib")
 
@@ -14,6 +16,7 @@ WNDPROC g_OriginalPanelWndProc;
 
 MyApp::MyApp(HINSTANCE hInstance)
 	: D3DApp(hInstance)
+	, mLastMousePos {0, 0}
 {
 }
 
@@ -43,7 +46,8 @@ bool MyApp::Initialize()
 	BuildShadersAndInputLayout();
 	GeometryManager::BuildNecessaryGeometry();
 	_selectedType = PSO::Opaque;
-	_selectedObject = _objectManagers[PSO::Opaque]->addRenderItem(md3dDevice.Get(), GeometryManager::BuildModelGeometry());
+	ModelData data = GeometryManager::BuildModelGeometry();
+	_selectedObject = _objectManagers[PSO::Opaque]->addRenderItem(md3dDevice.Get(), data.croppedName, data.isTesselated);
 	_objectManagers[PSO::Unlit]->addRenderItem(md3dDevice.Get(), L"grid");
 	BuildFrameResources();
 	BuildPSOs();
@@ -113,8 +117,11 @@ void MyApp::Update(const GameTimer& gt)
 	{
 		HANDLE eventHandle = CreateEventEx(nullptr, false, false, EVENT_ALL_ACCESS);
 		ThrowIfFailed(mFence->SetEventOnCompletion(mCurrFrameResource->Fence, eventHandle));
-		WaitForSingleObject(eventHandle, INFINITE);
-		CloseHandle(eventHandle);
+		if (eventHandle)
+		{
+			WaitForSingleObject(eventHandle, INFINITE);
+			CloseHandle(eventHandle);
+		}
 	}
 
 	UpdateObjectCBs(gt);
@@ -144,9 +151,19 @@ void MyApp::Draw(const GameTimer& gt)
 	mCommandList->RSSetViewports(1, &mScreenViewport);
 	mCommandList->RSSetScissorRects(1, &mScissorRect);
 
-	GBufferPass();
+	// Indicate a state transition on the resource usage.
+	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(CurrentBackBuffer(),
+		D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET));
 
-	LightingPass();
+	if (_isWireframe)
+	{
+		WireframePass();
+	}
+	else
+	{
+		GBufferPass();
+		LightingPass();
+	}
 
 	//drawing grid
 	_gBuffer->ChangeDSVState(D3D12_RESOURCE_STATE_DEPTH_WRITE);
@@ -160,8 +177,7 @@ void MyApp::Draw(const GameTimer& gt)
 	//// Rendering
 	ImGui::Render();
 	ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), mCommandList.Get());
-
-	// Indicate a state transition on the resource usage.
+	// Swap the back and front buffers
 	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(CurrentBackBuffer(),
 		D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
 
@@ -172,7 +188,6 @@ void MyApp::Draw(const GameTimer& gt)
 	ID3D12CommandList* cmdsLists[] = { mCommandList.Get() };
 	mCommandQueue->ExecuteCommandLists(_countof(cmdsLists), cmdsLists);
 
-	// Swap the back and front buffers
 	ThrowIfFailed(mSwapChain->Present(0, 0));
 	mCurrBackBuffer = (mCurrBackBuffer + 1) % SwapChainBufferCount;
 
@@ -292,7 +307,6 @@ void MyApp::UpdateCamera(const GameTimer& gt)
 	XMStoreFloat4x4(&mView, view);
 }
 
-
 void MyApp::UpdateObjectCBs(const GameTimer& gt)
 {
 	for (int i = 0; i < (int)PSO::Count; i++)
@@ -304,6 +318,7 @@ void MyApp::UpdateObjectCBs(const GameTimer& gt)
 
 void MyApp::UpdateMainPassCBs(const GameTimer& gt)
 {
+	//update pass for gbuffer
 	XMMATRIX view = XMLoadFloat4x4(&mView);
 	XMMATRIX proj = XMLoadFloat4x4(&mProj);
 
@@ -312,14 +327,17 @@ void MyApp::UpdateMainPassCBs(const GameTimer& gt)
 
 	XMStoreFloat4x4(&_GBufferCB.ViewProj, XMMatrixTranspose(viewProj));
 	_GBufferCB.DeltaTime = gt.DeltaTime();
+	_GBufferCB.EyePosW = _eyePos;
+	_GBufferCB.ScreenSize = { (float)mClientWidth, (float)mClientHeight };
 	auto currGBufferCB = mCurrFrameResource->GBufferPassCB.get();
 	currGBufferCB->CopyData(0, _GBufferCB);
+	
+	//update pass for lighting
 	XMStoreFloat4x4(&_lightingCB.InvViewProj, XMMatrixTranspose(invViewProj));
 	_lightingCB.EyePosW = _eyePos;
 	XMStoreFloat4x4(&_lightingCB.ViewProj, XMMatrixTranspose(viewProj));
 	_lightingCB.RTSize = { (float)mClientWidth, (float)mClientHeight };
 	_lightingCB.mousePosition = {(float)mLastMousePos.x, (float)mLastMousePos.y};
-
 	auto currLightingCB = mCurrFrameResource->LightingPassCB.get();
 	currLightingCB->CopyData(0, _lightingCB);
 
@@ -387,6 +405,12 @@ void MyApp::DrawInterface()
 		ImGui::EndTabItem();
 	}
 
+	if (ImGui::BeginTabItem("Other"))
+	{
+		ImGui::Checkbox("Wireframe", &_isWireframe);
+		ImGui::EndTabItem();
+	}
+
 	ImGui::EndTabBar();
 	ImGui::End();
 
@@ -412,7 +436,8 @@ void MyApp::DrawObjectsList(int* btnId)
 			if (BasicUtil::TryToOpenFile(L"3D Object", L"*.obj;*.fbx", pszFilePath))
 			{
 				_selectedType = PSO::Opaque;
-				_selectedObject = _objectManagers[PSO::Opaque]->addRenderItem(md3dDevice.Get(), GeometryManager::BuildModelGeometry(pszFilePath));
+				ModelData data = GeometryManager::BuildModelGeometry(pszFilePath);
+				_selectedObject = _objectManagers[PSO::Opaque]->addRenderItem(md3dDevice.Get(), data.croppedName, data.isTesselated);
 				CoTaskMemFree(pszFilePath);
 			}
 		}
@@ -607,7 +632,7 @@ void MyApp::DrawObjectInfo(int* btnId)
 	ImGui::SetNextWindowPos({ static_cast<float>(mClientWidth) - 300.f, 50.f }, ImGuiCond_Once, { 0.f, 0.f });
 	ImGui::SetNextWindowSize({ 250.f, 350.f }, ImGuiCond_Once);
 
-	RenderItem* selectedObject = _objectManagers[_selectedType]->object(_selectedObject);
+	EditableRenderItem* selectedObject = _objectManagers[_selectedType]->object(_selectedObject);
 
 	ImGui::Begin((selectedObject->Name + " Info").c_str());
 	if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen))
@@ -624,7 +649,7 @@ void MyApp::DrawObjectInfo(int* btnId)
 	ImGui::End();
 }
 
-void MyApp::DrawObjectTransform(RenderItem* selectedObject, int* btnId)
+void MyApp::DrawObjectTransform(EditableRenderItem* selectedObject, int* btnId)
 {
 	DrawTransformInput("Location: ", (*btnId)++, 0, selectedObject, 0.1f);
 	DrawTransformInput("Rotation: ", (*btnId)++, 1, selectedObject, 1.f);
@@ -671,7 +696,7 @@ void MyApp::DrawObjectTransform(RenderItem* selectedObject, int* btnId)
 	ImGui::PopID();
 }
 
-void MyApp::DrawObjectTextures(RenderItem* selectedObject, int* btnId)
+void MyApp::DrawObjectTextures(EditableRenderItem* selectedObject, int* btnId)
 {
 	//diffuse button
 	DrawTextureButton("Diffuse", btnId, selectedObject->diffuseHandle);
@@ -679,6 +704,24 @@ void MyApp::DrawObjectTextures(RenderItem* selectedObject, int* btnId)
 	{
 		selectedObject->NumFramesDirty = gNumFrameResources;
 	}
+	if (selectedObject->PrimitiveType == D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST)
+	{
+		return;
+	}
+
+	if (DrawTextureButton("Displacement", btnId, selectedObject->displacementHandle))
+	{
+		selectedObject->NumFramesDirty = gNumFrameResources;
+	}
+	ImGui::Text("Displacement scale");
+	ImGui::SameLine();
+	ImGui::PushItemWidth(50);
+	ImGui::PushID((*btnId)++);
+	if (ImGui::DragFloat("", &selectedObject->dispScale, 0.5f, 0.0f, 25.f))
+	{
+		selectedObject->NumFramesDirty = gNumFrameResources;
+	}
+	ImGui::PopID();
 }
 
 bool MyApp::DrawTextureButton(const std::string& label, int* btnId, TextureHandle& texHandle)
@@ -718,7 +761,7 @@ bool MyApp::DrawTextureButton(const std::string& label, int* btnId, TextureHandl
 	return false;
 }
 
-void MyApp::DrawTransformInput(const std::string& label, int btnId, int transformIndex, RenderItem* object, float speed)
+void MyApp::DrawTransformInput(const std::string& label, int btnId, int transformIndex, EditableRenderItem* object, float speed)
 {
 	ImGui::Text(label.c_str());
 	ImGui::SameLine();
@@ -742,12 +785,21 @@ void MyApp::DrawCameraSpeed()
 
 void MyApp::ClearData()
 {
-
 	ThrowIfFailed(mDirectCmdListAlloc->Reset());
 	ThrowIfFailed(mCommandList->Reset(mDirectCmdListAlloc.Get(), nullptr));
+	CD3DX12_RESOURCE_BARRIER barrier = CD3DX12_RESOURCE_BARRIER::Transition(
+		CurrentBackBuffer(),
+		D3D12_RESOURCE_STATE_PRESENT,
+		D3D12_RESOURCE_STATE_RENDER_TARGET);
+	mCommandList->ResourceBarrier(1, &barrier);
 
 	mCommandList->ClearRenderTargetView(CurrentBackBufferView(), Colors::LightSteelBlue, 0, nullptr);
 	_gBuffer->ClearInfo(Colors::Transparent);
+
+	barrier = CD3DX12_RESOURCE_BARRIER::Transition(
+		CurrentBackBuffer(),
+		D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
+	mCommandList->ResourceBarrier(1, &barrier);
 
 	ThrowIfFailed(mCommandList->Close());
 	ID3D12CommandList* cmdsLists[] = { mCommandList.Get() };
@@ -758,9 +810,9 @@ void MyApp::ClearData()
 void MyApp::InitManagers()
 {
 	TextureManager::Init(md3dDevice.Get());
-	_objectManagers[PSO::Opaque] = std::make_unique<OpaqueObjectManager>();
+	_objectManagers[PSO::Opaque] = std::make_unique<OpaqueObjectManager>(md3dDevice.Get());
 	_objectManagers[PSO::Opaque]->Init();
-	_objectManagers[PSO::Unlit] = std::make_unique<UnlitObjectManager>();
+	_objectManagers[PSO::Unlit] = std::make_unique<UnlitObjectManager>(md3dDevice.Get());
 	_objectManagers[PSO::Unlit]->Init();
 	
 	_lightingManager = std::make_unique<LightingManager>();
@@ -776,14 +828,11 @@ void MyApp::GBufferPass()
 	_gBuffer->ClearInfo(Colors::Transparent);
 	mCommandList->OMSetRenderTargets(_gBuffer->InfoCount(), _gBuffer->RTVs().data(),
 		false, &_gBuffer->DepthStencilView());
-	_objectManagers[PSO::Opaque]->Draw(mCommandList.Get(), mCurrFrameResource);
+	_objectManagers[PSO::Opaque]->Draw(mCommandList.Get(), mCurrFrameResource, _isWireframe);
 }
 
 void MyApp::LightingPass()
 {
-	// Indicate a state transition on the resource usage.
-	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(CurrentBackBuffer(),
-		D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET));
 
 	_gBuffer->ChangeRTVsState(D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 	_gBuffer->ChangeDSVState(D3D12_RESOURCE_STATE_DEPTH_READ);
@@ -807,8 +856,17 @@ void MyApp::LightingPass()
 			_lightingManager->DrawDebug(mCommandList.Get(), mCurrFrameResource);
 		}
 	}
+}
 
-	
+void MyApp::WireframePass()
+{
+	_gBuffer->ChangeDSVState(D3D12_RESOURCE_STATE_DEPTH_WRITE);
+	_gBuffer->ClearInfo(Colors::Transparent);
+
+	mCommandList->ClearRenderTargetView(CurrentBackBufferView(), Colors::LightSteelBlue, 0, nullptr);
+	mCommandList->OMSetRenderTargets(1, &CurrentBackBufferView(), true, &_gBuffer->DepthStencilView());
+
+	_objectManagers[PSO::Opaque]->Draw(mCommandList.Get(), mCurrFrameResource, _isWireframe);
 }
 
 //some wndproc stuff

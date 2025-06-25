@@ -75,6 +75,8 @@ Model::Model(WCHAR* filename)
 			_indices.push_back(mesh->mFaces[i].mIndices[2] + vertexOffset);
 		}
 	}
+
+	isTesselated = _vertices.size() < 10000;
 }
 
 Model::~Model()

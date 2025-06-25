@@ -22,9 +22,6 @@ struct RenderItem
 	std::string Name;
 	int nameCount = 0;
 
-	DirectX::XMFLOAT3 transform[3] = { {0., 0., 0.}, {0., 0., 0.}, {1., 1., 1.} };
-	bool lockedScale = true;
-
 	int NumFramesDirty = gNumFrameResources;
 
 	MeshGeometry* Geo = nullptr;
@@ -33,13 +30,16 @@ struct RenderItem
 	D3D12_PRIMITIVE_TOPOLOGY PrimitiveType = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 
 	UINT IndexCount = 0;
-
-	TextureHandle diffuseHandle;
-	TextureHandle normalHandle;
 };
 
-struct OpaqueRenderItem : public RenderItem
+struct EditableRenderItem : public RenderItem
 {
+	DirectX::XMFLOAT3 transform[3] = { {0., 0., 0.}, {0., 0., 0.}, {1., 1., 1.} };
+	bool lockedScale = true;
+	TextureHandle diffuseHandle;
+	TextureHandle normalHandle;
+	TextureHandle displacementHandle;
+	float dispScale = 1.0f;
 };
 
 struct UnlitRenderItem : public RenderItem

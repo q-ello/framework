@@ -14,19 +14,23 @@ struct OpaqueObjectConstants : public UnlitObjectConstants
 {
     DirectX::XMFLOAT4X4 WorldInvTranspose = MathHelper::Identity4x4();
     DirectX::XMUINT2 normalMapSize = { 0, 0 };
-    bool useNormalMap = false;
-    bool padding[3] = { };
+    uint32_t useNormalMap = 0;
+    uint32_t useDisplacementMap = 0;
+    float displacementScale = 1.0f;
+    float pad[3];
 };
 
 struct GBufferPassConstants
 {
     DirectX::XMFLOAT4X4 ViewProj = MathHelper::Identity4x4();
+    DirectX::XMFLOAT3 EyePosW = { 0.0f, 0.0f, 0.0f };
     float DeltaTime = 0.0f;
+    DirectX::XMFLOAT2 ScreenSize = { 0.0f, 0.0f };
+    float pad[2];
 };
 
 struct LightingPassConstants
 {
-
     DirectX::XMFLOAT4X4 InvViewProj = MathHelper::Identity4x4();
     DirectX::XMFLOAT4X4 ViewProj = MathHelper::Identity4x4();
     DirectX::XMFLOAT3 EyePosW = { 0.0f, 0.0f, 0.0f };
@@ -38,6 +42,9 @@ struct LightingPassConstants
 
 struct Light
 {
+    Light(bool enabled = true)
+        : active{ enabled ? 1 : 0 }
+    {}
     DirectX::XMMATRIX world = DirectX::XMMatrixIdentity();
     DirectX::XMFLOAT3 position = { 0.0f, 0.0f, 0.0f };
     int type = 0;

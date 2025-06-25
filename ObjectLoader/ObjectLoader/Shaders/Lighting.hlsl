@@ -71,15 +71,19 @@ float3 ComputeWorldPos(float3 texcoord)
 }
 
 float4 DirLightingPS(VertexOut pin) : SV_Target
-{
+{   
+    float3 coords = pin.PosH.xyz;
+    
+    float4 albedo = gDiffuse.Load(coords);
+    if (albedo.a == 0)
+    {
+        discard;
+    }
     if (!mainLightIsOn && mainSpotlight.active == 0)
     {
         return float4(0, 0, 0, 1);
     }
     
-    float3 coords = pin.PosH.xyz;
-    
-    float4 albedo = gDiffuse.Load(coords);
     float3 normal = gNormal.Load(coords).xyz;
     
     float3 finalColor = albedo.rgb * mainLightColor * dot(normal, -mainLightDirection);

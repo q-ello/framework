@@ -71,7 +71,7 @@ private:
 	const int MaxLights = 512;
 
 	//hand spotlight
-	Light _handSpotlight;
+	Light _handSpotlight = Light(false);
 
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> _rootSignature;
 

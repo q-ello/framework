@@ -70,10 +70,10 @@ private:
 	void DrawLightData(int* btnId);
 	void DrawLocalLightData(int* btnId, int lightIndex);
 	void DrawObjectInfo(int* btnId);
-	void DrawObjectTransform(RenderItem* selectedObject, int* btnId);
-	void DrawObjectTextures(RenderItem* selectedObject, int* btnId);
+	void DrawObjectTransform(EditableRenderItem* selectedObject, int* btnId);
+	void DrawObjectTextures(EditableRenderItem* selectedObject, int* btnId);
 	bool DrawTextureButton(const std::string& label, int* btnId, TextureHandle& texHandle);
-	void DrawTransformInput(const std::string& label, int btnId, int transformIndex, RenderItem* object, float speed);
+	void DrawTransformInput(const std::string& label, int btnId, int transformIndex, EditableRenderItem* object, float speed);
 	void DrawCameraSpeed();
 
 	void InitManagers();
@@ -81,6 +81,7 @@ private:
 	//drawing
 	void GBufferPass();
 	void LightingPass();
+	void WireframePass();
 
 	FrameResource* mCurrFrameResource = nullptr;
 	int mCurrFrameResourceIndex = 0;
@@ -103,6 +104,7 @@ private:
 	XMFLOAT3 _eyePos = { 0.0f, 0.0f, -5.0f };
 	float _cameraSpeed = 0.01f;
 	float _mbDown = false;
+	bool _isWireframe = false;
 
 	POINT mLastMousePos;
 

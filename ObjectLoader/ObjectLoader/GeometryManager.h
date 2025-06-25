@@ -8,12 +8,19 @@
 #include "BasicUtil.h"
 #include "Model.h"
 
+struct ModelData
+{
+	std::wstring croppedName = L"";
+	bool isTesselated = false;
+};
+
 class GeometryManager
 {
 public:
 	static std::unordered_map<std::wstring, std::unique_ptr<MeshGeometry>>& geometries();
+	static std::unordered_map<std::wstring, bool>& tesselatable();
 
 	static void BuildNecessaryGeometry();
-	static std::wstring GeometryManager::BuildModelGeometry(WCHAR* filename = L"obj\\african_head.obj");
+	static ModelData GeometryManager::BuildModelGeometry(WCHAR* filename = L"obj\\african_head.obj");
 	static void UnloadModel(const std::wstring& modelName);
 };

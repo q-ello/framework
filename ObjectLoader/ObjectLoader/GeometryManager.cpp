@@ -6,9 +6,16 @@ std::unordered_map<std::wstring, std::unique_ptr<MeshGeometry>>& GeometryManager
 	return geometries;
 }
 
+std::unordered_map<std::wstring, bool>& GeometryManager::tesselatable()
+{
+	static std::unordered_map<std::wstring, bool> geometries;
+	return geometries;
+}
+
 void GeometryManager::BuildNecessaryGeometry()
 {
 	UploadManager::Reset();
+
 	GeometryGenerator geoGen;
 	GeometryGenerator::MeshData grid = geoGen.CreateGrid(1000.f, 1000.f, 10.f);
 	GeometryGenerator::MeshData box = geoGen.CreateBox(1.0f, 1.0f, 1.0f, 0);
@@ -70,14 +77,17 @@ void GeometryManager::BuildNecessaryGeometry()
 	geometries()[geo->Name] = std::move(geo);
 }
 
-std::wstring GeometryManager::BuildModelGeometry(WCHAR* filename)
+ModelData GeometryManager::BuildModelGeometry(WCHAR* filename)
 {
 	std::wstring croppedName = BasicUtil::getCroppedName(filename);
 
 	//check if geometry already exists
 	if (geometries().find(croppedName) != geometries().end())
 	{
-		return croppedName;
+		ModelData data;
+		data.croppedName = croppedName;
+		data.isTesselated = tesselatable()[croppedName];
+		return data;
 	}
 
 	//load new model
@@ -87,7 +97,7 @@ std::wstring GeometryManager::BuildModelGeometry(WCHAR* filename)
 	if (model->vertices().empty() || model->indices().empty())
 	{
 		OutputDebugString(L"[ERROR] Model data is empty! Aborting geometry creation.\n");
-		return L"";
+		return ModelData();
 	}
 
 	// Pack the indices of all the meshes into one index buffer.
@@ -128,7 +138,11 @@ std::wstring GeometryManager::BuildModelGeometry(WCHAR* filename)
 
 	geometries()[geo->Name] = std::move(geo);
 
-	return croppedName;
+	ModelData data;
+	data.croppedName = croppedName;
+	data.isTesselated = model->isTesselated;
+
+	return data;
 }
 
 void GeometryManager::UnloadModel(const std::wstring& modelName)

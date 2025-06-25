@@ -148,6 +148,8 @@
     <ClInclude Include="Controls.h" />
     <ClInclude Include="GeometryManager.h" />
     <ClInclude Include="LightingManager.h" />
+    <ClInclude Include="OpaqueObjectManager.h" />
+    <ClInclude Include="UnlitObjectManager.h" />
     <ClInclude Include="UploadManager.h" />
     <ClInclude Include="FrameResource.h" />
     <ClInclude Include="DescriptorHeapAllocator.h" />
@@ -191,7 +193,9 @@
     <ClCompile Include="MyApp.cpp" />
     <ClCompile Include="ObjectLoader.cpp" />
     <ClCompile Include="ObjectManager.cpp" />
+    <ClCompile Include="OpaqueObjectManager.cpp" />
     <ClCompile Include="TextureManager.cpp" />
+    <ClCompile Include="UnlitObjectManager.cpp" />
     <ClCompile Include="UploadManager.cpp" />
   </ItemGroup>
   <ItemGroup>
