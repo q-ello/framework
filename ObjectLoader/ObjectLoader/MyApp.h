@@ -15,6 +15,7 @@
 #include "TextureManager.h"
 #include "GeometryManager.h"
 #include "LightingManager.h"
+#include "ModelManager.h"
 
 #define DELETE_ID 333
 
@@ -87,6 +88,7 @@ private:
 	int mCurrFrameResourceIndex = 0;
 
 	ComPtr<ID3D12DescriptorHeap> _imGuiDescriptorHeap = nullptr;
+	ModelManager _modelManager = ModelManager();
 
 	std::unordered_map<std::string, ComPtr<ID3DBlob>> mShaders;
 

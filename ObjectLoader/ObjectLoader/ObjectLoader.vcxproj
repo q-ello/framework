@@ -145,9 +145,9 @@
     <ClInclude Include="..\..\Common\MathHelper.h" />
     <ClInclude Include="..\..\Common\UploadBuffer.h" />
     <ClInclude Include="BasicUtil.h" />
-    <ClInclude Include="Controls.h" />
     <ClInclude Include="GeometryManager.h" />
     <ClInclude Include="LightingManager.h" />
+    <ClInclude Include="ModelManager.h" />
     <ClInclude Include="OpaqueObjectManager.h" />
     <ClInclude Include="UnlitObjectManager.h" />
     <ClInclude Include="UploadManager.h" />
@@ -190,6 +190,7 @@
     <ClCompile Include="imgui\misc\fonts\binary_to_compressed_c.cpp" />
     <ClCompile Include="LightingManager.cpp" />
     <ClCompile Include="Model.cpp" />
+    <ClCompile Include="ModelManager.cpp" />
     <ClCompile Include="MyApp.cpp" />
     <ClCompile Include="ObjectLoader.cpp" />
     <ClCompile Include="ObjectManager.cpp" />

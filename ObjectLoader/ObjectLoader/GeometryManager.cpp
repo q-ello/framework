@@ -1,15 +1,15 @@
 #include "GeometryManager.h"
 
-std::unordered_map<std::wstring, std::unique_ptr<MeshGeometry>>& GeometryManager::geometries()
+std::unordered_map<std::string, std::unique_ptr<MeshGeometry>>& GeometryManager::geometries()
 {
-	static std::unordered_map<std::wstring, std::unique_ptr<MeshGeometry>> geometries;
+	static std::unordered_map<std::string, std::unique_ptr<MeshGeometry>> geometries;
 	return geometries;
 }
 
-std::unordered_map<std::wstring, bool>& GeometryManager::tesselatable()
+std::unordered_map<std::string, bool>& GeometryManager::tesselatable()
 {
-	static std::unordered_map<std::wstring, bool> geometries;
-	return geometries;
+	static std::unordered_map<std::string, bool> tesselatable;
+	return tesselatable;
 }
 
 void GeometryManager::BuildNecessaryGeometry()
@@ -52,7 +52,7 @@ void GeometryManager::BuildNecessaryGeometry()
 	const UINT ibByteSize = (UINT)indices.size() * sizeof(std::uint16_t);
 
 	auto geo = std::make_unique<MeshGeometry>();
-	geo->Name = L"shapeGeo";
+	geo->Name = "shapeGeo";
 
 	ThrowIfFailed(D3DCreateBlob(vbByteSize, &geo->VertexBufferCPU));
 	CopyMemory(geo->VertexBufferCPU->GetBufferPointer(), vertices.data(), vbByteSize);
@@ -71,27 +71,22 @@ void GeometryManager::BuildNecessaryGeometry()
 	geo->IndexFormat = DXGI_FORMAT_R16_UINT;
 	geo->IndexBufferByteSize = ibByteSize;
 
-	geo->DrawArgs[L"grid"] = gridSubmesh;
-	geo->DrawArgs[L"box"] = boxSubmesh;
+	geo->DrawArgs["grid"] = gridSubmesh;
+	geo->DrawArgs["box"] = boxSubmesh;
 
 	geometries()[geo->Name] = std::move(geo);
 }
 
-ModelData GeometryManager::BuildModelGeometry(WCHAR* filename)
+ModelData GeometryManager::BuildModelGeometry(Model* model)
 {
-	std::wstring croppedName = BasicUtil::getCroppedName(filename);
-
 	//check if geometry already exists
-	if (geometries().find(croppedName) != geometries().end())
+	if (geometries().find(model.name) != geometries().end())
 	{
 		ModelData data;
-		data.croppedName = croppedName;
-		data.isTesselated = tesselatable()[croppedName];
+		data.croppedName = model.name;
+		data.isTesselated = tesselatable()[model.name];
 		return data;
 	}
-
-	//load new model
-	std::unique_ptr<Model> model = std::make_unique<Model>(filename);
 
 	//veryfying that model does actually have some data
 	if (model->vertices().empty() || model->indices().empty())
@@ -145,7 +140,7 @@ ModelData GeometryManager::BuildModelGeometry(WCHAR* filename)
 	return data;
 }
 
-void GeometryManager::UnloadModel(const std::wstring& modelName)
+void GeometryManager::UnloadModel(const std::string& modelName)
 {
 	if (geometries().find(modelName) != geometries().end())
 	{

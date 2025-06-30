@@ -10,17 +10,17 @@
 
 struct ModelData
 {
-	std::wstring croppedName = L"";
+	std::string croppedName = L"";
 	bool isTesselated = false;
 };
 
 class GeometryManager
 {
 public:
-	static std::unordered_map<std::wstring, std::unique_ptr<MeshGeometry>>& geometries();
-	static std::unordered_map<std::wstring, bool>& tesselatable();
+	static std::unordered_map<std::string, std::unique_ptr<MeshGeometry>>& geometries();
+	static std::unordered_map<std::string, bool>& tesselatable();
 
 	static void BuildNecessaryGeometry();
-	static ModelData GeometryManager::BuildModelGeometry(WCHAR* filename = L"obj\\african_head.obj");
-	static void UnloadModel(const std::wstring& modelName);
+	static ModelData GeometryManager::BuildModelGeometry(Model* model);
+	static void UnloadModel(const std::string& modelName);
 };

@@ -436,6 +436,16 @@ void MyApp::DrawObjectsList(int* btnId)
 			if (BasicUtil::TryToOpenFile(L"3D Object", L"*.obj;*.fbx", pszFilePath))
 			{
 				_selectedType = PSO::Opaque;
+				if (_modelManager.ImportObject(pszFilePath))
+				{
+					//modal window and all that since it is a scene
+				}
+				else
+				{
+					auto model = _modelManager.ParseAsOneObject();
+					//generating it as one mesh
+					ModelData data = GeometryManager::BuildModelGeometry(model.get());
+				}
 				ModelData data = GeometryManager::BuildModelGeometry(pszFilePath);
 				_selectedObject = _objectManagers[PSO::Opaque]->addRenderItem(md3dDevice.Get(), data.croppedName, data.isTesselated);
 				CoTaskMemFree(pszFilePath);

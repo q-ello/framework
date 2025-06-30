@@ -34,51 +34,33 @@
     <Filter Include="Resource Files\imgui">
       <UniqueIdentifier>{ec7d0f5e-25d3-4e16-abbc-9a64aaae9bd5}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Header Files\Basic">
+      <UniqueIdentifier>{d3db55b5-6e11-4afd-9995-0977c05b2fdd}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\DynamicHelpers">
+      <UniqueIdentifier>{b280fbd4-ed84-417c-bf63-ecfe0145aff5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\Deferred">
+      <UniqueIdentifier>{0ea84970-a8dc-4211-84b4-fddf2b57a58a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\DataManagers">
+      <UniqueIdentifier>{2acd4697-232e-4766-a86e-0b664b27a79c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Basic">
+      <UniqueIdentifier>{b4366321-f644-4c19-874d-6f31c234eb44}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\DynamicHelpers">
+      <UniqueIdentifier>{3efc769b-79ea-4150-8cf1-3861ac235eff}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Deferred">
+      <UniqueIdentifier>{b9fe8bb9-b178-42fe-a2b5-7cef369fe33b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\DataManagers">
+      <UniqueIdentifier>{70324ef2-b75e-482f-a1de-b2dac3fb12a6}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="FrameResource.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\Common\d3dApp.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\Common\d3dUtil.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\Common\d3dx12.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\Common\DDSTextureLoader.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\Common\GameTimer.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\Common\GeometryGenerator.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\Common\MathHelper.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\Common\UploadBuffer.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="MyApp.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Controls.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Model.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="VertexData.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="DescriptorHeapAllocator.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="imgui\imconfig.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="imgui\imstb_truetype.h">
@@ -105,66 +87,81 @@
     <ClInclude Include="imgui\backends\imgui_impl_win32.h">
       <Filter>Header Files\imgui\backends</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Common\GBuffer.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="BasicUtil.h">
-      <Filter>Header Files</Filter>
+      <Filter>Header Files\Basic</Filter>
     </ClInclude>
-    <ClInclude Include="RenderItem.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="..\..\Common\d3dApp.h">
+      <Filter>Header Files\Basic</Filter>
     </ClInclude>
-    <ClInclude Include="ObjectManager.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="..\..\Common\d3dUtil.h">
+      <Filter>Header Files\Basic</Filter>
     </ClInclude>
-    <ClInclude Include="TextureManager.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="..\..\Common\d3dx12.h">
+      <Filter>Header Files\Basic</Filter>
     </ClInclude>
-    <ClInclude Include="UploadManager.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="..\..\Common\DDSTextureLoader.h">
+      <Filter>Header Files\Basic</Filter>
+    </ClInclude>
+    <ClInclude Include="DescriptorHeapAllocator.h">
+      <Filter>Header Files\DynamicHelpers</Filter>
+    </ClInclude>
+    <ClInclude Include="FrameResource.h">
+      <Filter>Header Files\Basic</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Common\GameTimer.h">
+      <Filter>Header Files\Basic</Filter>
+    </ClInclude>
+    <ClInclude Include="imgui\imconfig.h">
+      <Filter>Header Files\imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="VertexData.h">
+      <Filter>Header Files\Basic</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Common\MathHelper.h">
+      <Filter>Header Files\Basic</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Common\GBuffer.h">
+      <Filter>Header Files\Deferred</Filter>
     </ClInclude>
     <ClInclude Include="GeometryManager.h">
-      <Filter>Header Files</Filter>
+      <Filter>Header Files\DataManagers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Common\GeometryGenerator.h">
+      <Filter>Header Files\Basic</Filter>
     </ClInclude>
     <ClInclude Include="LightingManager.h">
-      <Filter>Header Files</Filter>
+      <Filter>Header Files\Deferred</Filter>
+    </ClInclude>
+    <ClInclude Include="Model.h">
+      <Filter>Header Files\DynamicHelpers</Filter>
+    </ClInclude>
+    <ClInclude Include="ModelManager.h">
+      <Filter>Header Files\DynamicHelpers</Filter>
+    </ClInclude>
+    <ClInclude Include="ObjectManager.h">
+      <Filter>Header Files\DataManagers</Filter>
     </ClInclude>
     <ClInclude Include="OpaqueObjectManager.h">
-      <Filter>Header Files</Filter>
+      <Filter>Header Files\DataManagers</Filter>
+    </ClInclude>
+    <ClInclude Include="RenderItem.h">
+      <Filter>Header Files\Basic</Filter>
     </ClInclude>
     <ClInclude Include="UnlitObjectManager.h">
-      <Filter>Header Files</Filter>
+      <Filter>Header Files\DataManagers</Filter>
+    </ClInclude>
+    <ClInclude Include="UploadManager.h">
+      <Filter>Header Files\DynamicHelpers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Common\UploadBuffer.h">
+      <Filter>Header Files\Basic</Filter>
+    </ClInclude>
+    <ClInclude Include="TextureManager.h">
+      <Filter>Header Files\DynamicHelpers</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="ObjectLoader.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="FrameResource.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\Common\d3dApp.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\Common\d3dUtil.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\Common\DDSTextureLoader.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\Common\GameTimer.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\Common\GeometryGenerator.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\Common\MathHelper.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="MyApp.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="Model.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="imgui\imgui.cpp">
@@ -191,32 +188,62 @@
     <ClCompile Include="imgui\misc\fonts\binary_to_compressed_c.cpp">
       <Filter>Resource Files\imgui</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\Common\GBuffer.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="BasicUtil.cpp">
-      <Filter>Source Files</Filter>
+      <Filter>Source Files\Basic</Filter>
     </ClCompile>
-    <ClCompile Include="TextureManager.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="..\..\Common\d3dUtil.cpp">
+      <Filter>Source Files\Basic</Filter>
     </ClCompile>
-    <ClCompile Include="UploadManager.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="FrameResource.cpp">
+      <Filter>Source Files\Basic</Filter>
     </ClCompile>
-    <ClCompile Include="ObjectManager.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="..\..\Common\GBuffer.cpp">
+      <Filter>Source Files\Deferred</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Common\d3dApp.cpp">
+      <Filter>Source Files\Basic</Filter>
     </ClCompile>
     <ClCompile Include="GeometryManager.cpp">
-      <Filter>Source Files</Filter>
+      <Filter>Source Files\DataManagers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Common\DDSTextureLoader.cpp">
+      <Filter>Source Files\Basic</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Common\MathHelper.cpp">
+      <Filter>Source Files\Basic</Filter>
+    </ClCompile>
+    <ClCompile Include="Model.cpp">
+      <Filter>Source Files\DynamicHelpers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Common\GameTimer.cpp">
+      <Filter>Source Files\Basic</Filter>
+    </ClCompile>
+    <ClCompile Include="ObjectManager.cpp">
+      <Filter>Source Files\DataManagers</Filter>
     </ClCompile>
     <ClCompile Include="LightingManager.cpp">
+      <Filter>Source Files\Deferred</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Common\GeometryGenerator.cpp">
+      <Filter>Source Files\Basic</Filter>
+    </ClCompile>
+    <ClCompile Include="ObjectLoader.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="OpaqueObjectManager.cpp">
-      <Filter>Source Files</Filter>
+      <Filter>Source Files\DataManagers</Filter>
     </ClCompile>
     <ClCompile Include="UnlitObjectManager.cpp">
-      <Filter>Source Files</Filter>
+      <Filter>Source Files\DataManagers</Filter>
+    </ClCompile>
+    <ClCompile Include="UploadManager.cpp">
+      <Filter>Source Files\DynamicHelpers</Filter>
+    </ClCompile>
+    <ClCompile Include="ModelManager.cpp">
+      <Filter>Source Files\DynamicHelpers</Filter>
+    </ClCompile>
+    <ClCompile Include="TextureManager.cpp">
+      <Filter>Source Files\DynamicHelpers</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
