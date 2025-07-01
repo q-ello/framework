@@ -3,7 +3,7 @@
 Model::Model(aiMesh** meshes, unsigned int numMeshes, std::string sceneName)
 {
 	name = sceneName;
-	for (int j = 0; j < numMeshes; j++)
+	for (unsigned int j = 0; j < numMeshes; j++)
 	{
 		ParseMesh(meshes[j]);
 	}
@@ -35,7 +35,7 @@ std::vector<std::int32_t> Model::indices() const
 void Model::ParseMesh(aiMesh* mesh)
 {
 	size_t vertexOffset = _vertices.size();
-	for (int i = 0; i < mesh->mNumVertices; i++)
+	for (unsigned int i = 0; i < mesh->mNumVertices; i++)
 	{
 		Vertex v;
 		aiVector3D pos = mesh->mVertices[i];
@@ -61,14 +61,14 @@ void Model::ParseMesh(aiMesh* mesh)
 		_vertices.push_back(v);
 	}
 
-	for (int i = 0; i < mesh->mNumFaces; i++)
+	for (unsigned int i = 0; i < mesh->mNumFaces; i++)
 	{
 		if (mesh->mFaces[i].mNumIndices != 3)
 		{
 			continue;
 		}
-		_indices.push_back(mesh->mFaces[i].mIndices[0] + vertexOffset);
-		_indices.push_back(mesh->mFaces[i].mIndices[1] + vertexOffset);
-		_indices.push_back(mesh->mFaces[i].mIndices[2] + vertexOffset);
+		_indices.push_back(mesh->mFaces[i].mIndices[0] + (UINT)vertexOffset);
+		_indices.push_back(mesh->mFaces[i].mIndices[1] + (UINT)vertexOffset);
+		_indices.push_back(mesh->mFaces[i].mIndices[2] + (UINT)vertexOffset);
 	}
 }

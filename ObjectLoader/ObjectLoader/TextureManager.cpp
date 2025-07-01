@@ -11,7 +11,7 @@ std::unordered_map<std::wstring, std::unique_ptr<Texture>>& TextureManager::text
 	return textures;
 }
 
-TextureHandle TextureManager::LoadTexture(WCHAR* filename, int prevIndex)
+TextureHandle TextureManager::LoadTexture(WCHAR* filename, int prevIndex, int texCount)
 {
 	std::wstring croppedName = BasicUtil::getCroppedName(filename);
 
@@ -19,7 +19,7 @@ TextureHandle TextureManager::LoadTexture(WCHAR* filename, int prevIndex)
 	{
 		if (_texIndices()[croppedName] != prevIndex)
 		{
-			_texUsed()[croppedName]++;
+			_texUsed()[croppedName] += texCount;
 		}
 		return { std::string(croppedName.begin(), croppedName.end()), _texIndices()[croppedName], true };
 	}
@@ -50,14 +50,14 @@ TextureHandle TextureManager::LoadTexture(WCHAR* filename, int prevIndex)
 
 	textures()[croppedName] = std::move(tex);
 	_texIndices()[croppedName] = index;
-	_texUsed()[croppedName] = 1;
+	_texUsed()[croppedName] = texCount;
 
 	return { std::string(croppedName.begin(), croppedName.end()), index, true };
 }
 
-void TextureManager::deleteTexture(std::wstring name)
+void TextureManager::deleteTexture(std::wstring name, int texCount)
 {
-	_texUsed()[name]--;
+	_texUsed()[name] -= texCount;
 	if (_texUsed()[name] == 0)
 	{
 		UploadManager::Flush();

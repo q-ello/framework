@@ -28,7 +28,7 @@ void GeometryManager::BuildNecessaryGeometry()
 	SubmeshGeometry boxSubmesh;
 	boxSubmesh.IndexCount = (UINT)box.Indices32.size();
 	boxSubmesh.StartIndexLocation = gridSubmesh.IndexCount;
-	boxSubmesh.BaseVertexLocation = grid.Vertices.size();
+	boxSubmesh.BaseVertexLocation = (INT)grid.Vertices.size();
 
 	const size_t gridVerticesCount = grid.Vertices.size();
 
@@ -80,11 +80,11 @@ void GeometryManager::BuildNecessaryGeometry()
 ModelData GeometryManager::BuildModelGeometry(Model* model)
 {
 	//check if geometry already exists
-	if (geometries().find(model.name) != geometries().end())
+	if (geometries().find(model->name) != geometries().end())
 	{
 		ModelData data;
-		data.croppedName = model.name;
-		data.isTesselated = tesselatable()[model.name];
+		data.croppedName = model->name;
+		data.isTesselated = tesselatable()[model->name];
 		return data;
 	}
 
@@ -104,7 +104,7 @@ ModelData GeometryManager::BuildModelGeometry(Model* model)
 
 	auto geo = std::make_unique<MeshGeometry>();
 
-	geo->Name = croppedName;
+	geo->Name = model->name;
 
 	ThrowIfFailed(D3DCreateBlob(vbByteSize, &geo->VertexBufferCPU));
 	CopyMemory(geo->VertexBufferCPU->GetBufferPointer(), model->vertices().data(), vbByteSize);
@@ -129,13 +129,15 @@ ModelData GeometryManager::BuildModelGeometry(Model* model)
 	submesh.StartIndexLocation = 0;
 	submesh.BaseVertexLocation = 0;
 
-	geo->DrawArgs[croppedName] = submesh;
+	geo->DrawArgs[model->name] = submesh;
 
 	geometries()[geo->Name] = std::move(geo);
 
 	ModelData data;
-	data.croppedName = croppedName;
+	data.croppedName = model->name;
 	data.isTesselated = model->isTesselated;
+
+	tesselatable()[model->name] = data.isTesselated;
 
 	return data;
 }

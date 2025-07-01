@@ -4,6 +4,13 @@
 
 using namespace DirectX;
 
+enum class TextureType
+{
+	Diffuse = 0,
+	Normal,
+	Displacement
+};
+
 //textures for opaque items
 struct TextureHandle
 {
@@ -36,9 +43,11 @@ struct EditableRenderItem : public RenderItem
 {
 	DirectX::XMFLOAT3 transform[3] = { {0., 0., 0.}, {0., 0., 0.}, {1., 1., 1.} };
 	bool lockedScale = true;
-	TextureHandle diffuseHandle;
-	TextureHandle normalHandle;
-	TextureHandle displacementHandle;
+	std::unordered_map<TextureType, TextureHandle> texHandles = {
+		{TextureType::Diffuse, TextureHandle()},
+		{TextureType::Normal, TextureHandle()},
+		{TextureType::Displacement, TextureHandle()}
+	};
 	float dispScale = 1.0f;
 };
 

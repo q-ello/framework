@@ -13,7 +13,7 @@ public:
 	ObjectManager(ID3D12Device* device);
 	~ObjectManager();
 
-	virtual int addRenderItem(ID3D12Device* device, const std::wstring& itemName, bool isTesselated = false) = 0;
+	virtual int addRenderItem(ID3D12Device* device, const std::string& itemName, bool isTesselated = false) = 0;
 	virtual bool deleteObject(int selectedObject) = 0;
 
 	virtual void UpdateObjectCBs(FrameResource* currFrameResource) = 0;
@@ -25,8 +25,8 @@ public:
 	void Init();
 
 protected:
-	std::unordered_map<std::wstring, int> _objectCounters;
-	std::unordered_map<std::wstring, int> _objectLoaded;
+	std::unordered_map<std::string, int> _objectCounters;
+	std::unordered_map<std::string, int> _objectLoaded;
 
 	std::uint32_t uidCount;
 

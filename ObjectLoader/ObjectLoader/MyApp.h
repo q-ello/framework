@@ -71,11 +71,12 @@ private:
 	void DrawLightData(int* btnId);
 	void DrawLocalLightData(int* btnId, int lightIndex);
 	void DrawObjectInfo(int* btnId);
-	void DrawObjectTransform(EditableRenderItem* selectedObject, int* btnId);
-	void DrawObjectTextures(EditableRenderItem* selectedObject, int* btnId);
-	bool DrawTextureButton(const std::string& label, int* btnId, TextureHandle& texHandle);
-	void DrawTransformInput(const std::string& label, int btnId, int transformIndex, EditableRenderItem* object, float speed);
+	void DrawMultiObjectTransform(int* btnId);
+	void DrawMultiObjectTextures(int* btnId);
+	bool DrawTextureButton(const std::string& label, TextureType texType, int* btnId);
+	void DrawTransformInput(const std::string& label, int btnId, int transformIndex, float speed);
 	void DrawCameraSpeed();
+	void DrawImportModal();
 
 	void InitManagers();
 
@@ -88,7 +89,7 @@ private:
 	int mCurrFrameResourceIndex = 0;
 
 	ComPtr<ID3D12DescriptorHeap> _imGuiDescriptorHeap = nullptr;
-	ModelManager _modelManager = ModelManager();
+	std::unique_ptr<ModelManager> _modelManager = std::make_unique<ModelManager>();
 
 	std::unordered_map<std::string, ComPtr<ID3DBlob>> mShaders;
 
@@ -103,7 +104,7 @@ private:
 
 	float _yaw = XM_PI / 2.f;
 	float _pitch = 0.f;
-	XMFLOAT3 _eyePos = { 0.0f, 0.0f, -5.0f };
+	XMFLOAT3 _eyePos = { 0.0f, 1.0f, -5.0f };
 	float _cameraSpeed = 0.01f;
 	float _mbDown = false;
 	bool _isWireframe = false;
@@ -112,7 +113,7 @@ private:
 
 	bool checkForImGui(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) override;
 
-	int _selectedObject = -1;
 	PSO _selectedType = PSO::Opaque;
+	std::set<int> _selectedMeshes;
 };
 

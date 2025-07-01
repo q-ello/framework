@@ -45,10 +45,10 @@ bool MyApp::Initialize()
 	BuildDescriptorHeaps();
 	BuildShadersAndInputLayout();
 	GeometryManager::BuildNecessaryGeometry();
-	_selectedType = PSO::Opaque;
+	/*_selectedType = PSO::Opaque;
 	ModelData data = GeometryManager::BuildModelGeometry();
-	_selectedObject = _objectManagers[PSO::Opaque]->addRenderItem(md3dDevice.Get(), data.croppedName, data.isTesselated);
-	_objectManagers[PSO::Unlit]->addRenderItem(md3dDevice.Get(), L"grid");
+	_selectedObject = _objectManagers[PSO::Opaque]->addRenderItem(md3dDevice.Get(), data.croppedName, data.isTesselated);*/
+	_objectManagers[PSO::Unlit]->addRenderItem(md3dDevice.Get(), "grid");
 	BuildFrameResources();
 	BuildPSOs();
 
@@ -417,7 +417,7 @@ void MyApp::DrawInterface()
 
 	//object info
 
-	if (_selectedObject != -1)
+	if (!_selectedMeshes.empty())
 	{
 		DrawObjectInfo(buttonId);
 	}
@@ -436,34 +436,72 @@ void MyApp::DrawObjectsList(int* btnId)
 			if (BasicUtil::TryToOpenFile(L"3D Object", L"*.obj;*.fbx", pszFilePath))
 			{
 				_selectedType = PSO::Opaque;
-				if (_modelManager.ImportObject(pszFilePath))
+				if (_modelManager->ImportObject(pszFilePath))
 				{
-					//modal window and all that since it is a scene
+					ImGui::OpenPopup("Multiple meshes");
 				}
 				else
 				{
-					auto model = _modelManager.ParseAsOneObject();
+					auto model = _modelManager->ParseAsOneObject();
 					//generating it as one mesh
 					ModelData data = GeometryManager::BuildModelGeometry(model.get());
+					_selectedMeshes.clear();
+					_selectedMeshes.insert(_objectManagers[PSO::Opaque]->addRenderItem(md3dDevice.Get(), data.croppedName, data.isTesselated));
 				}
-				ModelData data = GeometryManager::BuildModelGeometry(pszFilePath);
-				_selectedObject = _objectManagers[PSO::Opaque]->addRenderItem(md3dDevice.Get(), data.croppedName, data.isTesselated);
 				CoTaskMemFree(pszFilePath);
 			}
 		}
 
+		// import multiple meshes modal
+		DrawImportModal();
+
 		ImGui::Spacing();
+
+		//for shift spacing
+		static int lastClicked = -1;
 
 		for (int i = 0; i < _objectManagers[PSO::Opaque]->objectsCount(); i++)
 		{
 			ImGui::PushID((*btnId)++);
 
+			//bool isSelected = _selectedType == PSO::Opaque && i == _selectedObject;
+			bool isSelected = _selectedType == PSO::Opaque && _selectedMeshes.count(i) > 0;
+
+			ImGui::PushStyleColor(ImGuiCol_Button, isSelected ? ImVec4(0.2f, 0.6f, 1.0f, 1.0f) : ImVec4(0.2f, 0.2f, 0.2f, 1.0f));
+
 			std::string name = BasicUtil::trimName(_objectManagers[PSO::Opaque]->objectName(i), 15);
 			if (ImGui::Button(name.c_str()))
 			{
-				_selectedObject = i;
+				//logic for multiple selecting
+				if (_selectedType == PSO::Opaque && ImGui::GetIO().KeyShift && lastClicked != -1)
+				{
+					_selectedMeshes.clear();
+					int start = min(lastClicked, i);
+					int end = max(lastClicked, i);
+					for (int j = start; j <= end; ++j)
+						_selectedMeshes.insert(j);
+				}
+				else if (ImGui::GetIO().KeyCtrl)
+				{
+					if (isSelected)
+					{
+						_selectedMeshes.erase(i);
+					}
+					else
+					{
+						_selectedMeshes.insert(i);
+					}
+					lastClicked = i;
+				}
+				else
+				{
+					_selectedMeshes.clear();
+					_selectedMeshes.insert(i);
+					lastClicked = i;
+				}
 				_selectedType = PSO::Opaque;
 			}
+			ImGui::PopStyleColor();
 			ImGui::PopID();
 
 			if (ImGui::BeginPopupContextItem())
@@ -471,13 +509,25 @@ void MyApp::DrawObjectsList(int* btnId)
 				ImGui::PushID((*btnId)++);
 				if (ImGui::Button("delete"))
 				{
-					_selectedObject = i;
-					_selectedType = PSO::Opaque;
-					if (_objectManagers[PSO::Opaque]->deleteObject(_selectedObject))
+					if (_selectedMeshes.count(i) > 0)
 					{
-						ClearData();
+						//going from the most index to last
+						for (auto it = _selectedMeshes.rbegin(); it != _selectedMeshes.rend(); it++)
+						{
+							if (_objectManagers[PSO::Opaque]->deleteObject(*it))
+							{
+								ClearData();
+							}
+						}
 					}
-					_selectedObject = -1;
+					else
+					{
+						if (_objectManagers[PSO::Opaque]->deleteObject(i))
+						{
+							ClearData();
+						}
+					}
+					_selectedMeshes.clear();
 				}
 				ImGui::PopID();
 				ImGui::EndPopup();
@@ -638,115 +688,231 @@ void MyApp::DrawLocalLightData(int* btnId, int lightIndex)
 
 void MyApp::DrawObjectInfo(int* btnId)
 {
-
 	ImGui::SetNextWindowPos({ static_cast<float>(mClientWidth) - 300.f, 50.f }, ImGuiCond_Once, { 0.f, 0.f });
 	ImGui::SetNextWindowSize({ 250.f, 350.f }, ImGuiCond_Once);
 
-	EditableRenderItem* selectedObject = _objectManagers[_selectedType]->object(_selectedObject);
+	std::string title = _selectedMeshes.size() == 1
+		? _objectManagers[_selectedType]->object(*_selectedMeshes.begin())->Name + " Info"
+		: std::to_string(_selectedMeshes.size()) + " objects selected";
 
-	ImGui::Begin((selectedObject->Name + " Info").c_str());
+	ImGui::Begin(title.c_str());
+
 	if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen))
 	{
-		DrawObjectTransform(selectedObject, btnId);
+		DrawMultiObjectTransform(btnId);
 	}
 
 	//textures
 	if (ImGui::CollapsingHeader("Textures", ImGuiTreeNodeFlags_DefaultOpen))
 	{
-		DrawObjectTextures(selectedObject, btnId);
+		DrawMultiObjectTextures(btnId);
 	}
 
 	ImGui::End();
 }
 
-void MyApp::DrawObjectTransform(EditableRenderItem* selectedObject, int* btnId)
+void MyApp::DrawMultiObjectTransform(int* btnId)
 {
-	DrawTransformInput("Location: ", (*btnId)++, 0, selectedObject, 0.1f);
-	DrawTransformInput("Rotation: ", (*btnId)++, 1, selectedObject, 1.f);
+	DrawTransformInput("Location: ", (*btnId)++, 0, 0.1f);
+	DrawTransformInput("Rotation: ", (*btnId)++, 1, 1.f);
 
-	ImGui::Text("Scale:");
-	ImGui::SameLine();
-	ImGui::PushID((*btnId)++);
-	ImGui::Checkbox("", &selectedObject->lockedScale);
-	ImGui::SameLine();
-	ImGui::PopID();
+	auto& manager = _objectManagers[_selectedType];
 
-	DirectX::XMFLOAT3 before = selectedObject->transform[2];
+	XMFLOAT3 firstPos = manager->object(*_selectedMeshes.begin())->transform[2];
+	bool firstScale = manager->object(*_selectedMeshes.begin())->lockedScale;
+	bool allSamePos = true;
 
-	ImGui::PushID((*btnId)++);
-	if (ImGui::DragFloat3("", &selectedObject->transform[2].x, 0.1f))
+	for (int idx : _selectedMeshes)
 	{
-		if (selectedObject->lockedScale)
+		if (manager->object(idx)->transform[2].x != firstPos.x ||
+			manager->object(idx)->transform[2].y != firstPos.y ||
+			manager->object(idx)->transform[2].z != firstPos.z ||
+			manager->object(idx)->lockedScale != firstScale)
 		{
-			DirectX::XMFLOAT3 after = selectedObject->transform[2];
-			float difference = 1.f;
-
-			float ratio = 1.0f;
-			int changedAxis = -1;
-			if (after.x != before.x && after.x != 0) { ratio = after.x / before.x; changedAxis = 0; }
-			else if (after.y != before.y && after.y != 0) { ratio = after.y / before.y; changedAxis = 1; }
-			else if (after.z != before.z && after.z != 0) { ratio = after.z / before.z; changedAxis = 2; }
-
-			if (changedAxis != -1)
-			{
-				after.x = before.x * ratio;
-				after.y = before.y * ratio;
-				after.z = before.z * ratio;
-			}
-			else
-			{
-				after.x = before.x;
-				after.y = before.y;
-				after.z = before.z;
-			}
-			selectedObject->transform[2] = after;
+			allSamePos = false;
+			break;
 		}
-		selectedObject->NumFramesDirty = gNumFrameResources;
 	}
-	ImGui::PopID();
+
+	ImGui::Text("Scale: ");
+	ImGui::SameLine();
+
+	//it is about scale I'm just lazy to change the name
+	if (allSamePos)
+	{
+		bool scale = firstScale;
+		ImGui::PushID((*btnId)++);
+		if (ImGui::Checkbox("", &scale))
+		{
+			for (int idx : _selectedMeshes)
+			{
+				manager->object(idx)->lockedScale = scale;
+				manager->object(idx)->NumFramesDirty = gNumFrameResources;
+			}
+		}
+		ImGui::SameLine();
+		ImGui::PopID();
+
+		XMFLOAT3 before = firstPos;
+		XMFLOAT3 pos = before;
+
+		ImGui::PushID((*btnId)++);
+
+		if (ImGui::DragFloat3("", &pos.x, 0.1f))
+		{
+			for (int idx : _selectedMeshes)
+			{
+				if (scale)
+				{
+					DirectX::XMFLOAT3 after = pos;
+					float difference = 1.f;
+
+					float ratio = 1.0f;
+					int changedAxis = -1;
+					if (after.x != before.x && after.x != 0) { ratio = after.x / before.x; changedAxis = 0; }
+					else if (after.y != before.y && after.y != 0) { ratio = after.y / before.y; changedAxis = 1; }
+					else if (after.z != before.z && after.z != 0) { ratio = after.z / before.z; changedAxis = 2; }
+
+					if (changedAxis != -1)
+					{
+						after.x = before.x * ratio;
+						after.y = before.y * ratio;
+						after.z = before.z * ratio;
+					}
+					else
+					{
+						after.x = before.x;
+						after.y = before.y;
+						after.z = before.z;
+					}
+					pos = after;
+				}
+				manager->object(idx)->transform[2] = pos;
+				manager->object(idx)->NumFramesDirty = gNumFrameResources;
+			}
+		}
+		ImGui::PopID();
+	}
+	else
+	{
+		ImGui::TextDisabled("Multiple values");
+	}
 }
 
-void MyApp::DrawObjectTextures(EditableRenderItem* selectedObject, int* btnId)
+void MyApp::DrawMultiObjectTextures(int* btnId)
 {
+
 	//diffuse button
-	DrawTextureButton("Diffuse", btnId, selectedObject->diffuseHandle);
-	if (DrawTextureButton("Normal", btnId, selectedObject->normalHandle))
+	DrawTextureButton("Diffuse", TextureType::Diffuse, btnId);
+	if (DrawTextureButton("Normal", TextureType::Normal, btnId))
 	{
-		selectedObject->NumFramesDirty = gNumFrameResources;
+		for (int idx : _selectedMeshes)
+		{
+			_objectManagers[_selectedType]->object(idx)->NumFramesDirty = gNumFrameResources;
+		}
 	}
-	if (selectedObject->PrimitiveType == D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST)
+
+	//we don't need to show next data if objects are not tesselatable
+	bool allTesselatable = true;
+	for (int idx : _selectedMeshes)
+	{
+		if (_objectManagers[_selectedType]->object(idx)->PrimitiveType == D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST)
+		{
+			allTesselatable = false;
+			break;
+		}
+	}
+
+	if (!allTesselatable)
 	{
 		return;
 	}
 
-	if (DrawTextureButton("Displacement", btnId, selectedObject->displacementHandle))
+	if (DrawTextureButton("Displacement", TextureType::Displacement, btnId))
 	{
-		selectedObject->NumFramesDirty = gNumFrameResources;
+		for (int idx : _selectedMeshes)
+		{
+			_objectManagers[_selectedType]->object(idx)->NumFramesDirty = gNumFrameResources;
+		}
 	}
+
+	//displacement scale
+	float firstDispScale = _objectManagers[_selectedType]->object(*_selectedMeshes.begin())->dispScale;
+	bool allScaleSame = true;
+	for (int idx : _selectedMeshes)
+	{
+		if (_objectManagers[_selectedType]->object(idx)->dispScale != firstDispScale)
+		{
+			allScaleSame = false;
+			break;
+		}
+	}
+
 	ImGui::Text("Displacement scale");
 	ImGui::SameLine();
 	ImGui::PushItemWidth(50);
 	ImGui::PushID((*btnId)++);
-	if (ImGui::DragFloat("", &selectedObject->dispScale, 0.5f, 0.0f, 25.f))
+
+	if (allScaleSame)
 	{
-		selectedObject->NumFramesDirty = gNumFrameResources;
+		if (ImGui::DragFloat("", &firstDispScale, 0.5f, 0.0f, 25.f))
+		{
+			for (int idx : _selectedMeshes)
+			{
+				_objectManagers[_selectedType]->object(idx)->dispScale = firstDispScale;
+				_objectManagers[_selectedType]->object(idx)->NumFramesDirty = gNumFrameResources;
+			}
+		}
 	}
+	else
+	{
+		ImGui::TextDisabled("Multiple values");
+	}
+	
 	ImGui::PopID();
 }
 
-bool MyApp::DrawTextureButton(const std::string& label, int* btnId, TextureHandle& texHandle)
+bool MyApp::DrawTextureButton(const std::string& label, TextureType texType, int* btnId)
 {
+	auto& manager = _objectManagers[_selectedType];
+
+	TextureHandle texHandle = manager->object(*_selectedMeshes.begin())->texHandles[texType];
+
+	bool allSameTex = true;
+
+	for (int idx : _selectedMeshes)
+	{
+
+		if (manager->object(idx)->texHandles[texType].index != texHandle.index)
+		{
+			allSameTex = false;
+			break;
+		}
+	}
+
 	ImGui::Text(label.c_str());
 	ImGui::SameLine();
 	ImGui::PushID((*btnId)++);
+	if (!allSameTex)
+	{
+		ImGui::TextDisabled("Multiple values");
+		ImGui::PopID();
+		return false;
+	}
+
 	std::string name = BasicUtil::trimName(texHandle.name, 15);
+
 	if (ImGui::Button(name.c_str()))
 	{
 		WCHAR* texturePath;
 		if (BasicUtil::TryToOpenFile(L"DDS Textures", L"*.dds", texturePath))
 		{
 			texHandle
-				= TextureManager::LoadTexture(texturePath, texHandle.index);
+				= TextureManager::LoadTexture(texturePath, texHandle.index, (int)_selectedMeshes.size());
+			for (int idx : _selectedMeshes)
+			{
+				manager->object(idx)->texHandles[texType] = texHandle;
+			}
 			CoTaskMemFree(texturePath);
 			ImGui::PopID();
 			return true;
@@ -759,8 +925,11 @@ bool MyApp::DrawTextureButton(const std::string& label, int* btnId, TextureHandl
 		if (ImGui::Button("delete") && texHandle.isRelevant == true)
 		{
 			const std::string texName = texHandle.name;
-			TextureManager::deleteTexture(std::wstring(texName.begin(), texName.end()));
-			texHandle = TextureHandle();
+			TextureManager::deleteTexture(std::wstring(texName.begin(), texName.end()), (int)_selectedMeshes.size());
+			for (int idx : _selectedMeshes)
+			{
+				manager->object(idx)->texHandles[texType] = TextureHandle();
+			}
 			ImGui::PopID();
 			ImGui::EndPopup();
 			return true;
@@ -771,17 +940,45 @@ bool MyApp::DrawTextureButton(const std::string& label, int* btnId, TextureHandl
 	return false;
 }
 
-void MyApp::DrawTransformInput(const std::string& label, int btnId, int transformIndex, EditableRenderItem* object, float speed)
+void MyApp::DrawTransformInput(const std::string& label, int btnId, int transformIndex, float speed)
 {
+	auto& manager = _objectManagers[_selectedType];
+
+	XMFLOAT3 firstPos = manager->object(*_selectedMeshes.begin())->transform[transformIndex];
+	bool allSamePos = true;
+
+	for (int idx : _selectedMeshes)
+	{
+		if (manager->object(idx)->transform[transformIndex].x != firstPos.x ||
+			manager->object(idx)->transform[transformIndex].y != firstPos.y ||
+			manager->object(idx)->transform[transformIndex].z != firstPos.z)
+		{
+			allSamePos = false;
+			break;
+		}
+	}
+
 	ImGui::Text(label.c_str());
 	ImGui::SameLine();
-
-	ImGui::PushID(btnId);
-	if (ImGui::DragFloat3("", &object->transform[transformIndex].x, speed))
+	if (allSamePos)
 	{
-		object->NumFramesDirty = gNumFrameResources;
+		XMFLOAT3 pos = firstPos;
+		ImGui::PushID(btnId);
+
+		if (ImGui::DragFloat3("", &pos.x, speed))
+		{
+			for (int idx : _selectedMeshes)
+			{
+				manager->object(idx)->transform[transformIndex] = pos;
+				manager->object(idx)->NumFramesDirty = gNumFrameResources;
+			}
+		}
+		ImGui::PopID();
 	}
-	ImGui::PopID();
+	else
+	{
+		ImGui::TextDisabled("Multiple values");
+	}
 }
 
 void MyApp::DrawCameraSpeed()
@@ -791,6 +988,59 @@ void MyApp::DrawCameraSpeed()
 	ImGui::Begin("Camera info");
 	ImGui::Text(("Speed: " + std::to_string(_cameraSpeed)).c_str());
 	ImGui::End();
+}
+
+void MyApp::DrawImportModal()
+{
+	ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+	ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+	if (ImGui::BeginPopupModal("Multiple meshes", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+	{
+		ImGui::Text(("This file has " + std::to_string(_modelManager->MeshCount()) + " meshes. How do you want to import it?").c_str());
+		ImGui::Spacing();
+
+
+		// Begin a scrollable child
+		ImVec2 listSize = ImVec2(400, 300); // Width x Height
+		ImGui::BeginChild("MeshList", listSize, true /* border */, ImGuiWindowFlags_AlwaysVerticalScrollbar);
+
+		for (auto& name : _modelManager->MeshNames())
+		{
+			ImGui::BulletText(name.c_str());
+		}
+
+		ImGui::EndChild();
+
+		ImGui::Spacing();
+
+		if (ImGui::Button("Import as one file"))
+		{
+			//merge meshes into one file
+			ModelData data = GeometryManager::BuildModelGeometry(_modelManager->ParseAsOneObject().get());
+			_selectedMeshes.clear();
+			_selectedMeshes.insert(_objectManagers[PSO::Opaque]->addRenderItem(md3dDevice.Get(), data.croppedName, data.isTesselated));
+			ImGui::CloseCurrentPopup();
+		}
+
+		if (ImGui::Button("Import as separate objects"))
+		{
+			_selectedMeshes.clear();
+
+			for (auto& model : _modelManager->ParseScene())
+			{
+				ModelData data = GeometryManager::BuildModelGeometry(model.get());
+				_selectedMeshes.insert(_objectManagers[PSO::Opaque]->addRenderItem(md3dDevice.Get(), data.croppedName, data.isTesselated));
+			}
+			ImGui::CloseCurrentPopup();
+		}
+		if (ImGui::Button("Cancel"))
+		{
+			ImGui::CloseCurrentPopup();
+		}
+
+		ImGui::EndPopup();
+	}
 }
 
 void MyApp::ClearData()

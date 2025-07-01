@@ -21,13 +21,13 @@ void OpaqueObjectManager::UpdateObjectCBs(FrameResource* currFrameResource)
 			OpaqueObjectConstants objConstants;
 			XMStoreFloat4x4(&objConstants.World, XMMatrixTranspose(world));
 			XMStoreFloat4x4(&objConstants.WorldInvTranspose, XMMatrixInverse(&XMMatrixDeterminant(world), world));
-			objConstants.useNormalMap = ri->normalHandle.isRelevant;
-			if (ri->normalHandle.isRelevant)
+			objConstants.useNormalMap = ri->texHandles[TextureType::Normal].isRelevant;
+			if (objConstants.useNormalMap)
 			{
-				const std::wstring& texName = std::wstring(ri->normalHandle.name.begin(), ri->normalHandle.name.end());
+				const std::wstring& texName = std::wstring(ri->texHandles[TextureType::Normal].name.begin(), ri->texHandles[TextureType::Normal].name.end());
 				objConstants.normalMapSize = { TextureManager::textures()[texName]->size[0], TextureManager::textures()[texName]->size[1] };
 			}
-			objConstants.useDisplacementMap = ri->displacementHandle.isRelevant;
+			objConstants.useDisplacementMap = ri->texHandles[TextureType::Displacement].isRelevant;
 			objConstants.displacementScale = ri->dispScale;
 
 			currObjectsCB[ri->uid].get()->CopyData(0, objConstants);
@@ -188,7 +188,7 @@ void OpaqueObjectManager::AddObjectToResource(Microsoft::WRL::ComPtr<ID3D12Devic
 		currFrameResource->addOpaqueObjectBuffer(device.Get(), obj->uid);
 }
 
-int OpaqueObjectManager::addRenderItem(ID3D12Device* device, const std::wstring& itemName, bool isTesselated)
+int OpaqueObjectManager::addRenderItem(ID3D12Device* device, const std::string& itemName, bool isTesselated)
 {
 	std::string name(itemName.begin(), itemName.end());
 
@@ -200,7 +200,7 @@ int OpaqueObjectManager::addRenderItem(ID3D12Device* device, const std::wstring&
 	modelRitem->Geo = GeometryManager::geometries()[itemName].get();
 	modelRitem->PrimitiveType = isTesselated ? D3D_PRIMITIVE_TOPOLOGY_3_CONTROL_POINT_PATCHLIST : D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 	modelRitem->IndexCount = modelRitem->Geo->DrawArgs[itemName].IndexCount;
-	modelRitem->diffuseHandle.index = 0;
+	modelRitem->texHandles[TextureType::Diffuse].index = 0;
 
 	for (int i = 0; i < FrameResource::frameResources().size(); ++i)
 	{
@@ -227,14 +227,14 @@ bool OpaqueObjectManager::deleteObject(int selectedObject)
 {
 	EditableRenderItem* objectToDelete = _objects[selectedObject].get();
 
-	const std::string diffName = objectToDelete->diffuseHandle.name;
+	const std::string diffName = objectToDelete->texHandles[TextureType::Diffuse].name;
 	TextureManager::deleteTexture(std::wstring(diffName.begin(), diffName.end()));
-	const std::string normalName = objectToDelete->normalHandle.name;
+	const std::string normalName = objectToDelete->texHandles[TextureType::Normal].name;
 	TextureManager::deleteTexture(std::wstring(normalName.begin(), normalName.end()));
-	const std::string dispName = objectToDelete->displacementHandle.name;
+	const std::string dispName = objectToDelete->texHandles[TextureType::Displacement].name;
 	TextureManager::deleteTexture(std::wstring(dispName.begin(), dispName.end()));
 
-	std::wstring name(objectToDelete->Name.begin(), objectToDelete->Name.end());
+	std::string name = objectToDelete->Name;
 	_objectLoaded[name]--;
 
 	//need for deleting from frame resource
@@ -290,8 +290,8 @@ void OpaqueObjectManager::Draw(ID3D12GraphicsCommandList* cmdList, FrameResource
 {
 	if (_objects.size() == 0)
 	{
-		int tes = _tesselatedObjects.size();
-		int untes = _untesselatedObjects.size();
+		int tes = (int)_tesselatedObjects.size();
+		int untes = (int)_untesselatedObjects.size();
 	}
 
 	ID3D12DescriptorHeap* descriptorHeaps[] = { TextureManager::srvDescriptorHeap.Get() };
@@ -330,11 +330,11 @@ void OpaqueObjectManager::DrawObjects(ID3D12GraphicsCommandList* cmdList, FrameR
 		cmdList->SetGraphicsRootConstantBufferView(2, objCBAddress);
 
 		//textures
-		CD3DX12_GPU_DESCRIPTOR_HANDLE diffuseTex(TextureManager::srvHeapAllocator.get()->GetGpuHandle(ri->diffuseHandle.index));
+		CD3DX12_GPU_DESCRIPTOR_HANDLE diffuseTex(TextureManager::srvHeapAllocator.get()->GetGpuHandle(ri->texHandles[TextureType::Diffuse].index));
 		cmdList->SetGraphicsRootDescriptorTable(0, diffuseTex);
-		CD3DX12_GPU_DESCRIPTOR_HANDLE normalTex(TextureManager::srvHeapAllocator.get()->GetGpuHandle(ri->normalHandle.index));
+		CD3DX12_GPU_DESCRIPTOR_HANDLE normalTex(TextureManager::srvHeapAllocator.get()->GetGpuHandle(ri->texHandles[TextureType::Normal].index));
 		cmdList->SetGraphicsRootDescriptorTable(1, normalTex);
-		CD3DX12_GPU_DESCRIPTOR_HANDLE dispTex(TextureManager::srvHeapAllocator.get()->GetGpuHandle(ri->displacementHandle.index));
+		CD3DX12_GPU_DESCRIPTOR_HANDLE dispTex(TextureManager::srvHeapAllocator.get()->GetGpuHandle(ri->texHandles[TextureType::Displacement].index));
 		cmdList->SetGraphicsRootDescriptorTable(4, dispTex);
 
 		cmdList->DrawIndexedInstanced(ri->IndexCount, 1, 0, 0, 0);

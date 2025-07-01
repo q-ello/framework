@@ -40,10 +40,26 @@ std::vector<std::unique_ptr<Model>> ModelManager::ParseScene()
 		return std::vector<std::unique_ptr<Model>>();
 	}
 	std::vector<std::unique_ptr<Model>> models{};
-	for (int i = 0; i < _scene->mNumMeshes; i++)
+	for (unsigned int i = 0; i < _scene->mNumMeshes; i++)
 	{
 		models.push_back(std::make_unique<Model>(_scene->mMeshes[i]));
 	}
 
     return models;
+}
+
+std::vector<std::string> ModelManager::MeshNames()
+{
+	std::vector<std::string> meshNames = {};
+	for (UINT i = 0; i < _scene->mNumMeshes; i++)
+	{
+		meshNames.push_back(_scene->mMeshes[i]->mName.C_Str());
+	}
+
+	return meshNames;
+}
+
+UINT ModelManager::MeshCount()
+{
+	return _scene->mNumMeshes;
 }

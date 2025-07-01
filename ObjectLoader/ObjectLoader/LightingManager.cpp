@@ -112,7 +112,7 @@ void LightingManager::UpdateWorld(int lightIndex)
 
 int LightingManager::lightsCount()
 {
-	return _localLights.size();
+	return (int)_localLights.size();
 }
 
 LightRenderItem* LightingManager::light(int i)
@@ -152,24 +152,24 @@ void LightingManager::DrawDirLight(ID3D12GraphicsCommandList* cmdList, FrameReso
 void LightingManager::DrawLocalLights(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource)
 {
 	//draw local lights
-	auto geo = GeometryManager::geometries()[L"shapeGeo"].get();
+	auto geo = GeometryManager::geometries()["shapeGeo"].get();
 
 	cmdList->IASetVertexBuffers(0, 1, &geo->VertexBufferView());
 	cmdList->IASetIndexBuffer(&geo->IndexBufferView());
 
 	cmdList->SetPipelineState(_localLightsPSO.Get());
 
-	SubmeshGeometry mesh = geo->DrawArgs[L"box"];
-	cmdList->DrawIndexedInstanced(mesh.IndexCount, _localLights.size(), mesh.StartIndexLocation,
+	SubmeshGeometry mesh = geo->DrawArgs["box"];
+	cmdList->DrawIndexedInstanced(mesh.IndexCount, (UINT)_localLights.size(), mesh.StartIndexLocation,
 		mesh.BaseVertexLocation, 0);
 }
 
 void LightingManager::DrawDebug(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource)
 {
-	auto geo = GeometryManager::geometries()[L"shapeGeo"].get();
-	SubmeshGeometry mesh = geo->DrawArgs[L"box"];
+	auto geo = GeometryManager::geometries()["shapeGeo"].get();
+	SubmeshGeometry mesh = geo->DrawArgs["box"];
 	cmdList->SetPipelineState(_localLightsWireframePSO.Get());
-	cmdList->DrawIndexedInstanced(mesh.IndexCount, _localLights.size(), mesh.StartIndexLocation, mesh.BaseVertexLocation, 0);
+	cmdList->DrawIndexedInstanced(mesh.IndexCount, (UINT)_localLights.size(), mesh.StartIndexLocation, mesh.BaseVertexLocation, 0);
 }
 
 void LightingManager::Init(int srvAmount, ID3D12Device* device, D3D12_CPU_DESCRIPTOR_HANDLE srvHandle)

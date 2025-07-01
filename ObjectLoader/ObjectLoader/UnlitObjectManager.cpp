@@ -104,7 +104,7 @@ void UnlitObjectManager::AddObjectToResource(Microsoft::WRL::ComPtr<ID3D12Device
 		currFrameResource->addUnlitObjectBuffer(device.Get(), obj->uid);
 }
 
-int UnlitObjectManager::addRenderItem(ID3D12Device* device, const std::wstring& itemName, bool isTesselated)
+int UnlitObjectManager::addRenderItem(ID3D12Device* device, const std::string& itemName, bool isTesselated)
 {
 	auto renderItem = std::make_unique<UnlitRenderItem>();
 	renderItem->uid = uidCount++;
@@ -112,7 +112,7 @@ int UnlitObjectManager::addRenderItem(ID3D12Device* device, const std::wstring& 
 
 	renderItem->Name = name;
 	renderItem->nameCount = _objectCounters[itemName]++;
-	renderItem->Geo = GeometryManager::geometries()[L"shapeGeo"].get();
+	renderItem->Geo = GeometryManager::geometries()["shapeGeo"].get();
 	renderItem->PrimitiveType = D3D11_PRIMITIVE_TOPOLOGY_LINELIST;
 	renderItem->IndexCount = renderItem->Geo->DrawArgs[itemName].IndexCount;
 
@@ -130,7 +130,7 @@ int UnlitObjectManager::addRenderItem(ID3D12Device* device, const std::wstring& 
 
 bool UnlitObjectManager::deleteObject(int selectedObject)
 {
-	std::wstring name(_objects[selectedObject]->Name.begin(), _objects[selectedObject]->Name.end());
+	std::string name = _objects[selectedObject]->Name;
 	_objectLoaded[name]--;
 
 	//need for deleting from frame resource

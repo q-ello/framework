@@ -18,10 +18,10 @@ private:
 	void BuildShaders() override;
 
 	void AddObjectToResource(Microsoft::WRL::ComPtr<ID3D12Device> device, FrameResource* currFrameResource) override;
-	int addRenderItem(ID3D12Device* device, const std::wstring& itemName, bool isTesselated = false) override;
+	int addRenderItem(ID3D12Device* device, const std::string& itemName, bool isTesselated = false) override;
 	bool deleteObject(int selectedObject) override;
 	int objectsCount() override;
 	std::string objectName(int i) override;
-	EditableRenderItem* object(int i) override { return &EditableRenderItem(); };
+	EditableRenderItem* object(int i) override { return nullptr; };
 	void Draw(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, bool isWireframe = false) override;
 };

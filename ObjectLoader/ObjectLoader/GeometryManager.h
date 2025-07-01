@@ -10,7 +10,7 @@
 
 struct ModelData
 {
-	std::string croppedName = L"";
+	std::string croppedName = "";
 	bool isTesselated = false;
 };
 

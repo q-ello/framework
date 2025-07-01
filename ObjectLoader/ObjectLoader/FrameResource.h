@@ -26,7 +26,7 @@ struct GBufferPassConstants
     DirectX::XMFLOAT3 EyePosW = { 0.0f, 0.0f, 0.0f };
     float DeltaTime = 0.0f;
     DirectX::XMFLOAT2 ScreenSize = { 0.0f, 0.0f };
-    float pad[2];
+    float pad[2] = { 0.f, 0.f };
 };
 
 struct LightingPassConstants
@@ -34,7 +34,7 @@ struct LightingPassConstants
     DirectX::XMFLOAT4X4 InvViewProj = MathHelper::Identity4x4();
     DirectX::XMFLOAT4X4 ViewProj = MathHelper::Identity4x4();
     DirectX::XMFLOAT3 EyePosW = { 0.0f, 0.0f, 0.0f };
-    float pad1;
+    float pad1 = 0.f;
     DirectX::XMFLOAT2 RTSize = { 1.0f, 1.0f };
     DirectX::XMFLOAT2 mousePosition = { 0.0f, 0.0f };
 };
@@ -54,7 +54,7 @@ struct Light
     float angle = 1.f;
     int active = 1;
     float intensity = 10.f;
-    float padding[2];
+    float padding[2]{ 0.f, 0.f };
 };
 
 struct DirectionalLightConstants
