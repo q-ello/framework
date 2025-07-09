@@ -85,6 +85,7 @@ ModelData GeometryManager::BuildModelGeometry(Model* model)
 		ModelData data;
 		data.croppedName = model->name;
 		data.isTesselated = tesselatable()[model->name];
+		data.material = std::move(model->material());
 		return data;
 	}
 
@@ -136,6 +137,7 @@ ModelData GeometryManager::BuildModelGeometry(Model* model)
 	ModelData data;
 	data.croppedName = model->name;
 	data.isTesselated = model->isTesselated;
+	data.material = model->material();
 
 	tesselatable()[model->name] = data.isTesselated;
 

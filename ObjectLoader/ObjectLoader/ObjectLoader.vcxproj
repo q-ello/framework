@@ -147,6 +147,7 @@
     <ClInclude Include="BasicUtil.h" />
     <ClInclude Include="GeometryManager.h" />
     <ClInclude Include="LightingManager.h" />
+    <ClInclude Include="Material.h" />
     <ClInclude Include="ModelManager.h" />
     <ClInclude Include="OpaqueObjectManager.h" />
     <ClInclude Include="UnlitObjectManager.h" />

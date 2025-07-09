@@ -72,11 +72,15 @@ private:
 	void DrawLocalLightData(int* btnId, int lightIndex);
 	void DrawObjectInfo(int* btnId);
 	void DrawMultiObjectTransform(int* btnId);
-	void DrawMultiObjectTextures(int* btnId);
-	bool DrawTextureButton(const std::string& label, TextureType texType, int* btnId);
+	void DrawMultiObjectMaterial(int* btnId);
+	void DrawMaterialProperty(const std::string& label, int index, int* btnId, bool isFloat3, bool hasAdditionalInfo = false, const std::string& additionalInfoLabel = "", int additionalInfoIndex = -1);
+	void DrawMaterialTexture(const std::string& label, int index, int* btnId, bool hasAdditionalInfo = false, const std::string& additionalInfoLabel = "", int additionalInfoIndex = -1);
+	void DrawMaterialARMTexture(const std::string& label, int index, int* btnId);
 	void DrawTransformInput(const std::string& label, int btnId, int transformIndex, float speed);
 	void DrawCameraSpeed();
 	void DrawImportModal();
+	bool DrawIsTransparentCheckbox();
+	bool DrawUseARMTextureCheckbox();
 
 	void InitManagers();
 

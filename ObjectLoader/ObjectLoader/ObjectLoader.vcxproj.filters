@@ -159,6 +159,9 @@
     <ClInclude Include="TextureManager.h">
       <Filter>Header Files\DynamicHelpers</Filter>
     </ClInclude>
+    <ClInclude Include="Material.h">
+      <Filter>Header Files\DataManagers</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="MyApp.cpp">

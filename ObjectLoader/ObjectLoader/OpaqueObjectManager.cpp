@@ -4,6 +4,7 @@
 void OpaqueObjectManager::UpdateObjectCBs(FrameResource* currFrameResource)
 {
 	auto& currObjectsCB = currFrameResource->OpaqueObjCB;
+	auto& currMaterialCB = currFrameResource->MaterialCB;
 	for (int i = 0; i < _objects.size(); i++)
 	{
 		// Only update the cbuffer data if the constants have changed.  
@@ -21,18 +22,38 @@ void OpaqueObjectManager::UpdateObjectCBs(FrameResource* currFrameResource)
 			OpaqueObjectConstants objConstants;
 			XMStoreFloat4x4(&objConstants.World, XMMatrixTranspose(world));
 			XMStoreFloat4x4(&objConstants.WorldInvTranspose, XMMatrixInverse(&XMMatrixDeterminant(world), world));
-			objConstants.useNormalMap = ri->texHandles[TextureType::Normal].isRelevant;
-			if (objConstants.useNormalMap)
-			{
-				const std::wstring& texName = std::wstring(ri->texHandles[TextureType::Normal].name.begin(), ri->texHandles[TextureType::Normal].name.end());
-				objConstants.normalMapSize = { TextureManager::textures()[texName]->size[0], TextureManager::textures()[texName]->size[1] };
-			}
-			objConstants.useDisplacementMap = ri->texHandles[TextureType::Displacement].isRelevant;
-			objConstants.displacementScale = ri->dispScale;
 
 			currObjectsCB[ri->uid].get()->CopyData(0, objConstants);
 
 			ri->NumFramesDirty--;
+		}
+
+		auto& material = ri->material;
+
+		if (material->numFramesDirty > 0)
+		{
+			MaterialConstants materialConstants;
+			materialConstants.baseColor = material->properties[BasicUtil::EnumIndex(MatProp::BaseColor)].value;
+			materialConstants.displacementScale = material->additionalInfo[BasicUtil::EnumIndex(MatAddInfo::Displacement)];
+			materialConstants.emissive = material->properties[BasicUtil::EnumIndex(MatProp::Emissive)].value;
+			materialConstants.emissiveIntensity = material->additionalInfo[BasicUtil::EnumIndex(MatAddInfo::Emissive)];
+			materialConstants.metallic = material->properties[BasicUtil::EnumIndex(MatProp::Metallic)].value.x;
+			materialConstants.opacity = material->properties[BasicUtil::EnumIndex(MatProp::Opacity)].value.x;
+			materialConstants.roughness = material->properties[BasicUtil::EnumIndex(MatProp::Roughness)].value.x;
+			materialConstants.useAOMap = material->textures[BasicUtil::EnumIndex(MatTex::AmbOcc)].useTexture;
+			materialConstants.useBaseColorMap = material->properties[BasicUtil::EnumIndex(MatProp::BaseColor)].texture.useTexture;
+			materialConstants.useDisplacementMap = material->textures[BasicUtil::EnumIndex(MatTex::Displacement)].useTexture;
+			materialConstants.useEmissiveMap = material->properties[BasicUtil::EnumIndex(MatProp::Emissive)].texture.useTexture;
+			materialConstants.useMetallicMap = material->properties[BasicUtil::EnumIndex(MatProp::Metallic)].texture.useTexture;
+			materialConstants.useNormalMap = material->textures[BasicUtil::EnumIndex(MatTex::Normal)].useTexture;
+			materialConstants.useOpacityMap = material->properties[BasicUtil::EnumIndex(MatProp::Opacity)].texture.useTexture;
+			materialConstants.useRoughnessMap = material->properties[BasicUtil::EnumIndex(MatProp::Roughness)].texture.useTexture;
+			materialConstants.useARMMap = material->textures[BasicUtil::EnumIndex(MatTex::ARM)].useTexture && material->useARMTexture;
+			materialConstants.ARMLayout = (int)material->armLayout;
+
+			currMaterialCB[ri->uid].get()->CopyData(0, materialConstants);
+
+			material->numFramesDirty--;
 		}
 	}
 }
@@ -53,24 +74,40 @@ void OpaqueObjectManager::BuildRootSignature()
 {
 	//first gbuffer root signature
 	//two tables for 
-	CD3DX12_DESCRIPTOR_RANGE diffTexTable;
-	diffTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
+	CD3DX12_DESCRIPTOR_RANGE baseColorTexTable;
+	baseColorTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
+	CD3DX12_DESCRIPTOR_RANGE emissTexTable;
+	emissTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1);
+	CD3DX12_DESCRIPTOR_RANGE roughTexTable;
+	roughTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 2);
+	CD3DX12_DESCRIPTOR_RANGE metallTexTable;
+	metallTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 3);
 	CD3DX12_DESCRIPTOR_RANGE normTexTable;
-	normTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1);
+	normTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 4);
+	CD3DX12_DESCRIPTOR_RANGE AOTexTable;
+	AOTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 5);
 	CD3DX12_DESCRIPTOR_RANGE dispTexTable;
-	dispTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 2);
+	dispTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 6);
+	CD3DX12_DESCRIPTOR_RANGE ARMTexTable;
+	ARMTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 7);
 
-	const int rootParamCount = 5;
+	const int rootParamCount = 11;
 
 	// Root parameter can be a table, root descriptor or root constants.
 	CD3DX12_ROOT_PARAMETER slotRootParameter[rootParamCount];
 
 	// Perfomance TIP: Order from most frequent to least frequent.
-	slotRootParameter[0].InitAsDescriptorTable(1, &diffTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
-	slotRootParameter[1].InitAsDescriptorTable(1, &normTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
-	slotRootParameter[2].InitAsConstantBufferView(0);
-	slotRootParameter[3].InitAsConstantBufferView(1);
-	slotRootParameter[4].InitAsDescriptorTable(1, &dispTexTable, D3D12_SHADER_VISIBILITY_DOMAIN);
+	slotRootParameter[0].InitAsDescriptorTable(1, &baseColorTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
+	slotRootParameter[1].InitAsDescriptorTable(1, &emissTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
+	slotRootParameter[2].InitAsDescriptorTable(1, &roughTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
+	slotRootParameter[3].InitAsDescriptorTable(1, &metallTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
+	slotRootParameter[4].InitAsDescriptorTable(1, &normTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
+	slotRootParameter[5].InitAsDescriptorTable(1, &AOTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
+	slotRootParameter[6].InitAsDescriptorTable(1, &dispTexTable, D3D12_SHADER_VISIBILITY_DOMAIN);
+	slotRootParameter[7].InitAsDescriptorTable(1, &ARMTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
+	slotRootParameter[8].InitAsConstantBufferView(0);
+	slotRootParameter[9].InitAsConstantBufferView(1);
+	slotRootParameter[10].InitAsConstantBufferView(2);
 
 	auto staticSamplers = TextureManager::GetStaticSamplers();
 
@@ -188,7 +225,7 @@ void OpaqueObjectManager::AddObjectToResource(Microsoft::WRL::ComPtr<ID3D12Devic
 		currFrameResource->addOpaqueObjectBuffer(device.Get(), obj->uid);
 }
 
-int OpaqueObjectManager::addRenderItem(ID3D12Device* device, const std::string& itemName, bool isTesselated)
+int OpaqueObjectManager::addRenderItem(ID3D12Device* device, const std::string& itemName, bool isTesselated, std::unique_ptr<Material> material)
 {
 	std::string name(itemName.begin(), itemName.end());
 
@@ -200,7 +237,8 @@ int OpaqueObjectManager::addRenderItem(ID3D12Device* device, const std::string& 
 	modelRitem->Geo = GeometryManager::geometries()[itemName].get();
 	modelRitem->PrimitiveType = isTesselated ? D3D_PRIMITIVE_TOPOLOGY_3_CONTROL_POINT_PATCHLIST : D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 	modelRitem->IndexCount = modelRitem->Geo->DrawArgs[itemName].IndexCount;
-	modelRitem->texHandles[TextureType::Diffuse].index = 0;
+	modelRitem->material = std::move(material);
+	modelRitem->material->numFramesDirty = gNumFrameResources;
 
 	for (int i = 0; i < FrameResource::frameResources().size(); ++i)
 	{
@@ -227,12 +265,17 @@ bool OpaqueObjectManager::deleteObject(int selectedObject)
 {
 	EditableRenderItem* objectToDelete = _objects[selectedObject].get();
 
-	const std::string diffName = objectToDelete->texHandles[TextureType::Diffuse].name;
-	TextureManager::deleteTexture(std::wstring(diffName.begin(), diffName.end()));
-	const std::string normalName = objectToDelete->texHandles[TextureType::Normal].name;
-	TextureManager::deleteTexture(std::wstring(normalName.begin(), normalName.end()));
-	const std::string dispName = objectToDelete->texHandles[TextureType::Displacement].name;
-	TextureManager::deleteTexture(std::wstring(dispName.begin(), dispName.end()));
+	Material* materialToDelete = objectToDelete->material.get();
+	for (int i = 0; i < BasicUtil::EnumIndex(MatProp::Count); i++)
+	{
+		const std::string texName = materialToDelete->properties[i].texture.name;
+		TextureManager::deleteTexture(std::wstring(texName.begin(), texName.end()));
+	}
+	for (int i = 0; i < BasicUtil::EnumIndex(MatTex::Count); i++)
+	{
+		const std::string texName = materialToDelete->textures[i].name;
+		TextureManager::deleteTexture(std::wstring(texName.begin(), texName.end()));
+	}
 
 	std::string name = objectToDelete->Name;
 	_objectLoaded[name]--;
@@ -302,7 +345,7 @@ void OpaqueObjectManager::Draw(ID3D12GraphicsCommandList* cmdList, FrameResource
 	cmdList->SetPipelineState(isWireframe ? _wireframePSO.Get() : _pso.Get());
 
 	auto passCB = currFrameResource->GBufferPassCB->Resource();
-	cmdList->SetGraphicsRootConstantBufferView(3, passCB->GetGPUVirtualAddress());
+	cmdList->SetGraphicsRootConstantBufferView(10, passCB->GetGPUVirtualAddress());
 	cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
 	DrawObjects(cmdList, currFrameResource, _untesselatedObjects);
@@ -327,15 +370,26 @@ void OpaqueObjectManager::DrawObjects(ID3D12GraphicsCommandList* cmdList, FrameR
 
 		D3D12_GPU_VIRTUAL_ADDRESS objCBAddress = objectCB->GetGPUVirtualAddress();
 
-		cmdList->SetGraphicsRootConstantBufferView(2, objCBAddress);
+		cmdList->SetGraphicsRootConstantBufferView(8, objCBAddress);
+		
+		auto materialCB = currFrameResource->MaterialCB[ri->uid]->Resource();
+		D3D12_GPU_VIRTUAL_ADDRESS materialCBAddress = materialCB->GetGPUVirtualAddress();
+		cmdList->SetGraphicsRootConstantBufferView(9, materialCBAddress);
 
-		//textures
-		CD3DX12_GPU_DESCRIPTOR_HANDLE diffuseTex(TextureManager::srvHeapAllocator.get()->GetGpuHandle(ri->texHandles[TextureType::Diffuse].index));
-		cmdList->SetGraphicsRootDescriptorTable(0, diffuseTex);
-		CD3DX12_GPU_DESCRIPTOR_HANDLE normalTex(TextureManager::srvHeapAllocator.get()->GetGpuHandle(ri->texHandles[TextureType::Normal].index));
-		cmdList->SetGraphicsRootDescriptorTable(1, normalTex);
-		CD3DX12_GPU_DESCRIPTOR_HANDLE dispTex(TextureManager::srvHeapAllocator.get()->GetGpuHandle(ri->texHandles[TextureType::Displacement].index));
-		cmdList->SetGraphicsRootDescriptorTable(4, dispTex);
+		auto heapAlloc = TextureManager::srvHeapAllocator.get();
+		auto material = ri->material.get();
+		constexpr size_t offset = BasicUtil::EnumIndex(MatProp::Count) - 1;
+		for (int i = 0; i < offset; i++)
+		{
+			if (i == BasicUtil::EnumIndex(MatProp::Opacity)) i++;
+			CD3DX12_GPU_DESCRIPTOR_HANDLE tex(heapAlloc->GetGpuHandle(material->properties[i].texture.index));
+			cmdList->SetGraphicsRootDescriptorTable(i, tex);
+		}
+		for (int i = 0; i < BasicUtil::EnumIndex(MatTex::Count); i++)
+		{
+			CD3DX12_GPU_DESCRIPTOR_HANDLE tex(heapAlloc->GetGpuHandle(material->textures[i].index));
+			cmdList->SetGraphicsRootDescriptorTable(offset + i, tex);
+		}
 
 		cmdList->DrawIndexedInstanced(ri->IndexCount, 1, 0, 0, 0);
 	}

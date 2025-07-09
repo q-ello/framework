@@ -30,9 +30,6 @@ TextureHandle TextureManager::LoadTexture(WCHAR* filename, int prevIndex, int te
 
 	UploadManager::CreateTexture(tex.get());
 
-	tex->size[0] = (std::uint32_t)tex->Resource.Get()->GetDesc().Width;
-	tex->size[1] = (std::uint32_t)tex->Resource.Get()->GetDesc().Height;
-
 	UINT index = srvHeapAllocator.get()->Allocate();
 	D3D12_CPU_DESCRIPTOR_HANDLE srvHandle = srvHeapAllocator.get()->GetCpuHandle(index);
 
@@ -85,22 +82,6 @@ void TextureManager::Init(ID3D12Device* device)
 	srvHeapAllocator = std::make_unique<DescriptorHeapAllocator>(srvDescriptorHeap.Get(), _srvDescriptorSize, srvHeapDesc.NumDescriptors);
 
 	LoadTexture();
-
-	//add default texture
-	UINT index = srvHeapAllocator.get()->Allocate();
-	D3D12_CPU_DESCRIPTOR_HANDLE srvHandle = srvHeapAllocator.get()->GetCpuHandle(index);
-	auto& defaultTex = textures()[L"tile"]->Resource;
-	_texIndices()[L"tile"] = index;
-
-	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-	srvDesc.Format = defaultTex.Get()->GetDesc().Format;
-	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-	srvDesc.Texture2D.MostDetailedMip = 0;
-	srvDesc.Texture2D.MipLevels = defaultTex.Get()->GetDesc().MipLevels;
-	srvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
-
-	_device->CreateShaderResourceView(defaultTex.Get(), &srvDesc, srvHandle);
 }
 
 std::array<const CD3DX12_STATIC_SAMPLER_DESC, 8> TextureManager::GetStaticSamplers()

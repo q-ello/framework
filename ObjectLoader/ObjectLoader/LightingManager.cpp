@@ -172,6 +172,13 @@ void LightingManager::DrawDebug(ID3D12GraphicsCommandList* cmdList, FrameResourc
 	cmdList->DrawIndexedInstanced(mesh.IndexCount, (UINT)_localLights.size(), mesh.StartIndexLocation, mesh.BaseVertexLocation, 0);
 }
 
+void LightingManager::DrawEmissive(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource)
+{
+	cmdList->SetPipelineState(_emissivePSO.Get());
+
+	cmdList->DrawInstanced(3, 1, 0, 0);
+}
+
 void LightingManager::Init(int srvAmount, ID3D12Device* device, D3D12_CPU_DESCRIPTOR_HANDLE srvHandle)
 {
 	// Create buffer on GPU
@@ -253,6 +260,7 @@ void LightingManager::BuildShaders()
 	_localLightsVSShader = d3dUtil::CompileShader(L"Shaders\\Lighting.hlsl", nullptr, "LocalLightingVS", "vs_5_1");
 	_localLightsPSShader = d3dUtil::CompileShader(L"Shaders\\Lighting.hlsl", nullptr, "LocalLightingPS", "ps_5_1");
 	_localLightsWireframePSShader = d3dUtil::CompileShader(L"Shaders\\Lighting.hlsl", nullptr, "LocalLightingWireframePS", "ps_5_1");
+	_emissivePSShader = d3dUtil::CompileShader(L"Shaders\\Lighting.hlsl", nullptr, "EmissivePS", "ps_5_1");
 }
 
 void LightingManager::BuildPSO()
@@ -323,4 +331,19 @@ void LightingManager::BuildPSO()
 	wireframePSO.RasterizerState.FillMode = D3D12_FILL_MODE_WIREFRAME;
 
 	ThrowIfFailed(UploadManager::device->CreateGraphicsPipelineState(&wireframePSO, IID_PPV_ARGS(&_localLightsWireframePSO)));
+
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC emissivePSODesc = lightingPSODesc;
+	emissivePSODesc.PS =
+	{
+		reinterpret_cast<BYTE*>(_emissivePSShader->GetBufferPointer()),
+		_emissivePSShader->GetBufferSize()
+	};
+
+	emissivePSODesc.BlendState.RenderTarget[0].BlendEnable = TRUE;
+	emissivePSODesc.BlendState.RenderTarget[0].SrcBlend = D3D12_BLEND_ONE;
+	emissivePSODesc.BlendState.RenderTarget[0].DestBlend = D3D12_BLEND_ONE;
+	emissivePSODesc.BlendState.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
+	emissivePSODesc.BlendState.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+
+	ThrowIfFailed(UploadManager::device->CreateGraphicsPipelineState(&emissivePSODesc, IID_PPV_ARGS(&_emissivePSO)));
 }

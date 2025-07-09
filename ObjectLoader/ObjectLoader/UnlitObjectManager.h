@@ -18,7 +18,7 @@ private:
 	void BuildShaders() override;
 
 	void AddObjectToResource(Microsoft::WRL::ComPtr<ID3D12Device> device, FrameResource* currFrameResource) override;
-	int addRenderItem(ID3D12Device* device, const std::string& itemName, bool isTesselated = false) override;
+	int addRenderItem(ID3D12Device* device, const std::string& itemName, bool isTesselated = false, std::unique_ptr<Material> material = nullptr) override;
 	bool deleteObject(int selectedObject) override;
 	int objectsCount() override;
 	std::string objectName(int i) override;

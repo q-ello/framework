@@ -45,9 +45,6 @@ bool MyApp::Initialize()
 	BuildDescriptorHeaps();
 	BuildShadersAndInputLayout();
 	GeometryManager::BuildNecessaryGeometry();
-	/*_selectedType = PSO::Opaque;
-	ModelData data = GeometryManager::BuildModelGeometry();
-	_selectedObject = _objectManagers[PSO::Opaque]->addRenderItem(md3dDevice.Get(), data.croppedName, data.isTesselated);*/
 	_objectManagers[PSO::Unlit]->addRenderItem(md3dDevice.Get(), "grid");
 	BuildFrameResources();
 	BuildPSOs();
@@ -446,7 +443,7 @@ void MyApp::DrawObjectsList(int* btnId)
 					//generating it as one mesh
 					ModelData data = GeometryManager::BuildModelGeometry(model.get());
 					_selectedMeshes.clear();
-					_selectedMeshes.insert(_objectManagers[PSO::Opaque]->addRenderItem(md3dDevice.Get(), data.croppedName, data.isTesselated));
+					_selectedMeshes.insert(_objectManagers[PSO::Opaque]->addRenderItem(md3dDevice.Get(), data.croppedName, data.isTesselated, std::move(data.material)));
 				}
 				CoTaskMemFree(pszFilePath);
 			}
@@ -580,7 +577,7 @@ void MyApp::DrawLightData(int* btnId)
 
 		ImVec4 color;
 
-		ImGui::Text("ColorEdit");
+		ImGui::Text("Color");
 		ImGui::SameLine();
 		ImGui::PushID((*btnId)++);
 		ImGui::ColorEdit3("", _lightingManager->mainLightColor());
@@ -702,10 +699,9 @@ void MyApp::DrawObjectInfo(int* btnId)
 		DrawMultiObjectTransform(btnId);
 	}
 
-	//textures
-	if (ImGui::CollapsingHeader("Textures", ImGuiTreeNodeFlags_DefaultOpen))
+	if (ImGui::CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen))
 	{
-		DrawMultiObjectTextures(btnId);
+		DrawMultiObjectMaterial(btnId);
 	}
 
 	ImGui::End();
@@ -799,145 +795,379 @@ void MyApp::DrawMultiObjectTransform(int* btnId)
 	}
 }
 
-void MyApp::DrawMultiObjectTextures(int* btnId)
+void MyApp::DrawMultiObjectMaterial(int* btnId)
 {
-
-	//diffuse button
-	DrawTextureButton("Diffuse", TextureType::Diffuse, btnId);
-	if (DrawTextureButton("Normal", TextureType::Normal, btnId))
+	bool isTransparent = DrawIsTransparentCheckbox();
+	bool useARM = DrawUseARMTextureCheckbox();
+	DrawMaterialProperty("Base Color", BasicUtil::EnumIndex(MatProp::BaseColor), btnId, true);
+	DrawMaterialProperty("Emissive", BasicUtil::EnumIndex(MatProp::Emissive), btnId, true, true, "Intensity", BasicUtil::EnumIndex(MatAddInfo::Emissive));
+	if (!useARM)
 	{
-		for (int idx : _selectedMeshes)
-		{
-			_objectManagers[_selectedType]->object(idx)->NumFramesDirty = gNumFrameResources;
-		}
+		DrawMaterialProperty("Roughness", BasicUtil::EnumIndex(MatProp::Roughness), btnId, false);
+		DrawMaterialProperty("Metallic", BasicUtil::EnumIndex(MatProp::Metallic), btnId, false);
+	}
+	if (isTransparent)
+	{
+		DrawMaterialProperty("Opacity", BasicUtil::EnumIndex(MatProp::Opacity), btnId, false);
 	}
 
-	//we don't need to show next data if objects are not tesselatable
-	bool allTesselatable = true;
-	for (int idx : _selectedMeshes)
+	DrawMaterialTexture("Normal", BasicUtil::EnumIndex(MatTex::Normal), btnId);
+	DrawMaterialTexture("Displacement", BasicUtil::EnumIndex(MatTex::Displacement), btnId, true, "Displacement Scale", BasicUtil::EnumIndex(MatAddInfo::Displacement));
+	if (!useARM)
 	{
-		if (_objectManagers[_selectedType]->object(idx)->PrimitiveType == D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST)
-		{
-			allTesselatable = false;
-			break;
-		}
-	}
-
-	if (!allTesselatable)
-	{
-		return;
-	}
-
-	if (DrawTextureButton("Displacement", TextureType::Displacement, btnId))
-	{
-		for (int idx : _selectedMeshes)
-		{
-			_objectManagers[_selectedType]->object(idx)->NumFramesDirty = gNumFrameResources;
-		}
-	}
-
-	//displacement scale
-	float firstDispScale = _objectManagers[_selectedType]->object(*_selectedMeshes.begin())->dispScale;
-	bool allScaleSame = true;
-	for (int idx : _selectedMeshes)
-	{
-		if (_objectManagers[_selectedType]->object(idx)->dispScale != firstDispScale)
-		{
-			allScaleSame = false;
-			break;
-		}
-	}
-
-	ImGui::Text("Displacement scale");
-	ImGui::SameLine();
-	ImGui::PushItemWidth(50);
-	ImGui::PushID((*btnId)++);
-
-	if (allScaleSame)
-	{
-		if (ImGui::DragFloat("", &firstDispScale, 0.5f, 0.0f, 25.f))
-		{
-			for (int idx : _selectedMeshes)
-			{
-				_objectManagers[_selectedType]->object(idx)->dispScale = firstDispScale;
-				_objectManagers[_selectedType]->object(idx)->NumFramesDirty = gNumFrameResources;
-			}
-		}
+		DrawMaterialTexture("Ambient Occlusion", BasicUtil::EnumIndex(MatTex::AmbOcc), btnId);
 	}
 	else
 	{
-		ImGui::TextDisabled("Multiple values");
+		DrawMaterialARMTexture("ARM", BasicUtil::EnumIndex(MatTex::ARM), btnId);
 	}
-	
-	ImGui::PopID();
 }
 
-bool MyApp::DrawTextureButton(const std::string& label, TextureType texType, int* btnId)
+void MyApp::DrawMaterialProperty(const std::string& label, int index, int* btnId, bool isFloat3, bool hasAdditionalInfo, const std::string& additionalInfoLabel, int additionalInfoIndex)
 {
 	auto& manager = _objectManagers[_selectedType];
-
-	TextureHandle texHandle = manager->object(*_selectedMeshes.begin())->texHandles[texType];
-
-	bool allSameTex = true;
+	Material* firstMaterial = manager->object(*_selectedMeshes.begin())->material.get();
+	bool textureTabOpen = firstMaterial->properties[index].texture.useTexture;
+	static int selectedTab = textureTabOpen;
+	XMFLOAT3 firstValue = firstMaterial->properties[index].value;
+	int firstTexIndex = firstMaterial->properties[index].texture.index;
+	float firstAddInfo = -1.f;
+	if (hasAdditionalInfo)
+	{
+		firstAddInfo = firstMaterial->additionalInfo[additionalInfoIndex];
+	}
+	bool allSameValues = true;
 
 	for (int idx : _selectedMeshes)
 	{
-
-		if (manager->object(idx)->texHandles[texType].index != texHandle.index)
+		Material* material = manager->object(idx)->material.get();
+		if (material->properties[index].texture.useTexture != textureTabOpen ||
+			material->properties[index].value.x != firstValue.x ||
+			material->properties[index].value.y != firstValue.y || 
+			material->properties[index].value.z != firstValue.z ||
+			material->properties[index].texture.index != firstTexIndex ||
+			(hasAdditionalInfo && firstAddInfo != material->additionalInfo[additionalInfoIndex])
+			)
 		{
-			allSameTex = false;
+			allSameValues = false;
 			break;
 		}
 	}
 
-	ImGui::Text(label.c_str());
-	ImGui::SameLine();
-	ImGui::PushID((*btnId)++);
-	if (!allSameTex)
+	if (ImGui::TreeNode(label.c_str()))
 	{
-		ImGui::TextDisabled("Multiple values");
-		ImGui::PopID();
-		return false;
-	}
-
-	std::string name = BasicUtil::trimName(texHandle.name, 15);
-
-	if (ImGui::Button(name.c_str()))
-	{
-		WCHAR* texturePath;
-		if (BasicUtil::TryToOpenFile(L"DDS Textures", L"*.dds", texturePath))
+		if (allSameValues)
 		{
-			texHandle
-				= TextureManager::LoadTexture(texturePath, texHandle.index, (int)_selectedMeshes.size());
+			if (ImGui::BeginTabBar("Tab bar"))
+			{
+				if (ImGui::BeginTabItem("Constant"))
+				{
+					selectedTab = 0;
+					bool smthChanged = false;
+					XMFLOAT3 newVal;
+
+					if (isFloat3)
+					{
+						XMFLOAT3 col = firstValue;
+						ImGui::PushID((*btnId)++);
+						if (ImGui::ColorEdit3("Color", &col.x))
+						{
+							smthChanged = true;
+							newVal = col;
+						}
+						ImGui::PopID();
+					}
+					else
+					{
+						float val = firstValue.x;
+						ImGui::PushID((*btnId)++);
+						if (ImGui::DragFloat("", &val, 0.1f, 0.f, 1.f))
+						{
+							smthChanged = true;
+							newVal = { val, val, val };
+						}
+						ImGui::PopID();
+					}
+
+					if (smthChanged)
+					{
+						for (int idx : _selectedMeshes)
+						{
+							Material* material = manager->object(idx)->material.get();
+							material->properties[index].value = newVal;
+							material->numFramesDirty = gNumFrameResources;
+						}
+					}
+
+					
+					ImGui::EndTabItem();
+
+				}
+				if (ImGui::BeginTabItem("Texture", 0, selectedTab ? ImGuiTabItemFlags_SetSelected : 0))
+				{
+					selectedTab = 1;
+
+					std::string name = BasicUtil::trimName(firstMaterial->properties[index].texture.name, 15);
+
+					TextureHandle texHandle = firstMaterial->properties[index].texture;
+
+					ImGui::PushID((*btnId)++);
+					if (ImGui::Button(name.c_str()))
+					{
+						WCHAR* texturePath;
+						if (BasicUtil::TryToOpenFile(L"DDS Textures", L"*.dds", texturePath))
+						{
+							texHandle = TextureManager::LoadTexture(texturePath, firstTexIndex, (int)_selectedMeshes.size());
+							for (int idx : _selectedMeshes)
+							{
+								Material* material = manager->object(idx)->material.get();
+								material->properties[index].texture = texHandle;
+								material->numFramesDirty = gNumFrameResources;
+							}
+							CoTaskMemFree(texturePath);
+						}
+					}
+					ImGui::PopID();
+					if (ImGui::BeginPopupContextItem())
+					{
+						ImGui::PushID((*btnId)++);
+						if (ImGui::Button("delete") && texHandle.useTexture == true)
+						{
+							const std::string texName = texHandle.name;
+							TextureManager::deleteTexture(std::wstring(texName.begin(), texName.end()), (int)_selectedMeshes.size());
+							for (int idx : _selectedMeshes)
+							{
+								Material* material = manager->object(idx)->material.get();
+								material->properties[index].texture = TextureHandle();
+								material->properties[index].texture.useTexture = true;
+								material->numFramesDirty = gNumFrameResources;
+							}
+						}
+						ImGui::PopID();
+						ImGui::EndPopup();
+					}
+					ImGui::EndTabItem();
+				}
+				ImGui::EndTabBar();
+			}
+
+			if (hasAdditionalInfo)
+			{
+				float val = firstAddInfo;
+
+				ImGui::PushID((*btnId)++);
+				ImGui::Text(additionalInfoLabel.c_str());
+				ImGui::PopID();
+				ImGui::SameLine();
+				ImGui::PushID((*btnId)++);
+				ImGui::SetNextItemWidth(100.f);
+				if (ImGui::DragFloat("", &val, 0.1, 0.0f, 10.f))
+				{
+					for (int idx : _selectedMeshes)
+					{
+						Material* material = manager->object(idx)->material.get();
+						material->additionalInfo[additionalInfoIndex] = val;
+						material->numFramesDirty = gNumFrameResources;
+					}
+				}
+				ImGui::PopID();
+			}
+		}
+		else
+		{
+			ImGui::TextDisabled("Multiple values");
+		}
+
+		if (allSameValues && textureTabOpen != selectedTab)
+		{
 			for (int idx : _selectedMeshes)
 			{
-				manager->object(idx)->texHandles[texType] = texHandle;
+				Material* material = manager->object(idx)->material.get();
+				material->properties[index].texture.useTexture = selectedTab;
+				material->numFramesDirty = gNumFrameResources;
 			}
-			CoTaskMemFree(texturePath);
-			ImGui::PopID();
-			return true;
 		}
+
+		ImGui::TreePop();
 	}
-	ImGui::PopID();
-	if (ImGui::BeginPopupContextItem())
+}
+
+void MyApp::DrawMaterialTexture(const std::string& label, int index, int* btnId, bool hasAdditionalInfo, const std::string& additionalInfoLabel, int additionalInfoIndex)
+{
+	auto& manager = _objectManagers[_selectedType];
+	Material* firstMaterial = manager->object(*_selectedMeshes.begin())->material.get();
+	int firstTexIndex = firstMaterial->textures[index].index;
+	float firstAddInfo = -1.f;
+	if (hasAdditionalInfo)
 	{
-		ImGui::PushID((*btnId)++);
-		if (ImGui::Button("delete") && texHandle.isRelevant == true)
+		firstAddInfo = firstMaterial->additionalInfo[additionalInfoIndex];
+	}
+	bool allSameValues = true;
+
+	for (int idx : _selectedMeshes)
+	{
+		Material* material = manager->object(idx)->material.get();
+		if (material->textures[index].index !=  firstTexIndex ||
+			(hasAdditionalInfo && firstAddInfo != material->additionalInfo[additionalInfoIndex])
+			)
 		{
-			const std::string texName = texHandle.name;
-			TextureManager::deleteTexture(std::wstring(texName.begin(), texName.end()), (int)_selectedMeshes.size());
-			for (int idx : _selectedMeshes)
+			allSameValues = false;
+			break;
+		}
+	}
+
+	if (ImGui::TreeNode(label.c_str()))
+	{
+		if (allSameValues)
+		{
+			TextureHandle texHandle = firstMaterial->textures[index];
+			std::string name = BasicUtil::trimName(texHandle.name, 15);
+
+			ImGui::PushID((*btnId)++);
+			if (ImGui::Button(name.c_str()))
 			{
-				manager->object(idx)->texHandles[texType] = TextureHandle();
+				WCHAR* texturePath;
+				if (BasicUtil::TryToOpenFile(L"DDS Textures", L"*.dds", texturePath))
+				{
+					texHandle = TextureManager::LoadTexture(texturePath, firstTexIndex, (int)_selectedMeshes.size());
+					for (int idx : _selectedMeshes)
+					{
+						Material* material = manager->object(idx)->material.get();
+						material->textures[index] = texHandle;
+						material->numFramesDirty = gNumFrameResources;
+					}
+					CoTaskMemFree(texturePath);
+				}
 			}
 			ImGui::PopID();
-			ImGui::EndPopup();
-			return true;
+			if (ImGui::BeginPopupContextItem())
+			{
+				ImGui::PushID((*btnId)++);
+				if (ImGui::Button("delete") && texHandle.useTexture == true)
+				{
+					const std::string texName = texHandle.name;
+					TextureManager::deleteTexture(std::wstring(texName.begin(), texName.end()), (int)_selectedMeshes.size());
+					for (int idx : _selectedMeshes)
+					{
+						Material* material = manager->object(idx)->material.get();
+						material->textures[index] = TextureHandle();
+						material->numFramesDirty = gNumFrameResources;
+					}
+				}
+				ImGui::PopID();
+				ImGui::EndPopup();
+			}
+
+			if (hasAdditionalInfo)
+			{
+				float val = firstAddInfo;
+
+				ImGui::PushID((*btnId)++);
+				ImGui::Text(additionalInfoLabel.c_str());
+				ImGui::PopID();
+				ImGui::SameLine();
+				ImGui::PushID((*btnId)++);
+				ImGui::SetNextItemWidth(100.f);
+				if (ImGui::DragFloat("", &val, 0.1, 0.0f, 10.f))
+				{
+					for (int idx : _selectedMeshes)
+					{
+						Material* material = manager->object(idx)->material.get();
+						material->additionalInfo[additionalInfoIndex] = val;
+						material->numFramesDirty = gNumFrameResources;
+					}
+				}
+				ImGui::PopID();
+			}
 		}
-		ImGui::PopID();
-		ImGui::EndPopup();
+		else
+		{
+			ImGui::TextDisabled("Multiple values");
+		}
+
+		ImGui::TreePop();
 	}
-	return false;
+}
+
+void MyApp::DrawMaterialARMTexture(const std::string& label, int index, int* btnId)
+{
+	auto& manager = _objectManagers[_selectedType];
+	Material* firstMaterial = manager->object(*_selectedMeshes.begin())->material.get();
+	int firstTexIndex = firstMaterial->textures[index].index;
+	ARMLayout firstARMLayout = firstMaterial->armLayout;
+	bool allSameValues = true;
+
+	for (int idx : _selectedMeshes)
+	{
+		Material* material = manager->object(idx)->material.get();
+		if (material->textures[index].index != firstTexIndex ||
+			firstARMLayout != material->armLayout)
+		{
+			allSameValues = false;
+			break;
+		}
+	}
+
+	if (ImGui::TreeNode(label.c_str()))
+	{
+		if (allSameValues)
+		{
+			static const char* layouts[] = { "AO-Rough-Metal", "Rough-Metal-AO", };
+			int layout = (int)firstARMLayout;
+			if (ImGui::Combo("Layout", &layout, layouts, IM_ARRAYSIZE(layouts)))
+			{
+				for (auto idx : _selectedMeshes)
+				{
+					manager->object(idx)->material->armLayout = (ARMLayout)layout;
+					manager->object(idx)->material->numFramesDirty = gNumFrameResources;
+				}
+			}
+
+			TextureHandle texHandle = firstMaterial->textures[index];
+			std::string name = BasicUtil::trimName(texHandle.name, 15);
+
+			ImGui::PushID((*btnId)++);
+			if (ImGui::Button(name.c_str()))
+			{
+				WCHAR* texturePath;
+				if (BasicUtil::TryToOpenFile(L"DDS Textures", L"*.dds", texturePath))
+				{
+					texHandle = TextureManager::LoadTexture(texturePath, firstTexIndex, (int)_selectedMeshes.size());
+					for (int idx : _selectedMeshes)
+					{
+						Material* material = manager->object(idx)->material.get();
+						material->textures[index] = texHandle;
+						material->numFramesDirty = gNumFrameResources;
+					}
+					CoTaskMemFree(texturePath);
+				}
+			}
+			ImGui::PopID();
+			if (ImGui::BeginPopupContextItem())
+			{
+				ImGui::PushID((*btnId)++);
+				if (ImGui::Button("delete") && texHandle.useTexture == true)
+				{
+					const std::string texName = texHandle.name;
+					TextureManager::deleteTexture(std::wstring(texName.begin(), texName.end()), (int)_selectedMeshes.size());
+					for (int idx : _selectedMeshes)
+					{
+						Material* material = manager->object(idx)->material.get();
+						material->textures[index] = TextureHandle();
+						material->numFramesDirty = gNumFrameResources;
+					}
+				}
+				ImGui::PopID();
+				ImGui::EndPopup();
+			}
+		}
+		else
+		{
+			ImGui::TextDisabled("Multiple values");
+		}
+
+		ImGui::TreePop();
+	}
 }
 
 void MyApp::DrawTransformInput(const std::string& label, int btnId, int transformIndex, float speed)
@@ -1014,12 +1244,12 @@ void MyApp::DrawImportModal()
 
 		ImGui::Spacing();
 
-		if (ImGui::Button("Import as one file"))
+		if (ImGui::Button("Import as one mesh"))
 		{
 			//merge meshes into one file
 			ModelData data = GeometryManager::BuildModelGeometry(_modelManager->ParseAsOneObject().get());
 			_selectedMeshes.clear();
-			_selectedMeshes.insert(_objectManagers[PSO::Opaque]->addRenderItem(md3dDevice.Get(), data.croppedName, data.isTesselated));
+			_selectedMeshes.insert(_objectManagers[PSO::Opaque]->addRenderItem(md3dDevice.Get(), data.croppedName, data.isTesselated, std::move(data.material)));
 			ImGui::CloseCurrentPopup();
 		}
 
@@ -1030,7 +1260,7 @@ void MyApp::DrawImportModal()
 			for (auto& model : _modelManager->ParseScene())
 			{
 				ModelData data = GeometryManager::BuildModelGeometry(model.get());
-				_selectedMeshes.insert(_objectManagers[PSO::Opaque]->addRenderItem(md3dDevice.Get(), data.croppedName, data.isTesselated));
+				_selectedMeshes.insert(_objectManagers[PSO::Opaque]->addRenderItem(md3dDevice.Get(), data.croppedName, data.isTesselated, std::move(data.material)));
 			}
 			ImGui::CloseCurrentPopup();
 		}
@@ -1041,6 +1271,72 @@ void MyApp::DrawImportModal()
 
 		ImGui::EndPopup();
 	}
+}
+
+bool MyApp::DrawIsTransparentCheckbox()
+{
+	auto& manager = _objectManagers[_selectedType];
+
+	bool firstState = manager->object(*_selectedMeshes.begin())->isTransparent;
+
+	bool allSameState = true;
+
+	for (int idx : _selectedMeshes)
+	{
+		if (manager->object(idx)->isTransparent != firstState)
+		{
+			allSameState = false;
+			break;
+		}
+	}
+
+	if (!allSameState)
+		return false;
+
+	bool state = firstState;
+	if (ImGui::Checkbox("Is transparent", &state))
+	{
+		for (int idx : _selectedMeshes)
+		{
+			manager->object(idx)->isTransparent = state;
+			manager->object(idx)->NumFramesDirty = gNumFrameResources;
+		}
+	}
+
+	return state;
+}
+
+bool MyApp::DrawUseARMTextureCheckbox()
+{
+	auto& manager = _objectManagers[_selectedType];
+
+	bool firstState = manager->object(*_selectedMeshes.begin())->material->useARMTexture;
+
+	bool allSameState = true;
+
+	for (int idx : _selectedMeshes)
+	{
+		if (manager->object(idx)->material->useARMTexture != firstState)
+		{
+			allSameState = false;
+			break;
+		}
+	}
+
+	if (!allSameState)
+		return false;
+
+	bool state = firstState;
+	if (ImGui::Checkbox("Use ARM Texture", &state))
+	{
+		for (int idx : _selectedMeshes)
+		{
+			manager->object(idx)->material->useARMTexture = state;
+			manager->object(idx)->NumFramesDirty = gNumFrameResources;
+		}
+	}
+
+	return state;
 }
 
 void MyApp::ClearData()
@@ -1116,6 +1412,8 @@ void MyApp::LightingPass()
 			_lightingManager->DrawDebug(mCommandList.Get(), mCurrFrameResource);
 		}
 	}
+
+	_lightingManager->DrawEmissive(mCommandList.Get(), mCurrFrameResource);
 }
 
 void MyApp::WireframePass()

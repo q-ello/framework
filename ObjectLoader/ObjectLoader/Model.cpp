@@ -1,20 +1,21 @@
 #include "Model.h"
 
-Model::Model(aiMesh** meshes, unsigned int numMeshes, std::string sceneName)
+Model::Model(aiMesh** meshes, unsigned int numMeshes, std::string sceneName, aiMaterial* material)
 {
 	name = sceneName;
 	for (unsigned int j = 0; j < numMeshes; j++)
 	{
 		ParseMesh(meshes[j]);
 	}
-
+	ParseMaterial(material);
 	isTesselated = _vertices.size() < 10000;
 }
 
-Model::Model(aiMesh* mesh)
+Model::Model(aiMesh* mesh, aiMaterial* material)
 {
 	name = mesh->mName.C_Str();
 	ParseMesh(mesh);
+	ParseMaterial(material);
 	isTesselated = _vertices.size() < 10000;
 }
 
@@ -30,6 +31,11 @@ std::vector<Vertex> Model::vertices() const
 std::vector<std::int32_t> Model::indices() const
 {
 	return _indices;
+}
+
+std::unique_ptr<Material> Model::material()
+{
+	return std::move(_material);
 }
 
 void Model::ParseMesh(aiMesh* mesh)
@@ -71,4 +77,55 @@ void Model::ParseMesh(aiMesh* mesh)
 		_indices.push_back(mesh->mFaces[i].mIndices[1] + (UINT)vertexOffset);
 		_indices.push_back(mesh->mFaces[i].mIndices[2] + (UINT)vertexOffset);
 	}
+}
+
+void Model::ParseMaterial(aiMaterial* material)
+{
+	if (material == nullptr)
+		return;
+
+	_material = std::make_unique<Material>();
+
+	aiColor4D color;
+
+	if (material->Get(AI_MATKEY_BASE_COLOR, color) == AI_SUCCESS)
+	{
+		_material->properties[BasicUtil::EnumIndex(MatProp::BaseColor)].value = { color.r, color.g, color.b };
+	}
+	else if (material->Get(AI_MATKEY_COLOR_DIFFUSE, color) == AI_SUCCESS)
+	{
+		_material->properties[BasicUtil::EnumIndex(MatProp::BaseColor)].value = { color.r, color.g, color.b };
+	}
+
+	if (material->Get(AI_MATKEY_COLOR_EMISSIVE, color) == AI_SUCCESS)
+	{
+		_material->properties[BasicUtil::EnumIndex(MatProp::Emissive)].value = { color.r, color.g, color.b };
+	}
+
+	float factor;
+	if (material->Get(AI_MATKEY_METALLIC_FACTOR, factor) == AI_SUCCESS)
+	{
+		_material->properties[BasicUtil::EnumIndex(MatProp::Metallic)].value.x = factor;
+	}
+	else
+	{
+		_material->properties[BasicUtil::EnumIndex(MatProp::Metallic)].value.x = 0.f;
+	}
+
+	if (material->Get(AI_MATKEY_ROUGHNESS_FACTOR, factor) == AI_SUCCESS)
+	{
+		_material->properties[BasicUtil::EnumIndex(MatProp::Roughness)].value.x = factor;
+	}
+
+	if (material->Get(AI_MATKEY_OPACITY, factor) == AI_SUCCESS)
+	{
+		_material->properties[BasicUtil::EnumIndex(MatProp::Opacity)].value.x = factor;
+	}
+
+	if (material->Get(AI_MATKEY_EMISSIVE_INTENSITY, factor) == AI_SUCCESS)
+	{
+		_material->additionalInfo[BasicUtil::EnumIndex(MatAddInfo::Emissive)] = 0.0f;
+	}
+
+	//todo textures
 }

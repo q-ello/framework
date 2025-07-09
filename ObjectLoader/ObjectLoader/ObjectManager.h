@@ -13,7 +13,7 @@ public:
 	ObjectManager(ID3D12Device* device);
 	~ObjectManager();
 
-	virtual int addRenderItem(ID3D12Device* device, const std::string& itemName, bool isTesselated = false) = 0;
+	virtual int addRenderItem(ID3D12Device* device, const std::string& itemName, bool isTesselated = false, std::unique_ptr<Material> material = nullptr) = 0;
 	virtual bool deleteObject(int selectedObject) = 0;
 
 	virtual void UpdateObjectCBs(FrameResource* currFrameResource) = 0;

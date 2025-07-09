@@ -10,24 +10,28 @@
 #include <assimp/scene.h>           // Output data structure
 #include <assimp/postprocess.h>     // Post processing flags
 #include <map>
+#include "RenderItem.h"
 
 class Model
 {
 public:
 	Model() {}
-	Model(aiMesh** meshes, unsigned int numMeshes, std::string sceneName);
-	Model(aiMesh* mesh);
+	Model(aiMesh** meshes, unsigned int numMeshes, std::string sceneName, aiMaterial* material);
+	Model(aiMesh* mesh, aiMaterial* material);
 	~Model();
 
 	std::vector<Vertex> vertices() const;
 	std::vector<std::int32_t> indices() const;
 	bool isTesselated = false;
 	std::string name = "";
+	std::unique_ptr<Material> material();
 private:
 	std::vector<Vertex> _vertices;
 	std::vector<std::int32_t> _indices;
 	std::vector<DirectX::XMFLOAT2> _texCoords;
 	std::vector<DirectX::XMFLOAT3> _normals;
+	std::unique_ptr<Material> _material = std::make_unique<Material>();
 
 	void ParseMesh(aiMesh* mesh);
+	void ParseMaterial(aiMaterial* material);
 };

@@ -29,7 +29,8 @@ std::unique_ptr<Model> ModelManager::ParseAsOneObject()
 		return std::make_unique<Model>();
 	}
 
-    return std::make_unique<Model>(_scene->mMeshes, _scene->mNumMeshes, _sceneName);
+    return std::make_unique<Model>(_scene->mMeshes, _scene->mNumMeshes, _sceneName, 
+		_scene->mMaterials[(*_scene->mMeshes)->mMaterialIndex]);
 }
 
 std::vector<std::unique_ptr<Model>> ModelManager::ParseScene()
@@ -42,7 +43,8 @@ std::vector<std::unique_ptr<Model>> ModelManager::ParseScene()
 	std::vector<std::unique_ptr<Model>> models{};
 	for (unsigned int i = 0; i < _scene->mNumMeshes; i++)
 	{
-		models.push_back(std::make_unique<Model>(_scene->mMeshes[i]));
+		auto& mesh = _scene->mMeshes[i];
+		models.push_back(std::make_unique<Model>(mesh, _scene->mMaterials[mesh->mMaterialIndex]));
 	}
 
     return models;

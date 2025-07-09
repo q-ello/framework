@@ -13,10 +13,32 @@ struct UnlitObjectConstants
 struct OpaqueObjectConstants : public UnlitObjectConstants
 {
     DirectX::XMFLOAT4X4 WorldInvTranspose = MathHelper::Identity4x4();
-    DirectX::XMUINT2 normalMapSize = { 0, 0 };
-    uint32_t useNormalMap = 0;
-    uint32_t useDisplacementMap = 0;
-    float displacementScale = 1.0f;
+};
+
+struct MaterialConstants
+{
+    int useBaseColorMap = 0;
+    int useEmissiveMap = 0;
+    int useOpacityMap = 0;
+    int useRoughnessMap = 0;
+
+    DirectX::XMFLOAT3 baseColor = { 1.0f, 1.0f, 1.0f };
+    int useMetallicMap = 0;
+    
+    int useNormalMap = 0;
+    int useAOMap = 0;
+    int useDisplacementMap = 0;
+    float emissiveIntensity = 0.0f;
+
+    DirectX::XMFLOAT3 emissive = { 0.0f, 0.0f, 0.0f };
+    float opacity = 1.f;
+    
+    float roughness = 1.f;
+    float metallic = 1.f;
+    float displacementScale = 0.0f;
+    int useARMMap = 0.0f;
+
+    int ARMLayout = 0;
     float pad[3];
 };
 
@@ -38,7 +60,6 @@ struct LightingPassConstants
     DirectX::XMFLOAT2 RTSize = { 1.0f, 1.0f };
     DirectX::XMFLOAT2 mousePosition = { 0.0f, 0.0f };
 };
-
 
 struct Light
 {
@@ -96,6 +117,7 @@ public:
     std::unique_ptr<UploadBuffer<Light>> LocalLightCB = nullptr;
 
     std::unordered_map<std::uint32_t, std::unique_ptr<UploadBuffer<OpaqueObjectConstants>>> OpaqueObjCB = {};
+    std::unordered_map<std::uint32_t, std::unique_ptr<UploadBuffer<MaterialConstants>>> MaterialCB = {};
     std::unordered_map<std::uint32_t, std::unique_ptr<UploadBuffer<UnlitObjectConstants>>> UnlitObjCB = {};
 
     // Fence value to mark commands up to this fence point.  This lets us

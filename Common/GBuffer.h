@@ -3,8 +3,10 @@
 
 enum class GBufferInfo
 {
-	Diffuse = 0,
+	BaseColor = 0,
 	Normals,
+	Emissive,
+	ORM,
 	Depth,
 	Count
 };
@@ -55,9 +57,11 @@ public:
 	}
 
 	static constexpr DXGI_FORMAT infoFormats[(int)GBufferInfo::Count] = {
-	DXGI_FORMAT_R8G8B8A8_UNORM,        // Diffuse
-	DXGI_FORMAT_R16G16B16A16_FLOAT,    // Normals
-	DXGI_FORMAT_R24G8_TYPELESS         // Depth
+	DXGI_FORMAT_R8G8B8A8_UNORM,			// Diffuse
+	DXGI_FORMAT_R16G16B16A16_FLOAT,		// Normals
+	DXGI_FORMAT_R16G16B16A16_FLOAT,		//Emissive
+	DXGI_FORMAT_R8G8B8A8_UNORM,			//ORM
+	DXGI_FORMAT_R24G8_TYPELESS,         // Depth
 	};
 
 	D3D12_CPU_DESCRIPTOR_HANDLE lightingHandle() const

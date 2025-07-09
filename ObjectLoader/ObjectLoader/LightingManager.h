@@ -31,6 +31,7 @@ public:
 	void DrawDirLight(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, D3D12_GPU_DESCRIPTOR_HANDLE descTable);
 	void DrawLocalLights(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource);
 	void DrawDebug(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource);
+	void DrawEmissive(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource);
 	void Init(int srvAmount, ID3D12Device* device, D3D12_CPU_DESCRIPTOR_HANDLE srvHandle);
 
 	bool* isMainLightOn()
@@ -87,6 +88,9 @@ private:
 
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> _localLightsWireframePSO;
 	Microsoft::WRL::ComPtr<ID3DBlob> _localLightsWireframePSShader;
+
+	Microsoft::WRL::ComPtr<ID3D12PipelineState> _emissivePSO;
+	Microsoft::WRL::ComPtr<ID3DBlob> _emissivePSShader;
 
 	void BuildInputLayout();
 	void BuildRootSignature(int srvAmount);

@@ -14,7 +14,11 @@ struct Light
 
 Texture2D gDiffuse : register(t0);
 Texture2D gNormal : register(t1);
-Texture2D gDepth : register(t2);
+Texture2D gEmissive : register(t2);
+Texture2D gORM : register(t3);
+Texture2D gDepth : register(t4);
+
+
 StructuredBuffer<Light> lights : register(t0, space1);
 
 cbuffer cbLightingPass : register(b0)
@@ -87,6 +91,9 @@ float4 DirLightingPS(VertexOut pin) : SV_Target
     float3 normal = gNormal.Load(coords).xyz;
     
     float3 finalColor = albedo.rgb * mainLightColor * dot(normal, -mainLightDirection);
+    
+    float4 emissive = gEmissive.Load(coords);
+    finalColor += emissive.xyz * emissive.a;
 
     if (mainSpotlight.active == 0)
     {
@@ -119,6 +126,7 @@ float4 DirLightingPS(VertexOut pin) : SV_Target
     
     finalColor += albedo.rgb * mainSpotlight.color * diff * attenuation * mainSpotlight.intensity * spotFactor;
     
+    
     return float4(finalColor, albedo.a);
 }
 
@@ -135,13 +143,13 @@ VertexOut LocalLightingVS(VertexIn vin, uint id : SV_InstanceID)
 
 float4 LocalLightingPS(VertexOut pin) : SV_Target
 {
+    float3 coords = pin.PosH.xyz;
+    
     Light light = lights[pin.InstanceId];
     if (light.active == 0)
     {
         discard;
     }
-    
-    float3 coords = pin.PosH.xyz;
     
     float4 albedo = gDiffuse.Load(coords);
     
@@ -181,7 +189,6 @@ float4 LocalLightingPS(VertexOut pin) : SV_Target
 }
 
 
-
 float4 LocalLightingWireframePS(VertexOut pin) : SV_Target
 {
     Light light = lights[pin.InstanceId];
@@ -190,4 +197,15 @@ float4 LocalLightingWireframePS(VertexOut pin) : SV_Target
         discard;
     }
     return float4(light.color, 1);
+}
+
+float4 EmissivePS(VertexOut pin) : SV_Target
+{
+    float3 coords = pin.PosH.xyz;
+    float4 emissive = gEmissive.Load(pin.PosH.xyz);
+    if (gEmissive.Load(coords).a <= 0)
+    {
+        discard;
+    }
+    return float4(emissive.xyz * emissive.a, 0);
 }

@@ -12,6 +12,7 @@ struct ModelData
 {
 	std::string croppedName = "";
 	bool isTesselated = false;
+	std::unique_ptr<Material> material;
 };
 
 class GeometryManager

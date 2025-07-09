@@ -1,6 +1,11 @@
-Texture2D gDiffuseMap : register(t0);
-Texture2D gNormalMap : register(t1);
-Texture2D gDisplacementMap : register(t2);
+Texture2D gBaseColorMap : register(t0);
+Texture2D gEmissiveMap : register(t1);
+Texture2D gRoughnessMap : register(t2);
+Texture2D gMetallicMap : register(t3);
+Texture2D gNormalMap : register(t4);
+Texture2D gAOMap : register(t5);
+Texture2D gDisplacementMap : register(t6);
+Texture2D gARMMap : register(t7);
 
 SamplerState gsamPointWrap : register(s0);
 SamplerState gsamPointClamp : register(s1);
@@ -17,20 +22,43 @@ cbuffer cbPerObject : register(b0)
 {
     float4x4 gWorld;
     float4x4 gWorldInvTranspose;
-    uint2 normalMapSize;
-    uint useNormalMap;
-    uint useDisplacementMap;
-    float displacementScale;
-    float3 pad;
 };
 
-cbuffer cbPass : register(b1)
+cbuffer cbPerMaterial : register(b1)
+{
+    int useBaseColorMap;
+    int useEmissiveMap;
+    int useOpacityMap;
+    int useRoughnessMap;
+
+    float3 baseColor;
+    int useMetallicMap;
+    
+    int useNormalMap;
+    int useAOMap;
+    int useDisplacementMap;
+    float emissiveIntensity;
+
+    float3 emissive;
+    float opacity;
+    
+    float roughness;
+    float metallic;
+    float displacementScale;
+    int useARMMap;
+    
+    int ARMLayout;
+    float3 padcpm;
+}
+
+cbuffer cbPass : register(b2)
 {
     float4x4 gViewProj;
     float3 gEyePosW;
     float gDeltaTime;
     float2 gScreenSize;
 };
+
 
 struct VertexIn
 {
@@ -90,20 +118,8 @@ struct PatchTess
 };
 
 float TessEdge(float3 p0, float3 p1, float2 s0, float2 s1)
-{
-    //distance from camera tess factor
-    const float d0 = 10.0f;
-    const float d1 = 30.0f;
-    const float distWeight = 0.3f;
-    
-    float3 mid = 0.5f * (p0 + p1);
-    float d = distance(gEyePosW, mid);
-    float distTess = saturate((d1 - d) / (d1 - d0));
-    distTess *= distWeight;
-    
+{   
     //screen area size tess factor
-    const float screenWeight = 1 - distWeight;
-    
     const float wantedScreenEdge = 32.f;
     float edgeScreenLength = length(s0 - s1);
     
@@ -117,12 +133,6 @@ float TessEdge(float3 p0, float3 p1, float2 s0, float2 s1)
     float maxTess = 64.0f;
     
     screenTess = clamp(screenTess, 1.0f, maxTess);
-    //screenTess *= screenWeight;
-    
-    //I just didn't like that
-    //float tess = maxTess * distTess + screenTess;
-    
-    //return floor(clamp(tess, 1.0f, maxTess));
     
     return screenTess;
 }
@@ -236,12 +246,16 @@ VertexOut TessDS(PatchTess patchTess,
 
 struct GBufferInfo
 {
-    float4 Diffuse : SV_Target0;
+    float4 BaseColor : SV_Target0;
     float4 Normal : SV_Target1;
+    float4 Emissive : SV_Target2;
+    float4 ORM : SV_Target3;
 };
 
 GBufferInfo GBufferPS(VertexOut pin)
 {
+    GBufferInfo res;
+    
     if (useNormalMap)
     {
         float3x3 tbnMat =
@@ -251,14 +265,29 @@ GBufferInfo GBufferPS(VertexOut pin)
             normalize(pin.NormalW)
         };
         
-        pin.NormalW = gNormalMap.Load(int3(pin.TexC * normalMapSize, 0)).xyz * 2.0f - 1.0f;
+        pin.NormalW = gNormalMap.Sample(gsamPointWrap, pin.TexC).xyz * 2.0f - 1.0f;
         pin.NormalW = mul(pin.NormalW, tbnMat);
     }
     
-    GBufferInfo res;
-    
-    res.Diffuse = gDiffuseMap.Sample(gsamLinearMirror, pin.TexC);
+    res.BaseColor = useBaseColorMap ? gBaseColorMap.Sample(gsamLinearClamp, pin.TexC) : float4(baseColor, 1);
     res.Normal = float4(normalize(pin.NormalW), 1);
+    if (useARMMap)
+    {
+        res.ORM = saturate(gARMMap.Sample(gsamPointClamp, pin.TexC));
+        if (ARMLayout == 1)
+        {
+            res.ORM.rgb = res.ORM.gbr;
+        }
+    }
+    else
+    {
+        res.ORM.r = useAOMap ? saturate(gAOMap.Sample(gsamPointClamp, pin.TexC)) : 1.f;
+        res.ORM.g = useRoughnessMap ? saturate(gRoughnessMap.Sample(gsamPointClamp, pin.TexC)) : roughness;
+        res.ORM.b = useMetallicMap ? saturate(gMetallicMap.Sample(gsamPointClamp, pin.TexC)) : metallic;
+        res.ORM.a = 1.f;
+    }
+    res.Emissive.xyz = useEmissiveMap ? gEmissiveMap.Sample(gsamPointClamp, pin.TexC) : emissive;
+    res.Emissive.a = emissiveIntensity;
     
     return res;
 }

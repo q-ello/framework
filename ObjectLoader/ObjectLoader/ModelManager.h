@@ -10,6 +10,7 @@
 #include <assimp/scene.h>           // Output data structure
 #include <assimp/postprocess.h>     // Post processing flags
 #include <map>
+#include "RenderItem.h"
 
 class ModelManager
 {
