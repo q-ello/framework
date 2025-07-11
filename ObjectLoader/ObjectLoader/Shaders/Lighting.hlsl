@@ -126,6 +126,10 @@ float4 DirLightingPS(VertexOut pin) : SV_Target
     
     finalColor += albedo.rgb * mainSpotlight.color * diff * attenuation * mainSpotlight.intensity * spotFactor;
     
+    float3 l = mainLightDirection;
+    float3 v = currDir;
+    float3 h = normalize(l + v);
+    
     
     return float4(finalColor, albedo.a);
 }

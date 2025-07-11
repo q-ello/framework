@@ -217,7 +217,7 @@ void MyApp::OnMouseMove(WPARAM btnState, int x, int y)
 	if ((btnState & MK_LBUTTON) != 0 && !io.WantCaptureMouse)
 	{
 		// Make each pixel correspond to a quarter of a degree.
-		float dx = 0.005f * static_cast<float>(x - mLastMousePos.x);
+		float dx = 0.001f * static_cast<float>(x - mLastMousePos.x);
 		float dy = _cameraSpeed * static_cast<float>(y - mLastMousePos.y);
 
 		XMVECTOR position = XMLoadFloat3(&_eyePos);
@@ -230,8 +230,8 @@ void MyApp::OnMouseMove(WPARAM btnState, int x, int y)
 	else if ((btnState & MK_RBUTTON) != 0 && !io.WantCaptureMouse)
 	{
 		// Make each pixel correspond to 0.2 unit in the scene.
-		float dx = 0.005f * static_cast<float>(x - mLastMousePos.x);
-		float dy = 0.005f * static_cast<float>(y - mLastMousePos.y);
+		float dx = 0.001f * static_cast<float>(x - mLastMousePos.x);
+		float dy = 0.001f * static_cast<float>(y - mLastMousePos.y);
 
 		_yaw += dx;
 		_pitch += dy;
@@ -251,6 +251,13 @@ void MyApp::OnMouseWheel(WPARAM btnState)
 	{
 		_cameraSpeed += (float)GET_WHEEL_DELTA_WPARAM(btnState)/(float)WHEEL_DELTA * 0.01f;
 		_cameraSpeed = MathHelper::Clamp(_cameraSpeed, 0.f, 25.f);
+	}
+	else
+	{
+		int direction = ((float)GET_WHEEL_DELTA_WPARAM(btnState) > 0) ? 1 : -1;
+		_eyePos.x += mView._13 * direction;
+		_eyePos.y += mView._23 * direction;
+		_eyePos.z += mView._33 * direction;
 	}
 }
 
