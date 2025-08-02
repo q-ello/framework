@@ -923,7 +923,7 @@ void MyApp::DrawMaterialProperty(const std::string& label, int index, int* btnId
 					if (ImGui::Button(name.c_str()))
 					{
 						WCHAR* texturePath;
-						if (BasicUtil::TryToOpenFile(L"DDS Textures", L"*.dds", texturePath))
+						if (BasicUtil::TryToOpenFile(L"Image Files", L"*.dds;*.png;*.jpg;*.jpeg;*.tga;*.bmp", texturePath))
 						{
 							texHandle = TextureManager::LoadTexture(texturePath, firstTexIndex, (int)_selectedMeshes.size());
 							for (int idx : _selectedMeshes)
@@ -1035,7 +1035,7 @@ void MyApp::DrawMaterialTexture(const std::string& label, int index, int* btnId,
 			if (ImGui::Button(name.c_str()))
 			{
 				WCHAR* texturePath;
-				if (BasicUtil::TryToOpenFile(L"DDS Textures", L"*.dds", texturePath))
+				if (BasicUtil::TryToOpenFile(L"Image Files", L"*.dds;*.png;*.jpg;*.jpeg;*.tga;*.bmp", texturePath))
 				{
 					texHandle = TextureManager::LoadTexture(texturePath, firstTexIndex, (int)_selectedMeshes.size());
 					for (int idx : _selectedMeshes)
@@ -1138,7 +1138,7 @@ void MyApp::DrawMaterialARMTexture(const std::string& label, int index, int* btn
 			if (ImGui::Button(name.c_str()))
 			{
 				WCHAR* texturePath;
-				if (BasicUtil::TryToOpenFile(L"DDS Textures", L"*.dds", texturePath))
+				if (BasicUtil::TryToOpenFile(L"Image Files", L"*.dds;*.png;*.jpg;*.jpeg;*.tga;*.bmp", texturePath))
 				{
 					texHandle = TextureManager::LoadTexture(texturePath, firstTexIndex, (int)_selectedMeshes.size());
 					for (int idx : _selectedMeshes)

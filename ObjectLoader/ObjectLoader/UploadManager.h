@@ -1,5 +1,7 @@
 #pragma once
 #include "../../Common/d3dUtil.h"
+#include "./../../Common/d3dx12.h"
+#include <DirectXTex.h>
 
 class UploadManager
 {

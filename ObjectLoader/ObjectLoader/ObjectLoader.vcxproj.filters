@@ -58,6 +58,9 @@
     <Filter Include="Source Files\DataManagers">
       <UniqueIdentifier>{70324ef2-b75e-482f-a1de-b2dac3fb12a6}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\directxtex">
+      <UniqueIdentifier>{98c6992a-720c-4cc1-a36c-ee8069dbfeb4}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="MyApp.h">
@@ -247,6 +250,51 @@
     </ClCompile>
     <ClCompile Include="TextureManager.cpp">
       <Filter>Source Files\DynamicHelpers</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXTex\DirectXTexConvert.cpp">
+      <Filter>Source Files\directxtex</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXTex\DirectXTexD3D11.cpp">
+      <Filter>Source Files\directxtex</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXTex\DirectXTexD3D12.cpp">
+      <Filter>Source Files\directxtex</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXTex\DirectXTexDDS.cpp">
+      <Filter>Source Files\directxtex</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXTex\DirectXTexFlipRotate.cpp">
+      <Filter>Source Files\directxtex</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXTex\DirectXTexHDR.cpp">
+      <Filter>Source Files\directxtex</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXTex\DirectXTexImage.cpp">
+      <Filter>Source Files\directxtex</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXTex\DirectXTexMipmaps.cpp">
+      <Filter>Source Files\directxtex</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXTex\DirectXTexMisc.cpp">
+      <Filter>Source Files\directxtex</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXTex\DirectXTexNormalMaps.cpp">
+      <Filter>Source Files\directxtex</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXTex\DirectXTexPMAlpha.cpp">
+      <Filter>Source Files\directxtex</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXTex\DirectXTexResize.cpp">
+      <Filter>Source Files\directxtex</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXTex\DirectXTexTGA.cpp">
+      <Filter>Source Files\directxtex</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXTex\DirectXTexUtil.cpp">
+      <Filter>Source Files\directxtex</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXTex\DirectXTexWIC.cpp">
+      <Filter>Source Files\directxtex</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
