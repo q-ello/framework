@@ -247,12 +247,13 @@ void MyApp::OnMouseMove(WPARAM btnState, int x, int y)
 
 void MyApp::OnMouseWheel(WPARAM btnState)
 {
+	ImGuiIO& io = ImGui::GetIO();
 	if (_mbDown)
 	{
 		_cameraSpeed += (float)GET_WHEEL_DELTA_WPARAM(btnState)/(float)WHEEL_DELTA * 0.01f;
 		_cameraSpeed = MathHelper::Clamp(_cameraSpeed, 0.f, 25.f);
 	}
-	else
+	else if (!io.WantCaptureMouse)
 	{
 		int direction = ((float)GET_WHEEL_DELTA_WPARAM(btnState) > 0) ? 1 : -1;
 		_eyePos.x += mView._13 * direction;
@@ -437,7 +438,7 @@ void MyApp::DrawObjectsList(int* btnId)
 		if (ImGui::Button("Add New"))
 		{
 			PWSTR pszFilePath;
-			if (BasicUtil::TryToOpenFile(L"3D Object", L"*.obj;*.fbx", pszFilePath))
+			if (BasicUtil::TryToOpenFile(L"3D Object", L"*.obj;*.fbx;*.glb", pszFilePath))
 			{
 				_selectedType = PSO::Opaque;
 				if (_modelManager->ImportObject(pszFilePath))
@@ -1074,7 +1075,7 @@ void MyApp::DrawMaterialTexture(const std::string& label, int index, int* btnId,
 				ImGui::PopID();
 				ImGui::SameLine();
 				ImGui::PushID((*btnId)++);
-				ImGui::SetNextItemWidth(100.f);
+				ImGui::SetNextItemWidth(50.f);
 				if (ImGui::DragFloat("", &val, 0.1, 0.0f, 10.f))
 				{
 					for (int idx : _selectedMeshes)

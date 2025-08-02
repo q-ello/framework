@@ -281,7 +281,7 @@ GBufferInfo GBufferPS(VertexOut pin)
     }
     else
     {
-        res.ORM.r = useAOMap ? saturate(gAOMap.Sample(gsamPointClamp, pin.TexC)) : 1.f;
+        res.ORM.r = useAOMap ? saturate(gAOMap.Sample(gsamPointClamp, pin.TexC)) : 0.3f;
         res.ORM.g = useRoughnessMap ? saturate(gRoughnessMap.Sample(gsamPointClamp, pin.TexC)) : roughness;
         res.ORM.b = useMetallicMap ? saturate(gMetallicMap.Sample(gsamPointClamp, pin.TexC)) : metallic;
         res.ORM.a = 1.f;
