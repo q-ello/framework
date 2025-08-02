@@ -167,11 +167,6 @@ float4 DirLightingPS(VertexOut pin) : SV_Target
     float3 finalColor = PBRShading(coords, -mainLightDirection, mainLightColor);
     
     float3 normal = gNormal.Load(coords).xyz;
-    
-    //float3 finalColor = albedo.rgb * mainLightColor * dot(normal, -mainLightDirection);
-    
-    //float4 emissive = gEmissive.Load(coords);
-    //finalColor += emissive.xyz * emissive.a;
 
     if (mainSpotlight.active == 0)
     {
@@ -197,8 +192,6 @@ float4 DirLightingPS(VertexOut pin) : SV_Target
         return float4(finalColor, albedo.a);
     }
     
-    //float diff = saturate(dot(normal, -normalizedCurrDir));
-    
     float attenuation = saturate(1.0f - length(currDir) / mainSpotlight.radius);
     float spotFactor = saturate((angle - cutoff) / (1.0f - cutoff));
     spotFactor = pow(spotFactor, 4.f);
@@ -206,8 +199,6 @@ float4 DirLightingPS(VertexOut pin) : SV_Target
     float finalIntensity = mainSpotlight.intensity * attenuation * spotFactor;
     
     finalColor += PBRShading(coords, -normalizedCurrDir, mainSpotlight.color) * finalIntensity;
-    
-    //finalColor += albedo.rgb * mainSpotlight.color * diff * attenuation * mainSpotlight.intensity * spotFactor;
     
     return float4(finalColor, albedo.a);
 }
@@ -261,16 +252,12 @@ float4 LocalLightingPS(VertexOut pin) : SV_Target
         spotFactor = pow(spotFactor, 4.f);
     }
     
-    //float diff = saturate(dot(normal, -normalizedLightDir));
-    
     float attenuation = saturate(1.0f - length(lightDir) / light.radius);
     
     float finalIntensity = attenuation * spotFactor * light.intensity;
     
     float3 finalColor = PBRShading(coords, -normalizedLightDir, light.color) * finalIntensity;
 
-    //float3 finalColor = albedo.rgb * light.color * diff * attenuation * light.intensity * spotFactor;
-    
     return float4(finalColor, albedo.a);
 }
 

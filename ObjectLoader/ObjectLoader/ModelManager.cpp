@@ -17,6 +17,42 @@ bool ModelManager::ImportObject(WCHAR* filename)
 		return false;
 	}
 
+	const std::vector<aiTextureType> textureTypes = {
+		aiTextureType_DIFFUSE,
+		aiTextureType_SPECULAR,
+		aiTextureType_AMBIENT,
+		aiTextureType_EMISSIVE,
+		aiTextureType_HEIGHT,
+		aiTextureType_NORMALS,
+		aiTextureType_SHININESS,
+		aiTextureType_OPACITY,
+		aiTextureType_DISPLACEMENT,
+		aiTextureType_LIGHTMAP,
+		aiTextureType_REFLECTION,
+		aiTextureType_BASE_COLOR,             // glTF2
+		aiTextureType_NORMAL_CAMERA,
+		aiTextureType_EMISSION_COLOR,     // glTF2
+		aiTextureType_METALNESS,               // glTF2
+		aiTextureType_DIFFUSE_ROUGHNESS,      // glTF2
+		aiTextureType_AMBIENT_OCCLUSION,              // glTF2
+		aiTextureType_UNKNOWN
+	};
+
+	aiString path;
+	for (int i = 0; i < _scene->mNumMaterials; i++)
+	{
+		aiMaterial* material = _scene->mMaterials[i];
+		for (auto& type : textureTypes)
+		{
+			if (material->GetTexture(type, 0, &path) == AI_SUCCESS)
+			{
+				path.C_Str();
+			}
+		}
+		
+	}
+	
+
 	_sceneName = _scene->GetShortFilename(s.c_str());
     return _scene->mNumMeshes > 1;
 }
@@ -30,7 +66,7 @@ std::unique_ptr<Model> ModelManager::ParseAsOneObject()
 	}
 
     return std::make_unique<Model>(_scene->mMeshes, _scene->mNumMeshes, _sceneName, 
-		_scene->mMaterials[(*_scene->mMeshes)->mMaterialIndex]);
+		_scene->mMaterials[(*_scene->mMeshes)->mMaterialIndex], _scene->mTextures);
 }
 
 std::vector<std::unique_ptr<Model>> ModelManager::ParseScene()
@@ -44,7 +80,7 @@ std::vector<std::unique_ptr<Model>> ModelManager::ParseScene()
 	for (unsigned int i = 0; i < _scene->mNumMeshes; i++)
 	{
 		auto& mesh = _scene->mMeshes[i];
-		models.push_back(std::make_unique<Model>(mesh, _scene->mMaterials[mesh->mMaterialIndex]));
+		models.push_back(std::make_unique<Model>(mesh, _scene->mMaterials[mesh->mMaterialIndex], _scene->mTextures));
 	}
 
     return models;

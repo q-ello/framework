@@ -11,7 +11,7 @@ std::unordered_map<std::wstring, std::unique_ptr<Texture>>& TextureManager::text
 	return textures;
 }
 
-TextureHandle TextureManager::LoadTexture(WCHAR* filename, int prevIndex, int texCount)
+TextureHandle TextureManager::LoadTexture(const WCHAR* filename, int prevIndex, int texCount)
 {
 	std::wstring croppedName = BasicUtil::getCroppedName(filename);
 
@@ -50,6 +50,41 @@ TextureHandle TextureManager::LoadTexture(WCHAR* filename, int prevIndex, int te
 	_texUsed()[croppedName] = texCount;
 
 	return { std::string(croppedName.begin(), croppedName.end()), index, true };
+}
+
+TextureHandle TextureManager::LoadEmbeddedTexture(const std::wstring& texName, const aiTexture* embeddedTex)
+{
+	auto tex = std::make_unique<Texture>();
+	tex->Name = texName;
+
+	if (textures().find(texName) != textures().end())
+	{
+		_texUsed()[texName]++;
+		return { std::string(texName.begin(), texName.end()), _texIndices()[texName], true };
+	}
+
+	UploadManager::CreateEmbeddedTexture(tex.get(), embeddedTex);
+
+	UINT index = srvHeapAllocator.get()->Allocate();
+	D3D12_CPU_DESCRIPTOR_HANDLE srvHandle = srvHeapAllocator.get()->GetCpuHandle(index);
+
+	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	srvDesc.Format = tex.get()->Resource->GetDesc().Format;
+	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+	srvDesc.Texture2D.MostDetailedMip = 0;
+	srvDesc.Texture2D.MipLevels = tex.get()->Resource.Get()->GetDesc().MipLevels;
+	srvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
+
+	_device->CreateShaderResourceView(tex.get()->Resource.Get(), &srvDesc, srvHandle);
+
+	UploadManager::ExecuteUploadCommandList();
+
+	textures()[texName] = std::move(tex);
+	_texIndices()[texName] = index;
+	_texUsed()[texName] = 1;
+
+	return  { std::string(texName.begin(), texName.end()), index, true};
 }
 
 void TextureManager::deleteTexture(std::wstring name, int texCount)

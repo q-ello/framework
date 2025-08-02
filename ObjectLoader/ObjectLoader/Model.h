@@ -11,13 +11,14 @@
 #include <assimp/postprocess.h>     // Post processing flags
 #include <map>
 #include "RenderItem.h"
+#include "TextureManager.h"
 
 class Model
 {
 public:
 	Model() {}
-	Model(aiMesh** meshes, unsigned int numMeshes, std::string sceneName, aiMaterial* material);
-	Model(aiMesh* mesh, aiMaterial* material);
+	Model(aiMesh** meshes, unsigned int numMeshes, std::string sceneName, aiMaterial* material, aiTexture** textures);
+	Model(aiMesh* mesh, aiMaterial* material, aiTexture** textures);
 	~Model();
 
 	std::vector<Vertex> vertices() const;
@@ -33,5 +34,9 @@ private:
 	std::unique_ptr<Material> _material = std::make_unique<Material>();
 
 	void ParseMesh(aiMesh* mesh);
-	void ParseMaterial(aiMaterial* material);
+	void ParseMaterial(aiMaterial* material, aiTexture** textures);
+
+	//helper
+	bool LoadMatPropTexture(aiMaterial* material, aiTexture** textures, MatProp property, aiTextureType texType);
+	bool LoadMatTexture(aiMaterial* material, aiTexture** textures, MatTex property, aiTextureType texType);
 };

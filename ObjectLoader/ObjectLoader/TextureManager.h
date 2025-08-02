@@ -5,13 +5,15 @@
 #include "../../Common/d3dUtil.h"
 #include "DescriptorHeapAllocator.h"
 #include "UploadManager.h"
+#include <assimp/scene.h>
 
 class TextureManager
 {
 public:
 	static std::unordered_map<std::wstring, std::unique_ptr<Texture>>& textures();
 
-	static TextureHandle LoadTexture(WCHAR* filename = L"default.dds", int prevIndex = 0, int texCount = 1);
+	static TextureHandle LoadTexture(const WCHAR* filename = L"default.dds", int prevIndex = 0, int texCount = 1);
+	static TextureHandle LoadEmbeddedTexture(const std::wstring& texName, const aiTexture* embeddedTex);
 	static void deleteTexture(std::wstring name, int texCount = 1);
 
 	static void Init(ID3D12Device* device);

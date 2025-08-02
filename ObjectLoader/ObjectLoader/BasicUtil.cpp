@@ -1,6 +1,6 @@
 #include "BasicUtil.h"
 
-std::wstring BasicUtil::getCroppedName(WCHAR* filename)
+std::wstring BasicUtil::getCroppedName(const WCHAR* filename)
 {
 	//making pretty name
 	std::wstringstream ss(filename);

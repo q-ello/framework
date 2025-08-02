@@ -1,21 +1,21 @@
 #include "Model.h"
 
-Model::Model(aiMesh** meshes, unsigned int numMeshes, std::string sceneName, aiMaterial* material)
+Model::Model(aiMesh** meshes, unsigned int numMeshes, std::string sceneName, aiMaterial* material, aiTexture** textures)
 {
 	name = sceneName;
 	for (unsigned int j = 0; j < numMeshes; j++)
 	{
 		ParseMesh(meshes[j]);
 	}
-	ParseMaterial(material);
+	ParseMaterial(material, textures);
 	isTesselated = _vertices.size() < 10000;
 }
 
-Model::Model(aiMesh* mesh, aiMaterial* material)
+Model::Model(aiMesh* mesh, aiMaterial* material, aiTexture** textures)
 {
 	name = mesh->mName.C_Str();
 	ParseMesh(mesh);
-	ParseMaterial(material);
+	ParseMaterial(material, textures);
 	isTesselated = _vertices.size() < 10000;
 }
 
@@ -79,7 +79,7 @@ void Model::ParseMesh(aiMesh* mesh)
 	}
 }
 
-void Model::ParseMaterial(aiMaterial* material)
+void Model::ParseMaterial(aiMaterial* material, aiTexture** textures)
 {
 	if (material == nullptr)
 		return;
@@ -127,5 +127,65 @@ void Model::ParseMaterial(aiMaterial* material)
 		_material->additionalInfo[BasicUtil::EnumIndex(MatAddInfo::Emissive)] = 0.0f;
 	}
 
-	//todo textures
+	if (!LoadMatPropTexture(material, textures, MatProp::BaseColor, aiTextureType_BASE_COLOR))
+		LoadMatPropTexture(material, textures, MatProp::BaseColor, aiTextureType_DIFFUSE);
+	if (!LoadMatPropTexture(material, textures, MatProp::Emissive, aiTextureType_EMISSION_COLOR))
+		LoadMatPropTexture(material, textures, MatProp::Emissive, aiTextureType_EMISSIVE);
+	if (!LoadMatPropTexture(material, textures, MatProp::Metallic, aiTextureType_METALNESS))
+		LoadMatPropTexture(material, textures, MatProp::Metallic, aiTextureType_SPECULAR);
+	LoadMatPropTexture(material, textures, MatProp::Opacity, aiTextureType_OPACITY);
+	LoadMatPropTexture(material, textures, MatProp::Roughness, aiTextureType_DIFFUSE_ROUGHNESS);
+
+	if (!LoadMatTexture(material, textures, MatTex::AmbOcc, aiTextureType_AMBIENT_OCCLUSION))
+		if (!LoadMatTexture(material, textures, MatTex::AmbOcc, aiTextureType_AMBIENT))
+			LoadMatTexture(material, textures, MatTex::AmbOcc, aiTextureType_LIGHTMAP);
+	LoadMatTexture(material, textures, MatTex::ARM, aiTextureType_UNKNOWN);
+	LoadMatTexture(material, textures, MatTex::Displacement, aiTextureType_DISPLACEMENT);
+	LoadMatTexture(material, textures, MatTex::Normal, aiTextureType_NORMALS);
+}
+
+bool Model::LoadMatPropTexture(aiMaterial* material, aiTexture** textures, MatProp property, aiTextureType texType)
+{
+	aiString texPath;
+	if (material->GetTexture(texType, 0, &texPath) == AI_SUCCESS)
+	{
+		std::string textureFilename = texPath.C_Str();
+
+		if (textureFilename[0] == '*')
+		{
+			int texIndex = atoi(texPath.C_Str() + 1);
+			aiTexture* embeddedTex = textures[texIndex];
+			std::wstring texName = std::wstring(name.begin(), name.end()) + L"__embedded_" + std::to_wstring(texIndex);
+			_material->properties[BasicUtil::EnumIndex(property)].texture = TextureManager::LoadEmbeddedTexture(texName, embeddedTex);
+			return true;
+		}
+
+		std::wstring textureFileNameW = std::wstring(textureFilename.begin(), textureFilename.end());
+		_material->properties[BasicUtil::EnumIndex(property)].texture = TextureManager::LoadTexture(textureFileNameW.c_str());
+		return true;
+	}
+	return false;
+}
+
+bool Model::LoadMatTexture(aiMaterial* material, aiTexture** textures, MatTex property, aiTextureType texType)
+{
+	aiString texPath;
+	if (material->GetTexture(texType, 0, &texPath) == AI_SUCCESS)
+	{
+		std::string textureFilename = texPath.C_Str();
+
+		if (textureFilename[0] == '*')
+		{
+			int texIndex = atoi(texPath.C_Str() + 1);
+			aiTexture* embeddedTex = textures[texIndex];
+			std::wstring texName = std::wstring(name.begin(), name.end()) + L"__embedded_" + std::to_wstring(texIndex);
+			_material->textures[BasicUtil::EnumIndex(property)] = TextureManager::LoadEmbeddedTexture(texName, embeddedTex);
+			return true;
+		}
+
+		std::wstring textureFileNameW = std::wstring(textureFilename.begin(), textureFilename.end());
+		_material->textures[BasicUtil::EnumIndex(property)] = TextureManager::LoadTexture(textureFileNameW.c_str());
+		return true;
+	}
+	return false;
 }
