@@ -8,7 +8,7 @@
 struct LightRenderItem
 {
 	Light LightData;
-	BoundingBox Bounds;
+	BoundingSphere Bounds;
 	int NumFramesDirty = gNumFrameResources;
 	int LightIndex = -1;
 };

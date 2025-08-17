@@ -94,7 +94,7 @@ void MyApp::OnResize()
 	//resizing the render window
 	D3DApp::OnResize();
 
-	_camera.SetLens(0.25f * MathHelper::Pi, AspectRatio(), 0.01f, 5000.0f);
+	_camera.SetLens(0.25f * MathHelper::Pi, AspectRatio(), 1.f, 2000.f);
 	_camera.UpdateFrustum();
 }
 
@@ -402,10 +402,6 @@ void MyApp::DrawInterface()
 
 	//debug info
 	ImGui::Begin("Debug info");
-
-	int lightsInsideFrustum = _lightingManager->lightsInsideFrustum();
-	int lightsCount = _lightingManager->lightsCount();
-	ImGui::Text(("Lights drawn: " + std::to_string(lightsInsideFrustum) + "/" + std::to_string(lightsCount)).c_str());
 	ImGui::End();
 }
 

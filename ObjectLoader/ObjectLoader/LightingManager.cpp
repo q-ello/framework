@@ -33,7 +33,7 @@ void LightingManager::addLight(ID3D12Device* device)
 	float radius = lightItem->LightData.radius;
 	float diameter = radius * 2.f;
 	lightItem->LightData.world = XMMatrixScalingFromVector(XMVectorSet(diameter, diameter, diameter, 1));
-	lightItem->Bounds = BoundingBox({ 0.f, 0.f, 0.f }, { radius, radius, radius });
+	lightItem->Bounds = BoundingSphere(lightItem->LightData.position, lightItem->LightData.radius);
 
 	_localLights.push_back(std::move(lightItem));
 }
@@ -67,7 +67,7 @@ void LightingManager::UpdateLightCBs(FrameResource* currFrameResource, Camera* c
 	auto currLightsCB = currFrameResource->LocalLightCB.get();
 
 	//for frustum culling
-	XMMATRIX view = camera->GetView();
+	XMMATRIX view = XMMatrixTranspose(camera->GetView());
 	XMMATRIX invView = XMMatrixInverse(&XMMatrixDeterminant(view), view);
 
 	int lightsInsideFrustum = 0;
@@ -85,16 +85,9 @@ void LightingManager::UpdateLightCBs(FrameResource* currFrameResource, Camera* c
 			light->NumFramesDirty--;
 		}
 
-		//frustum culling
-		XMMATRIX world = light->LightData.world;
-		XMMATRIX invWorld = XMMatrixInverse(&XMMatrixDeterminant(world), world);
-
-		// View space to the light's local space.
-		XMMATRIX viewToLocal = XMMatrixMultiply(invView, invWorld);
-
 		// Transform the camera frustum from view space to the object's local space.
 		BoundingFrustum localSpaceFrustum;
-		camera->CameraFrustum().Transform(localSpaceFrustum, viewToLocal);
+		camera->CameraFrustum().Transform(localSpaceFrustum, invView);
 
 		// Perform the box/frustum intersection test in local space.
 		//todo: if camera in local light it's one thing but if local light in camera it is another
@@ -102,7 +95,7 @@ void LightingManager::UpdateLightCBs(FrameResource* currFrameResource, Camera* c
 		{
 			continue;
 		}
-		else if (localSpaceFrustum.Contains(light->Bounds) == DirectX::INTERSECTS && light->Bounds.Contains(camera->GetPosition()))
+		else if (light->Bounds.Contains(camera->GetPosition()))
 		{
 			//we are inside of the light
 			currLightsContainingFrustumCB->CopyData(lightsContainingFrustum++, LightIndex(light->LightIndex));
@@ -130,6 +123,7 @@ void LightingManager::UpdateWorld(int lightIndex)
 		XMMATRIX translation = XMMatrixTranslationFromVector(XMLoadFloat3(&data.position));
 
 		world = scale * translation;
+		_localLights[lightIndex]->Bounds = BoundingSphere(data.position, data.radius);
 	}
 	//or it is a cone
 	else
@@ -144,7 +138,8 @@ void LightingManager::UpdateWorld(int lightIndex)
 		XMVECTOR direction = XMVector3Normalize(dir);
 
 		XMVECTOR position = XMLoadFloat3(&data.position);
-		XMMATRIX translation = XMMatrixTranslationFromVector(position + direction * data.radius * .5f);
+		position += direction * data.radius * .5f;
+		XMMATRIX translation = XMMatrixTranslationFromVector(position);
 		
 		XMVECTOR up = XMVectorSet(0.f, 1.f, 0.f, 0.f);
 		if (fabs(XMVectorGetX(XMVector3Dot(direction, up))) > 0.999f)
@@ -154,10 +149,10 @@ void LightingManager::UpdateWorld(int lightIndex)
 
 		XMMATRIX rotation = XMMatrixTranspose(XMMatrixLookToLH(XMVectorZero(), direction, up));
 		world = scale * rotation * translation;
-	}
-	BoundingBox localBox = { {0.0f, 0.0f, 0.0f}, {0.5f, 0.5f, 0.5f} };
-	localBox.Transform(_localLights[lightIndex]->Bounds, world);
 
+		XMStoreFloat3(&_localLights[lightIndex]->Bounds.Center, position);
+		_localLights[lightIndex]->Bounds.Radius = data.radius * .5f;
+	}
 	_localLights[lightIndex]->LightData.world = XMMatrixTranspose(world);
 	_localLights[lightIndex]->NumFramesDirty = gNumFrameResources;
 }
