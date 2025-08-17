@@ -139,7 +139,7 @@ float3 PBRShading(float3 coords, float3 lightDir, float3 lightColor)
 
     float3 diffuse = kD * albedo / PI;
 
-    float3 ambient = ao * albedo;
+    float3 ambient = 0.1 * ao * albedo;
 
     float3 color = (diffuse + specular) * lightColor * NdotL;
 
@@ -220,7 +220,8 @@ float4 DirLightingPS(VertexOut pin) : SV_Target
     float4 finalColor = float4(0, 0, 0, albedo.a);
     if (mainLightIsOn)
     {
-        finalColor.xyz = PBRShading(coords, -mainLightDirection, mainLightColor);
+        //main light intensity is 3
+        finalColor.xyz = PBRShading(coords, -mainLightDirection, mainLightColor) * 3.f;
     }
     
     //spotlight in hand
