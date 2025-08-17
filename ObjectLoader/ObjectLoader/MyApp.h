@@ -53,7 +53,6 @@ private:
 	virtual void OnMouseWheel(WPARAM btnState) override;
 
 	void OnKeyboardInput(const GameTimer& gt);
-	void UpdateCamera(const GameTimer& gt);
 	void UpdateObjectCBs(const GameTimer& gt);
 	void UpdateMainPassCBs(const GameTimer& gt);
 
@@ -103,21 +102,17 @@ private:
 	GBufferPassConstants _GBufferCB;
 	LightingPassConstants _lightingCB;
 
-	XMFLOAT4X4 mView = MathHelper::Identity4x4();
-	XMFLOAT4X4 mProj = MathHelper::Identity4x4();
-
-	float _yaw = XM_PI / 2.f;
-	float _pitch = 0.f;
-	XMFLOAT3 _eyePos = { 0.0f, 1.0f, -5.0f };
 	float _cameraSpeed = 0.01f;
 	float _mbDown = false;
 	bool _isWireframe = false;
 
-	POINT mLastMousePos;
+	POINT _lastMousePos;
 
 	bool checkForImGui(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) override;
 
 	PSO _selectedType = PSO::Opaque;
 	std::set<int> _selectedMeshes;
+
+	Camera _camera;
 };
 

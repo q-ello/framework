@@ -30,6 +30,10 @@ void LightingManager::addLight(ID3D12Device* device)
 	lightItem->LightIndex = lightIndex;
 	lightItem->NumFramesDirty = gNumFrameResources;
 	lightItem->LightData = Light();
+	float radius = lightItem->LightData.radius;
+	float diameter = radius * 2.f;
+	lightItem->LightData.world = XMMatrixScalingFromVector(XMVectorSet(diameter, diameter, diameter, 1));
+	lightItem->Bounds = BoundingBox({ 0.f, 0.f, 0.f }, { radius, radius, radius });
 
 	_localLights.push_back(std::move(lightItem));
 }
@@ -42,30 +46,76 @@ void LightingManager::deleteLight(int deletedLight)
 
 void LightingManager::UpdateDirectionalLightCB(FrameResource* currFrameResource)
 {
-	_dirLightCB.mainLightIsOn = _isMainLightOn;
-	_dirLightCB.gLightColor = _dirLightColor;
+	DirectionalLightConstants dirLightCB;
+	dirLightCB.mainLightIsOn = _isMainLightOn;
+	dirLightCB.gLightColor = _dirLightColor;
 
 	DirectX::XMVECTOR direction = DirectX::XMLoadFloat3(&_mainLightDirection);
 	direction = DirectX::XMVector3Normalize(direction);
-	DirectX::XMStoreFloat3(&_dirLightCB.mainLightDirection, direction);
-	_dirLightCB.mainSpotlight = _handSpotlight;
+	DirectX::XMStoreFloat3(&dirLightCB.mainLightDirection, direction);
+	dirLightCB.mainSpotlight = _handSpotlight;
+
+	dirLightCB.lightsContainingFrustum = _lightsContainingFrustum;
 
 	auto currDirLightCB = currFrameResource->DirLightCB.get();
-	currDirLightCB->CopyData(0, _dirLightCB);
+	currDirLightCB->CopyData(0, dirLightCB);
 }
 
-void LightingManager::UpdateLightCBs(FrameResource* currFrameResource)
+void LightingManager::UpdateLightCBs(FrameResource* currFrameResource, Camera* camera)
 {
+	//for update
+	auto currLightsCB = currFrameResource->LocalLightCB.get();
+
+	//for frustum culling
+	XMMATRIX view = camera->GetView();
+	XMMATRIX invView = XMMatrixInverse(&XMMatrixDeterminant(view), view);
+
+	int lightsInsideFrustum = 0;
+	int lightsContainingFrustum = 0;
+
+	auto currLightsInsideFrustumCB = currFrameResource->LightsInsideFrustum.get();
+	auto currLightsContainingFrustumCB = currFrameResource->LightsContainingFrustum.get();
+
 	for (auto& light : _localLights)
 	{
-		if (light->NumFramesDirty == 0)
+		//update data if needed
+		if (light->NumFramesDirty != 0)
+		{
+			currLightsCB->CopyData(light->LightIndex, light->LightData);
+			light->NumFramesDirty--;
+		}
+
+		//frustum culling
+		XMMATRIX world = light->LightData.world;
+		XMMATRIX invWorld = XMMatrixInverse(&XMMatrixDeterminant(world), world);
+
+		// View space to the light's local space.
+		XMMATRIX viewToLocal = XMMatrixMultiply(invView, invWorld);
+
+		// Transform the camera frustum from view space to the object's local space.
+		BoundingFrustum localSpaceFrustum;
+		camera->CameraFrustum().Transform(localSpaceFrustum, viewToLocal);
+
+		// Perform the box/frustum intersection test in local space.
+		//todo: if camera in local light it's one thing but if local light in camera it is another
+		if (localSpaceFrustum.Contains(light->Bounds) == DirectX::DISJOINT)
 		{
 			continue;
 		}
-		auto currLightCB = currFrameResource->LocalLightCB.get();
-		currLightCB->CopyData(light->LightIndex, light->LightData);
-		light->NumFramesDirty--;
+		else if (localSpaceFrustum.Contains(light->Bounds) == DirectX::INTERSECTS && light->Bounds.Contains(camera->GetPosition()))
+		{
+			//we are inside of the light
+			currLightsContainingFrustumCB->CopyData(lightsContainingFrustum++, LightIndex(light->LightIndex));
+		}
+		else
+		{
+			//the light is inside of the frustum
+			currLightsInsideFrustumCB->CopyData(lightsInsideFrustum++, LightIndex(light->LightIndex));
+		}
 	}
+
+	_lightisInsideFrustum = lightsInsideFrustum;
+	_lightsContainingFrustum = lightsContainingFrustum;
 }
 
 void LightingManager::UpdateWorld(int lightIndex)
@@ -99,13 +149,15 @@ void LightingManager::UpdateWorld(int lightIndex)
 		XMVECTOR up = XMVectorSet(0.f, 1.f, 0.f, 0.f);
 		if (fabs(XMVectorGetX(XMVector3Dot(direction, up))) > 0.999f)
 		{
-			// If direction is parallel or opposite to up, choose another up
 			up = XMVectorSet(0.f, 0.f, 1.f, 0.f);
 		}
 
 		XMMATRIX rotation = XMMatrixTranspose(XMMatrixLookToLH(XMVectorZero(), direction, up));
 		world = scale * rotation * translation;
 	}
+	BoundingBox localBox = { {0.0f, 0.0f, 0.0f}, {0.5f, 0.5f, 0.5f} };
+	localBox.Transform(_localLights[lightIndex]->Bounds, world);
+
 	_localLights[lightIndex]->LightData.world = XMMatrixTranspose(world);
 	_localLights[lightIndex]->NumFramesDirty = gNumFrameResources;
 }
@@ -126,15 +178,9 @@ void LightingManager::DrawDirLight(ID3D12GraphicsCommandList* cmdList, FrameReso
 
 	cmdList->SetGraphicsRootSignature(_rootSignature.Get());
 
-	//update buffer with light data
-	cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(_lightBufferGPU.Get(),
-		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST));
-	cmdList->CopyBufferRegion(_lightBufferGPU.Get(), 0, currFrameResource->LocalLightCB.get()->Resource(), 0, sizeof(Light) * _localLights.size());
-	cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(_lightBufferGPU.Get(),
-		D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE));
-
 	cmdList->SetGraphicsRootDescriptorTable(0, descTable);
-	cmdList->SetGraphicsRootShaderResourceView(1, _lightBufferGPU->GetGPUVirtualAddress());
+	cmdList->SetGraphicsRootShaderResourceView(1, currFrameResource->LocalLightCB.get()->Resource()->GetGPUVirtualAddress());
+	cmdList->SetGraphicsRootShaderResourceView(4, currFrameResource->LightsContainingFrustum.get()->Resource()->GetGPUVirtualAddress());
 
 	cmdList->SetPipelineState(_dirLightPSO.Get());
 	cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -157,10 +203,12 @@ void LightingManager::DrawLocalLights(ID3D12GraphicsCommandList* cmdList, FrameR
 	cmdList->IASetVertexBuffers(0, 1, &geo->VertexBufferView());
 	cmdList->IASetIndexBuffer(&geo->IndexBufferView());
 
+	cmdList->SetGraphicsRootShaderResourceView(4, currFrameResource->LightsInsideFrustum.get()->Resource()->GetGPUVirtualAddress());
+
 	cmdList->SetPipelineState(_localLightsPSO.Get());
 
 	SubmeshGeometry mesh = geo->DrawArgs["box"];
-	cmdList->DrawIndexedInstanced(mesh.IndexCount, (UINT)_localLights.size(), mesh.StartIndexLocation,
+	cmdList->DrawIndexedInstanced(mesh.IndexCount, (UINT)_lightisInsideFrustum, mesh.StartIndexLocation,
 		mesh.BaseVertexLocation, 0);
 }
 
@@ -169,7 +217,7 @@ void LightingManager::DrawDebug(ID3D12GraphicsCommandList* cmdList, FrameResourc
 	auto geo = GeometryManager::geometries()["shapeGeo"].get();
 	SubmeshGeometry mesh = geo->DrawArgs["box"];
 	cmdList->SetPipelineState(_localLightsWireframePSO.Get());
-	cmdList->DrawIndexedInstanced(mesh.IndexCount, (UINT)_localLights.size(), mesh.StartIndexLocation, mesh.BaseVertexLocation, 0);
+	cmdList->DrawIndexedInstanced(mesh.IndexCount, (UINT)_lightisInsideFrustum, mesh.StartIndexLocation, mesh.BaseVertexLocation, 0);
 }
 
 void LightingManager::DrawEmissive(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource)
@@ -226,14 +274,17 @@ void LightingManager::BuildRootSignature(int srvAmount)
 	CD3DX12_DESCRIPTOR_RANGE lightingRange;
 	lightingRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, srvAmount, 0);
 
-	CD3DX12_ROOT_PARAMETER lightingSlotRootParameter[4];
+	const int rootParameterCount = 5;
+
+	CD3DX12_ROOT_PARAMETER lightingSlotRootParameter[rootParameterCount];
 
 	lightingSlotRootParameter[0].InitAsDescriptorTable(1, &lightingRange);
 	lightingSlotRootParameter[1].InitAsShaderResourceView(0, 1);
 	lightingSlotRootParameter[2].InitAsConstantBufferView(0);
 	lightingSlotRootParameter[3].InitAsConstantBufferView(1);
+	lightingSlotRootParameter[4].InitAsShaderResourceView(1, 1);
 
-	CD3DX12_ROOT_SIGNATURE_DESC lightingRootSigDesc(4, lightingSlotRootParameter, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+	CD3DX12_ROOT_SIGNATURE_DESC lightingRootSigDesc(rootParameterCount, lightingSlotRootParameter, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 
 	ComPtr<ID3DBlob> serializedRootSig = nullptr;
 	ComPtr<ID3DBlob> errorBlob = nullptr;

@@ -70,7 +70,7 @@ struct Light
     DirectX::XMFLOAT3 position = { 0.0f, 0.0f, 0.0f };
     int type = 0;
     DirectX::XMFLOAT3 direction = { 0.0f, -1.0f, 0.0f };
-    float radius = .5f;
+    float radius = 5.f;
     DirectX::XMFLOAT3 color = { 1.0f, 1.0f, 1.0f };
     float angle = 1.f;
     int active = 1;
@@ -83,8 +83,17 @@ struct DirectionalLightConstants
     DirectX::XMFLOAT3 mainLightDirection = { 0.0f, 0.0f, 0.0f };
     int mainLightIsOn = 1;
     DirectX::XMFLOAT3 gLightColor = { 1.0f, 1.0f, 1.0f };
-    float pad = 0.0f;
+    int lightsContainingFrustum = 0;
     Light mainSpotlight = Light();
+};
+
+struct LightIndex
+{
+    LightIndex(int idx)
+        : index{ idx }
+        { }
+    int index;
+    int pad[3] = { 0, 0, 0 };
 };
 
 // Stores the resources needed for the CPU to build the command lists
@@ -115,6 +124,8 @@ public:
     std::unique_ptr<UploadBuffer<LightingPassConstants>> LightingPassCB = nullptr;
     std::unique_ptr<UploadBuffer<DirectionalLightConstants>> DirLightCB = nullptr;
     std::unique_ptr<UploadBuffer<Light>> LocalLightCB = nullptr;
+    std::unique_ptr<UploadBuffer<LightIndex>> LightsInsideFrustum = nullptr;
+    std::unique_ptr<UploadBuffer<LightIndex>> LightsContainingFrustum = nullptr;
 
     std::unordered_map<std::uint32_t, std::unique_ptr<UploadBuffer<OpaqueObjectConstants>>> OpaqueObjCB = {};
     std::unordered_map<std::uint32_t, std::unique_ptr<UploadBuffer<MaterialConstants>>> MaterialCB = {};

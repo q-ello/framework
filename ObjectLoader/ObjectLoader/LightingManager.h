@@ -3,10 +3,12 @@
 #include "FrameResource.h"
 #include "UploadManager.h"
 #include "GeometryManager.h"
+#include "Camera.h"
 
 struct LightRenderItem
 {
 	Light LightData;
+	BoundingBox Bounds;
 	int NumFramesDirty = gNumFrameResources;
 	int LightIndex = -1;
 };
@@ -22,7 +24,7 @@ public:
 	void deleteLight(int deletedLight);
 
 	void UpdateDirectionalLightCB(FrameResource* currFrameResource);
-	void UpdateLightCBs(FrameResource* currFrameResource);
+	void UpdateLightCBs(FrameResource* currFrameResource, Camera* camera);
 	void UpdateWorld(int lightIndex);
 
 	int lightsCount();
@@ -59,11 +61,15 @@ public:
 		return &_handSpotlight;
 	}
 
+	int lightsInsideFrustum() const
+	{
+		return _lightisInsideFrustum;
+	}
+
 private:
 	DirectX::XMFLOAT3 _mainLightDirection = { 1.f, -1.f, 0.f };
 	bool _isMainLightOn = true;
 	DirectX::XMFLOAT3 _dirLightColor = { 1.f, 1.f, 1.f };
-	DirectionalLightConstants _dirLightCB;
 	bool _debugEnabled = false;
 
 	std::vector<std::unique_ptr<LightRenderItem>> _localLights;
@@ -91,6 +97,9 @@ private:
 
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> _emissivePSO;
 	Microsoft::WRL::ComPtr<ID3DBlob> _emissivePSShader;
+
+	int _lightisInsideFrustum = 0;
+	int _lightsContainingFrustum = 0;
 
 	void BuildInputLayout();
 	void BuildRootSignature(int srvAmount);

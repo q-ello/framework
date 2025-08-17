@@ -165,6 +165,9 @@
     <ClInclude Include="Material.h">
       <Filter>Header Files\DataManagers</Filter>
     </ClInclude>
+    <ClInclude Include="Camera.h">
+      <Filter>Header Files\DataManagers</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="MyApp.cpp">
@@ -295,6 +298,9 @@
     </ClCompile>
     <ClCompile Include="DirectXTex\DirectXTexWIC.cpp">
       <Filter>Source Files\directxtex</Filter>
+    </ClCompile>
+    <ClCompile Include="Camera.cpp">
+      <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

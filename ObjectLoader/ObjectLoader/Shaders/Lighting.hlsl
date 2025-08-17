@@ -12,6 +12,12 @@ struct Light
     float2 pad;
 };
 
+struct LightIndex
+{
+    int index;
+    int pad[3]; // keep aligned
+};
+
 Texture2D gBaseColor : register(t0);
 Texture2D gNormal : register(t1);
 Texture2D gEmissive : register(t2);
@@ -21,6 +27,7 @@ Texture2D gDepth : register(t4);
 static const float PI = 3.14159265f;
 
 StructuredBuffer<Light> lights : register(t0, space1);
+StructuredBuffer<LightIndex> lightIndices : register(t1, space1);
 
 cbuffer cbLightingPass : register(b0)
 {
@@ -37,7 +44,7 @@ cbuffer cbDirLight : register(b1)
     float3 mainLightDirection;
     int mainLightIsOn;
     float3 mainLightColor;
-    float pad2;
+    int lightsContainingFrustum;
     Light mainSpotlight;
 };
 
@@ -49,32 +56,10 @@ struct VertexIn
 struct VertexOut
 {
     float4 PosH : SV_POSITION;
-    int InstanceId : SV_InstanceID;
+    int lightIndex : TEXCOORD;
 };
 
-VertexOut DirLightingVS(uint id : SV_VertexID)
-{
-    VertexOut vout;
-	
-    float2 positions[3] = { float2(-1, -1), float2(-1, 3), float2(3, -1) };
-    
-    vout.PosH = float4(positions[id], 0, 1);
-    vout.InstanceId = 0;
-    
-    return vout;
-}
-
-float3 ComputeWorldPos(float3 texcoord)
-{
-    float depth = gDepth.Load(texcoord).r;
-    
-    float2 uv = texcoord.xy / gRTSize;
-    
-    float4 ndc = float4( uv.x * 2.f - 1.f, 1.f - uv.y * 2.f, depth, 1.0f);
-    float4 viewPos = mul(ndc, gInvViewProj);
-    return viewPos.xyz / viewPos.w;
-}
-
+//pbr stuff
 float DistributionGGX(float3 N, float3 H, float roughness)
 {
     float a = roughness * roughness;
@@ -106,6 +91,18 @@ float GeometrySmith(float3 N, float3 V, float3 L, float roughness)
 float3 FresnelSchlick(float cosTheta, float3 F0)
 {
     return F0 + (1.0 - F0) * pow(1.0 - cosTheta, 5.0);
+}
+
+
+float3 ComputeWorldPos(float3 texcoord)
+{
+    float depth = gDepth.Load(texcoord).r;
+    
+    float2 uv = texcoord.xy / gRTSize;
+    
+    float4 ndc = float4(uv.x * 2.f - 1.f, 1.f - uv.y * 2.f, depth, 1.0f);
+    float4 viewPos = mul(ndc, gInvViewProj);
+    return viewPos.xyz / viewPos.w;
 }
 
 float3 PBRShading(float3 coords, float3 lightDir, float3 lightColor)
@@ -149,79 +146,26 @@ float3 PBRShading(float3 coords, float3 lightDir, float3 lightColor)
     return ambient + color;
 }
 
-
-float4 DirLightingPS(VertexOut pin) : SV_Target
-{   
-    float3 coords = pin.PosH.xyz;
-    
-    float4 albedo = gBaseColor.Load(coords);
-    if (albedo.a == 0)
-    {
-        discard;
-    }
-    if (!mainLightIsOn && mainSpotlight.active == 0)
-    {
-        return float4(0, 0, 0, 1);
-    }
-    
-    float3 finalColor = PBRShading(coords, -mainLightDirection, mainLightColor);
-    
-    float3 normal = gNormal.Load(coords).xyz;
-
-    if (mainSpotlight.active == 0)
-    {
-        return float4(finalColor, albedo.a);
-    }
-    
-    float3 mousePosW = ComputeWorldPos(float3(mousePos, 0));
-    float3 spotlightDir = mousePosW - gEyePosW;
-
-    float3 posW = ComputeWorldPos(coords);
-    float3 currDir = posW - gEyePosW;
-    float3 normalizedCurrDir = normalize(currDir);
-    
-    if (length(currDir) > mainSpotlight.radius)
-    {
-        return float4(finalColor, albedo.a);
-    }
-    
-    float angle = dot(normalizedCurrDir, normalize(spotlightDir));
-    float cutoff = cos(mainSpotlight.angle);
-    if (angle < cutoff)
-    {
-        return float4(finalColor, albedo.a);
-    }
-    
-    float attenuation = saturate(1.0f - length(currDir) / mainSpotlight.radius);
-    float spotFactor = saturate((angle - cutoff) / (1.0f - cutoff));
-    spotFactor = pow(spotFactor, 4.f);
-    
-    float finalIntensity = mainSpotlight.intensity * attenuation * spotFactor;
-    
-    finalColor += PBRShading(coords, -normalizedCurrDir, mainSpotlight.color) * finalIntensity;
-    
-    return float4(finalColor, albedo.a);
-}
-
-VertexOut LocalLightingVS(VertexIn vin, uint id : SV_InstanceID)
+//shader stuff
+VertexOut DirLightingVS(uint id : SV_VertexID)
 {
     VertexOut vout;
+	
+    float2 positions[3] = { float2(-1, -1), float2(-1, 3), float2(3, -1) };
     
-    float4 posW = mul(float4(vin.PosL, 1), lights[id].world);
-    vout.PosH = mul(posW, gViewProj);
-    vout.InstanceId = id;
+    vout.PosH = float4(positions[id], 0, 1);
+    vout.lightIndex = 0;
     
     return vout;
 }
 
-float4 LocalLightingPS(VertexOut pin) : SV_Target
+//helper for local lights
+float4 ComputeLocalLighting(int lightIndex, float3 coords)
 {
-    float3 coords = pin.PosH.xyz;
-    
-    Light light = lights[pin.InstanceId];
+    Light light = lights[lightIndex];
     if (light.active == 0)
     {
-        discard;
+        return float4(0, 0, 0, 0);
     }
     
     float4 albedo = gBaseColor.Load(coords);
@@ -235,7 +179,7 @@ float4 LocalLightingPS(VertexOut pin) : SV_Target
     
     if (length(lightDir) > light.radius)
     {
-        discard;
+        return float4(0, 0, 0, 0);
     }
     
     float angle = dot(normalizedLightDir, normalize(light.direction));
@@ -246,7 +190,7 @@ float4 LocalLightingPS(VertexOut pin) : SV_Target
         
         if (angle < cos(light.angle))
         {
-            discard;
+            return float4(0, 0, 0, 0);
         }
         spotFactor = saturate((angle - cos(light.angle)) / (1.0f - cos(light.angle)));
         spotFactor = pow(spotFactor, 4.f);
@@ -261,10 +205,86 @@ float4 LocalLightingPS(VertexOut pin) : SV_Target
     return float4(finalColor, albedo.a);
 }
 
+//actually just a full quad pass, not only for directional light
+float4 DirLightingPS(VertexOut pin) : SV_Target
+{   
+    float3 coords = pin.PosH.xyz;
+    
+    float4 albedo = gBaseColor.Load(coords);
+    if (albedo.a == 0)
+    {
+        discard;
+    }
+    
+    //directional light
+    float4 finalColor = float4(0, 0, 0, albedo.a);
+    if (mainLightIsOn)
+    {
+        finalColor.xyz = PBRShading(coords, -mainLightDirection, mainLightColor);
+    }
+    
+    //spotlight in hand
+    if (mainSpotlight.active == 1)
+    {
+        float3 mousePosW = ComputeWorldPos(float3(mousePos, 0));
+        float3 spotlightDir = mousePosW - gEyePosW;
+
+        float3 posW = ComputeWorldPos(coords);
+        float3 currDir = posW - gEyePosW;
+        float3 normalizedCurrDir = normalize(currDir);
+    
+        if (length(currDir) <= mainSpotlight.radius)
+        {
+            float angle = dot(normalizedCurrDir, normalize(spotlightDir));
+            float cutoff = cos(mainSpotlight.angle);
+            
+            if (angle >= cutoff)
+            {
+                float attenuation = saturate(1.0f - length(currDir) / mainSpotlight.radius);
+                float spotFactor = saturate((angle - cutoff) / (1.0f - cutoff));
+                spotFactor = pow(spotFactor, 4.f);
+    
+                float finalIntensity = mainSpotlight.intensity * attenuation * spotFactor;
+    
+                finalColor.xyz += PBRShading(coords, -normalizedCurrDir, mainSpotlight.color) * finalIntensity;
+            }
+        }
+    }
+    
+    //lighting for every light we are inside of
+    for (int i = 0; i < lightsContainingFrustum; i++)
+    {
+        finalColor.xyz += ComputeLocalLighting(lightIndices[i].index, coords).xyz;
+    }
+    
+    return finalColor;
+}
+
+VertexOut LocalLightingVS(VertexIn vin, uint id : SV_InstanceID)
+{
+    VertexOut vout;
+    
+    float4 posW = mul(float4(vin.PosL, 1), lights[lightIndices[id].index].world);
+    vout.PosH = mul(posW, gViewProj);
+    vout.lightIndex = lightIndices[id].index;
+    
+    return vout;
+}
+
+float4 LocalLightingPS(VertexOut pin) : SV_Target
+{
+    float3 coords = pin.PosH.xyz;
+    
+    float4 finalColor = ComputeLocalLighting(pin.lightIndex, coords);
+    if (finalColor.a == 0)
+        discard;
+    
+    return finalColor;
+}
 
 float4 LocalLightingWireframePS(VertexOut pin) : SV_Target
 {
-    Light light = lights[pin.InstanceId];
+    Light light = lights[pin.lightIndex];
     if (light.active == 0)
     {
         discard;

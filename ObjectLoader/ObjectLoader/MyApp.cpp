@@ -16,7 +16,7 @@ WNDPROC g_OriginalPanelWndProc;
 
 MyApp::MyApp(HINSTANCE hInstance)
 	: D3DApp(hInstance)
-	, mLastMousePos {0, 0}
+	, _lastMousePos {0, 0}
 {
 }
 
@@ -94,15 +94,13 @@ void MyApp::OnResize()
 	//resizing the render window
 	D3DApp::OnResize();
 
-	// The window resized, so update the aspect ratio and recompute the projection matrix.
-	XMMATRIX P = XMMatrixPerspectiveFovLH(0.25f * MathHelper::Pi, AspectRatio(), 1.0f, 2000.0f);
-	XMStoreFloat4x4(&mProj, P);
+	_camera.SetLens(0.25f * MathHelper::Pi, AspectRatio(), 0.01f, 5000.0f);
+	_camera.UpdateFrustum();
 }
 
 void MyApp::Update(const GameTimer& gt)
 {
 	OnKeyboardInput(gt);
-	UpdateCamera(gt);
 
 	// Cycle through the circular frame resource array.
 	mCurrFrameResourceIndex = (mCurrFrameResourceIndex + 1) % gNumFrameResources;
@@ -123,7 +121,7 @@ void MyApp::Update(const GameTimer& gt)
 
 	UpdateObjectCBs(gt);
 	UpdateMainPassCBs(gt);
-	_lightingManager->UpdateLightCBs(mCurrFrameResource);
+	_lightingManager->UpdateLightCBs(mCurrFrameResource, &_camera);
 }
 
 void MyApp::Draw(const GameTimer& gt)
@@ -199,8 +197,8 @@ void MyApp::Draw(const GameTimer& gt)
 
 void MyApp::OnMouseDown(WPARAM btnState, int x, int y)
 {
-	mLastMousePos.x = x;
-	mLastMousePos.y = y;
+	_lastMousePos.x = x;
+	_lastMousePos.y = y;
 	SetCapture(mhMainWnd);
 	_mbDown = true;
 }
@@ -217,32 +215,24 @@ void MyApp::OnMouseMove(WPARAM btnState, int x, int y)
 	if ((btnState & MK_LBUTTON) != 0 && !io.WantCaptureMouse)
 	{
 		// Make each pixel correspond to a quarter of a degree.
-		float dx = 0.001f * static_cast<float>(x - mLastMousePos.x);
-		float dy = _cameraSpeed * static_cast<float>(y - mLastMousePos.y);
+		float dx = 0.001f * static_cast<float>(x - _lastMousePos.x);
+		float dy = _cameraSpeed * static_cast<float>(y - _lastMousePos.y);
 
-		XMVECTOR position = XMLoadFloat3(&_eyePos);
-		XMVECTOR forward = XMVector3Normalize(XMVectorSet(mView._13, 0, mView._33, 0));
-
-		_yaw += dx;
-		position -= dy * forward;
-		XMStoreFloat3(&_eyePos, position);
+		_camera.Walk(dy);
+		_camera.RotateY(dx);
 	}
 	else if ((btnState & MK_RBUTTON) != 0 && !io.WantCaptureMouse)
 	{
 		// Make each pixel correspond to 0.2 unit in the scene.
-		float dx = 0.001f * static_cast<float>(x - mLastMousePos.x);
-		float dy = 0.001f * static_cast<float>(y - mLastMousePos.y);
+		float dx = 0.001f * static_cast<float>(x - _lastMousePos.x);
+		float dy = 0.001f * static_cast<float>(y - _lastMousePos.y);
 
-		_yaw += dx;
-		_pitch += dy;
-
-		// Clamp pitch to avoid flipping (e.g., straight up/down)
-		_pitch = MathHelper::Clamp(_pitch, -XM_PIDIV2 + 0.1f, XM_PIDIV2 - 0.1f);
-
+		_camera.Pitch(dy);
+		_camera.RotateY(dx);
 	}
 
-	mLastMousePos.x = x;
-	mLastMousePos.y = y;
+	_lastMousePos.x = x;
+	_lastMousePos.y = y;
 }
 
 void MyApp::OnMouseWheel(WPARAM btnState)
@@ -256,9 +246,7 @@ void MyApp::OnMouseWheel(WPARAM btnState)
 	else if (!io.WantCaptureMouse)
 	{
 		int direction = ((float)GET_WHEEL_DELTA_WPARAM(btnState) > 0) ? 1 : -1;
-		_eyePos.x += mView._13 * direction;
-		_eyePos.y += mView._23 * direction;
-		_eyePos.z += mView._33 * direction;
+		_camera.Walk(direction);
 	}
 }
 
@@ -267,49 +255,31 @@ void MyApp::OnKeyboardInput(const GameTimer& gt)
 	if (GetAsyncKeyState('E') & 0x8000)
 	{
 		//since view matrix is transponed I'm taking z-column
-		auto lightDir = _lightingManager->mainLightDirection();
-		lightDir[0] = mView._13;
-		lightDir[1] = mView._23;
-		lightDir[2] = mView._33;
+		XMFLOAT3 lightDir = (XMFLOAT3)(_lightingManager->mainLightDirection());
+		XMStoreFloat3(&lightDir, _camera.GetLook());
 	}
 
-	//moving camera
-	XMVECTOR forward = XMVectorSet(mView._13, mView._23, mView._33, 0);
-	XMVECTOR right = XMVectorSet(mView._11, mView._21, mView._31, 0);
-	XMVECTOR direction = XMVectorZero();
+	const float dt = gt.DeltaTime();
 
+	//moving camera
 	if (_mbDown && GetAsyncKeyState('W') & 0x8000)
 	{
-		direction += forward * _cameraSpeed;
+		_camera.Walk(_cameraSpeed);
 	}
 	if (_mbDown && GetAsyncKeyState('A') & 0x8000)
 	{
-		direction -= right * _cameraSpeed;
+		_camera.Strafe(-_cameraSpeed);
 	}
 	if (_mbDown && GetAsyncKeyState('S') & 0x8000)
 	{
-		direction -= forward * _cameraSpeed;
+		_camera.Walk(-_cameraSpeed);
 	}
 	if (_mbDown && GetAsyncKeyState('D') & 0x8000)
 	{
-		direction += right * _cameraSpeed;
+		_camera.Strafe(_cameraSpeed);
 	}
 
-	XMVECTOR position = XMLoadFloat3(&_eyePos);
-	XMStoreFloat3(&_eyePos, position + direction);
-}
-
-void MyApp::UpdateCamera(const GameTimer& gt)
-{
-	XMVECTOR forward = XMVectorSet(cosf(_pitch) * cosf(_yaw), sinf(_pitch), cosf(_pitch) * sinf(_yaw), 1);
-
-	// Build the view matrix.
-	XMVECTOR pos = XMLoadFloat3(&_eyePos);
-	XMVECTOR target = pos + forward;
-	XMVECTOR up = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
-
-	XMMATRIX view = XMMatrixLookAtLH(pos, target, up);
-	XMStoreFloat4x4(&mView, view);
+	_camera.UpdateViewMatrix();
 }
 
 void MyApp::UpdateObjectCBs(const GameTimer& gt)
@@ -324,25 +294,25 @@ void MyApp::UpdateObjectCBs(const GameTimer& gt)
 void MyApp::UpdateMainPassCBs(const GameTimer& gt)
 {
 	//update pass for gbuffer
-	XMMATRIX view = XMLoadFloat4x4(&mView);
-	XMMATRIX proj = XMLoadFloat4x4(&mProj);
+	XMMATRIX view = _camera.GetView();
+	XMMATRIX proj = _camera.GetProj();
 
 	XMMATRIX viewProj = XMMatrixMultiply(view, proj);
 	XMMATRIX invViewProj = XMMatrixInverse(nullptr, viewProj);
 
 	XMStoreFloat4x4(&_GBufferCB.ViewProj, XMMatrixTranspose(viewProj));
 	_GBufferCB.DeltaTime = gt.DeltaTime();
-	_GBufferCB.EyePosW = _eyePos;
+	_GBufferCB.EyePosW = _camera.GetPosition3f();
 	_GBufferCB.ScreenSize = { (float)mClientWidth, (float)mClientHeight };
 	auto currGBufferCB = mCurrFrameResource->GBufferPassCB.get();
 	currGBufferCB->CopyData(0, _GBufferCB);
 	
 	//update pass for lighting
 	XMStoreFloat4x4(&_lightingCB.InvViewProj, XMMatrixTranspose(invViewProj));
-	_lightingCB.EyePosW = _eyePos;
+	_lightingCB.EyePosW = _camera.GetPosition3f();
 	XMStoreFloat4x4(&_lightingCB.ViewProj, XMMatrixTranspose(viewProj));
 	_lightingCB.RTSize = { (float)mClientWidth, (float)mClientHeight };
-	_lightingCB.mousePosition = {(float)mLastMousePos.x, (float)mLastMousePos.y};
+	_lightingCB.mousePosition = {(float)_lastMousePos.x, (float)_lastMousePos.y};
 	auto currLightingCB = mCurrFrameResource->LightingPassCB.get();
 	currLightingCB->CopyData(0, _lightingCB);
 
@@ -429,6 +399,14 @@ void MyApp::DrawInterface()
 	delete buttonId;
 
 	DrawCameraSpeed();
+
+	//debug info
+	ImGui::Begin("Debug info");
+
+	int lightsInsideFrustum = _lightingManager->lightsInsideFrustum();
+	int lightsCount = _lightingManager->lightsCount();
+	ImGui::Text(("Lights drawn: " + std::to_string(lightsInsideFrustum) + "/" + std::to_string(lightsCount)).c_str());
+	ImGui::End();
 }
 
 void MyApp::DrawObjectsList(int* btnId)
