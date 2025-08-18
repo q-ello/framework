@@ -6,6 +6,7 @@
 #include "TextureManager.h"
 #include "../../Common/GBuffer.h"
 #include "GeometryManager.h"
+#include "Camera.h"
 
 class ObjectManager
 {
@@ -13,16 +14,20 @@ public:
 	ObjectManager(ID3D12Device* device);
 	~ObjectManager();
 
-	virtual int addRenderItem(ID3D12Device* device, const std::string& itemName, bool isTesselated = false, std::unique_ptr<Material> material = nullptr) = 0;
+	virtual int addRenderItem(ID3D12Device* device, const std::string& itemName, bool isTesselated = false, std::unique_ptr<Material> material = nullptr, BoundingBox aabb = BoundingBox()) = 0;
 	virtual bool deleteObject(int selectedObject) = 0;
 
-	virtual void UpdateObjectCBs(FrameResource* currFrameResource) = 0;
+	virtual void UpdateObjectCBs(FrameResource* currFrameResource, Camera* camera = nullptr) = 0;
 	virtual void AddObjectToResource(Microsoft::WRL::ComPtr<ID3D12Device> device, FrameResource* currFrameResource) = 0;
+
 	virtual int objectsCount() = 0;
+	virtual int visibleObjectsCount() = 0;
 	virtual EditableRenderItem* object(int i) = 0;
 	virtual std::string objectName(int i) = 0;
+
 	virtual void Draw(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, bool isWireframe = false) = 0;
 	void Init();
+
 
 protected:
 	std::unordered_map<std::string, int> _objectCounters;

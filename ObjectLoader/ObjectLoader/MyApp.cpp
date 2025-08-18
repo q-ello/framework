@@ -287,7 +287,7 @@ void MyApp::UpdateObjectCBs(const GameTimer& gt)
 	for (int i = 0; i < (int)PSO::Count; i++)
 	{
 		PSO type = (PSO)i;
-		_objectManagers[type]->UpdateObjectCBs(mCurrFrameResource);
+		_objectManagers[type]->UpdateObjectCBs(mCurrFrameResource, &_camera);
 	}
 }
 
@@ -402,6 +402,13 @@ void MyApp::DrawInterface()
 
 	//debug info
 	ImGui::Begin("Debug info");
+	auto manager = _objectManagers[PSO::Opaque].get();
+	auto visObjectsCnt = manager->visibleObjectsCount();
+	auto objectsCnt = manager->objectsCount();
+	ImGui::Text(("Objects drawn: " + std::to_string(visObjectsCnt) + "/" + std::to_string(objectsCnt)).c_str());
+	auto visLights = _lightingManager->lightsInsideFrustum();
+	auto lightsCnt = _lightingManager->lightsCount();
+	ImGui::Text(("Lights drawn: " + std::to_string(visLights) + "/" + std::to_string(lightsCnt)).c_str());
 	ImGui::End();
 }
 
@@ -425,7 +432,7 @@ void MyApp::DrawObjectsList(int* btnId)
 					//generating it as one mesh
 					ModelData data = GeometryManager::BuildModelGeometry(model.get());
 					_selectedMeshes.clear();
-					_selectedMeshes.insert(_objectManagers[PSO::Opaque]->addRenderItem(md3dDevice.Get(), data.croppedName, data.isTesselated, std::move(data.material)));
+					_selectedMeshes.insert(_objectManagers[PSO::Opaque]->addRenderItem(md3dDevice.Get(), data.croppedName, data.isTesselated, std::move(data.material), model->AABB()));
 				}
 				CoTaskMemFree(pszFilePath);
 			}

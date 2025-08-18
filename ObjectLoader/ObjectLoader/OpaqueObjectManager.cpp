@@ -1,15 +1,22 @@
 #pragma once
 #include "OpaqueObjectManager.h"
 
-void OpaqueObjectManager::UpdateObjectCBs(FrameResource* currFrameResource)
+void OpaqueObjectManager::UpdateObjectCBs(FrameResource* currFrameResource, Camera* camera)
 {
 	auto& currObjectsCB = currFrameResource->OpaqueObjCB;
 	auto& currMaterialCB = currFrameResource->MaterialCB;
+
+	//for frustum culling
+	_visibleTesselatedObjects.clear();
+	_visibleUntesselatedObjects.clear();
+
+	XMMATRIX view = camera->GetView();
+	XMMATRIX invView = XMMatrixInverse(&XMMatrixDeterminant(view), view);
+
 	for (int i = 0; i < _objects.size(); i++)
 	{
-		// Only update the cbuffer data if the constants have changed.  
-		// This needs to be tracked per frame resource.
 		auto& ri = _objects[i];
+		//updating object data
 		if (ri->NumFramesDirty > 0)
 		{
 			XMMATRIX scale = XMMatrixScalingFromVector(XMLoadFloat3(&ri->transform[2]));
@@ -28,8 +35,8 @@ void OpaqueObjectManager::UpdateObjectCBs(FrameResource* currFrameResource)
 			ri->NumFramesDirty--;
 		}
 
+		//updating object's material
 		auto& material = ri->material;
-
 		if (material->numFramesDirty > 0)
 		{
 			MaterialConstants materialConstants;
@@ -54,6 +61,26 @@ void OpaqueObjectManager::UpdateObjectCBs(FrameResource* currFrameResource)
 			currMaterialCB[ri->uid].get()->CopyData(0, materialConstants);
 
 			material->numFramesDirty--;
+		}
+
+		//frustum culling
+		XMMATRIX world = XMLoadFloat4x4(&ri->World);
+		XMMATRIX invWorld = XMMatrixInverse(&XMMatrixDeterminant(world), world);
+
+		XMMATRIX viewToLocal = XMMatrixMultiply(invView, invWorld);
+
+		BoundingFrustum localSpaceFrustum;
+		camera->CameraFrustum().Transform(localSpaceFrustum, viewToLocal);
+		if ((localSpaceFrustum.Contains(ri->Bounds) != DirectX::DISJOINT))
+		{
+			if (_tesselatedObjects.find(ri->uid) != _tesselatedObjects.end())
+			{
+				_visibleTesselatedObjects.push_back(ri->uid);
+			}
+			else
+			{
+				_visibleUntesselatedObjects.push_back(ri->uid);
+			}
 		}
 	}
 }
@@ -225,7 +252,7 @@ void OpaqueObjectManager::AddObjectToResource(Microsoft::WRL::ComPtr<ID3D12Devic
 		currFrameResource->addOpaqueObjectBuffer(device.Get(), obj->uid);
 }
 
-int OpaqueObjectManager::addRenderItem(ID3D12Device* device, const std::string& itemName, bool isTesselated, std::unique_ptr<Material> material)
+int OpaqueObjectManager::addRenderItem(ID3D12Device* device, const std::string& itemName, bool isTesselated, std::unique_ptr<Material> material, BoundingBox AABB)
 {
 	std::string name(itemName.begin(), itemName.end());
 
@@ -239,6 +266,7 @@ int OpaqueObjectManager::addRenderItem(ID3D12Device* device, const std::string& 
 	modelRitem->IndexCount = modelRitem->Geo->DrawArgs[itemName].IndexCount;
 	modelRitem->material = std::move(material);
 	modelRitem->material->numFramesDirty = gNumFrameResources;
+	modelRitem->Bounds = AABB;
 
 	for (int i = 0; i < FrameResource::frameResources().size(); ++i)
 	{
@@ -283,14 +311,29 @@ bool OpaqueObjectManager::deleteObject(int selectedObject)
 	//need for deleting from frame resource
 	std::uint32_t uid = objectToDelete->uid;
 
-	if (objectToDelete->PrimitiveType == D3D_PRIMITIVE_TOPOLOGY_3_CONTROL_POINT_PATCHLIST)
+	if (_tesselatedObjects.find(uid) != _tesselatedObjects.end())
 	{
-
 		_tesselatedObjects.erase(uid);
+		for (int i = 0; i < _visibleTesselatedObjects.size(); i++)
+		{
+			if (_visibleTesselatedObjects[i] == uid)
+			{
+				_visibleTesselatedObjects.erase(_visibleTesselatedObjects.begin() + i);
+				break;
+			}
+		}
 	}
 	else
 	{
 		_untesselatedObjects.erase(uid);
+		for (int i = 0; i < _visibleUntesselatedObjects.size(); i++)
+		{
+			if (_visibleUntesselatedObjects[i] == uid)
+			{
+				_visibleUntesselatedObjects.erase(_visibleUntesselatedObjects.begin() + i);
+				break;
+			}
+		}
 	}
 
 	_objects.erase(_objects.begin() + selectedObject);
@@ -348,21 +391,21 @@ void OpaqueObjectManager::Draw(ID3D12GraphicsCommandList* cmdList, FrameResource
 	cmdList->SetGraphicsRootConstantBufferView(10, passCB->GetGPUVirtualAddress());
 	cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-	DrawObjects(cmdList, currFrameResource, _untesselatedObjects);
+	DrawObjects(cmdList, currFrameResource, _visibleUntesselatedObjects, _untesselatedObjects);
 	
 	//draw with tesselation
 	cmdList->SetPipelineState(isWireframe ? _wireframeTesselatedPSO.Get() : _tesselatedPSO.Get());
 
 	cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_3_CONTROL_POINT_PATCHLIST);
 
-	DrawObjects(cmdList, currFrameResource, _tesselatedObjects);
+	DrawObjects(cmdList, currFrameResource, _visibleTesselatedObjects, _tesselatedObjects);
 }
 
-void OpaqueObjectManager::DrawObjects(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, std::unordered_map<uint32_t, EditableRenderItem*> objects)
+void OpaqueObjectManager::DrawObjects(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, std::vector<uint32_t> indices, std::unordered_map<uint32_t, EditableRenderItem*> objects)
 {
-	for (auto& obj : objects)
+	for (auto& idx : indices)
 	{
-		auto& ri = obj.second;
+		auto& ri = objects[idx];
 		auto objectCB = currFrameResource->OpaqueObjCB[ri->uid]->Resource();
 
 		cmdList->IASetVertexBuffers(0, 1, &ri->Geo->VertexBufferView());

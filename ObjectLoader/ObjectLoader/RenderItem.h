@@ -33,6 +33,7 @@ struct EditableRenderItem : public RenderItem
 	std::unique_ptr<Material> material;
 
 	bool isTransparent = false;
+	BoundingBox Bounds;
 };
 
 struct UnlitRenderItem : public RenderItem

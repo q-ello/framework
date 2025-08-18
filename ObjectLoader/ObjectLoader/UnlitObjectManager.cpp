@@ -1,6 +1,6 @@
 #include "UnlitObjectManager.h"
 
-void UnlitObjectManager::UpdateObjectCBs(FrameResource* currFrameResource)
+void UnlitObjectManager::UpdateObjectCBs(FrameResource* currFrameResource, Camera* camera)
 {
 	auto& currObjectsCB = currFrameResource->UnlitObjCB;
 	for (int i = 0; i < _objects.size(); i++)
@@ -104,7 +104,7 @@ void UnlitObjectManager::AddObjectToResource(Microsoft::WRL::ComPtr<ID3D12Device
 		currFrameResource->addUnlitObjectBuffer(device.Get(), obj->uid);
 }
 
-int UnlitObjectManager::addRenderItem(ID3D12Device* device, const std::string& itemName, bool isTesselated, std::unique_ptr<Material> material)
+int UnlitObjectManager::addRenderItem(ID3D12Device* device, const std::string& itemName, bool isTesselated, std::unique_ptr<Material> material, BoundingBox aabb)
 {
 	auto renderItem = std::make_unique<UnlitRenderItem>();
 	renderItem->uid = uidCount++;

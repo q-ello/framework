@@ -279,7 +279,7 @@ void Camera::UpdateFrustum()
 
 DirectX::BoundingFrustum Camera::CameraFrustum() const
 {
-	return BoundingFrustum();
+	return _frustum;
 }
 
 

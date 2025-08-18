@@ -67,7 +67,7 @@ void LightingManager::UpdateLightCBs(FrameResource* currFrameResource, Camera* c
 	auto currLightsCB = currFrameResource->LocalLightCB.get();
 
 	//for frustum culling
-	XMMATRIX view = XMMatrixTranspose(camera->GetView());
+	XMMATRIX view = camera->GetView();
 	XMMATRIX invView = XMMatrixInverse(&XMMatrixDeterminant(view), view);
 
 	int lightsInsideFrustum = 0;

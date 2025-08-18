@@ -3,9 +3,27 @@
 Model::Model(aiMesh** meshes, unsigned int numMeshes, std::string sceneName, aiMaterial* material, aiTexture** textures)
 {
 	name = sceneName;
+
 	for (unsigned int j = 0; j < numMeshes; j++)
 	{
 		ParseMesh(meshes[j]);
+
+		aiMesh* mesh = meshes[j];
+
+		aiVector3D vMaxAI = mesh->mAABB.mMax;
+		aiVector3D vMinAI = mesh->mAABB.mMin;
+		DirectX::XMVECTOR vMax = DirectX::XMVectorSet(vMaxAI.x, vMaxAI.y, vMaxAI.z, 1);
+		DirectX::XMVECTOR vMin = DirectX::XMVectorSet(vMinAI.x, vMinAI.y, vMinAI.z, 1);
+		if (j > 0)
+		{
+			DirectX::BoundingBox newAabb;
+			DirectX::BoundingBox::CreateFromPoints(newAabb, vMax, vMin);
+			DirectX::BoundingBox::CreateMerged(_aabb, _aabb, newAabb);
+		}
+		else
+		{
+			DirectX::BoundingBox::CreateFromPoints(_aabb, vMax, vMin);
+		}
 	}
 	ParseMaterial(material, textures);
 	isTesselated = _vertices.size() < 10000;
@@ -17,6 +35,11 @@ Model::Model(aiMesh* mesh, aiMaterial* material, aiTexture** textures)
 	ParseMesh(mesh);
 	ParseMaterial(material, textures);
 	isTesselated = _vertices.size() < 10000;
+	aiVector3D vMaxAI = mesh->mAABB.mMax;
+	aiVector3D vMinAI = mesh->mAABB.mMin;
+	DirectX::XMVECTOR vMax = DirectX::XMVectorSet(vMaxAI.x, vMaxAI.y, vMaxAI.z, 1);
+	DirectX::XMVECTOR vMin = DirectX::XMVectorSet(vMinAI.x, vMinAI.y, vMinAI.z, 1);
+	DirectX::BoundingBox::CreateFromPoints(_aabb, vMax, vMin);
 }
 
 Model::~Model()
