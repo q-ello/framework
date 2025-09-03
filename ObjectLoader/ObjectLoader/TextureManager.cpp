@@ -28,7 +28,11 @@ TextureHandle TextureManager::LoadTexture(const WCHAR* filename, int prevIndex, 
 	tex->Name = croppedName;
 	tex->Filename = filename;
 
-	UploadManager::CreateTexture(tex.get());
+	if (!UploadManager::CreateTexture(tex.get()))
+	{
+		OutputDebugStringA(("Failed to load texture: " + std::string(tex->Filename.begin(), tex->Filename.end()) + "\n").c_str());
+		return { std::string(croppedName.begin(), croppedName.end()), 0, false };
+	}
 
 	UINT index = srvHeapAllocator.get()->Allocate();
 	D3D12_CPU_DESCRIPTOR_HANDLE srvHandle = srvHeapAllocator.get()->GetCpuHandle(index);

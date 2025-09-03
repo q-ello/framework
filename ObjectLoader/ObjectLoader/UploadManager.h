@@ -9,7 +9,7 @@ class UploadManager
 public:
 	static void InitUploadCmdList(ID3D12Device* device, Microsoft::WRL::ComPtr<ID3D12CommandQueue> cmdQueue);
 	static void ExecuteUploadCommandList();
-	static void CreateTexture(Texture* tex);
+	static bool CreateTexture(Texture* tex);
 	static void CreateEmbeddedTexture(Texture* tex, const aiTexture* texture);
 	static void Flush();
 	static void Reset();

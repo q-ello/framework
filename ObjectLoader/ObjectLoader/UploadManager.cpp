@@ -34,7 +34,7 @@ void UploadManager::ExecuteUploadCommandList()
 	ThrowIfFailed(uploadCmdList->Reset(_uploadCmdAlloc.Get(), nullptr));
 }
 
-void UploadManager::CreateTexture(Texture* tex)
+bool UploadManager::CreateTexture(Texture* tex)
 {
     std::wstring ext = tex->Filename.substr(tex->Filename.find_last_of(L'.') + 1);
     for (auto& c : ext) c = towlower(c);
@@ -51,12 +51,17 @@ void UploadManager::CreateTexture(Texture* tex)
         DirectX::TexMetadata metadata;
         DirectX::ScratchImage scratch;
 
-        ThrowIfFailed(DirectX::LoadFromWICFile(
+        HRESULT res = DirectX::LoadFromWICFile(
             tex->Filename.c_str(),
             DirectX::WIC_FLAGS_FORCE_RGB, // or _SRGB/_NONE if you care
             &metadata,
             scratch
-        ));
+        );
+
+        if (FAILED(res))
+        {
+            return false;
+        }
 
         Microsoft::WRL::ComPtr<ID3D12Resource> texture;
         CD3DX12_RESOURCE_DESC texDesc = CD3DX12_RESOURCE_DESC::Tex2D(
