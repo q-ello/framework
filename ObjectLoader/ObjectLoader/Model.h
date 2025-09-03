@@ -17,8 +17,8 @@ class Model
 {
 public:
 	Model() {}
-	Model(aiMesh** meshes, unsigned int numMeshes, std::string sceneName, aiMaterial* material, aiTexture** textures);
-	Model(aiMesh* mesh, aiMaterial* material, aiTexture** textures);
+	Model(aiMesh** meshes, unsigned int numMeshes, std::string sceneName, aiMaterial* material, aiTexture** textures, std::wstring fileLocation);
+	Model(aiMesh* mesh, aiMaterial* material, aiTexture** textures, std::wstring fileLocation);
 	~Model();
 
 	std::vector<Vertex> vertices() const;
@@ -37,6 +37,7 @@ private:
 	std::vector<DirectX::XMFLOAT3> _normals;
 	std::unique_ptr<Material> _material = std::make_unique<Material>();
 	DirectX::BoundingBox _aabb;
+	std::wstring _fileLocation;
 
 	void ParseMesh(aiMesh* mesh);
 	void ParseMaterial(aiMaterial* material, aiTexture** textures);

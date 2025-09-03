@@ -3,6 +3,7 @@
 bool ModelManager::ImportObject(WCHAR* filename)
 {
 	std::wstring ws(filename);
+	_fileLocation = ws.substr(0, ws.find_last_of('\\') + 1);
 	std::string s(ws.begin(), ws.end());
 	_scene = _importer.ReadFile(s,
 		aiProcess_Triangulate |
@@ -38,21 +39,6 @@ bool ModelManager::ImportObject(WCHAR* filename)
 		aiTextureType_UNKNOWN
 	};
 
-	aiString path;
-	for (int i = 0; i < _scene->mNumMaterials; i++)
-	{
-		aiMaterial* material = _scene->mMaterials[i];
-		for (auto& type : textureTypes)
-		{
-			if (material->GetTexture(type, 0, &path) == AI_SUCCESS)
-			{
-				path.C_Str();
-			}
-		}
-		
-	}
-	
-
 	_sceneName = _scene->GetShortFilename(s.c_str());
     return _scene->mNumMeshes > 1;
 }
@@ -66,7 +52,7 @@ std::unique_ptr<Model> ModelManager::ParseAsOneObject()
 	}
 
     return std::make_unique<Model>(_scene->mMeshes, _scene->mNumMeshes, _sceneName, 
-		_scene->mMaterials[(*_scene->mMeshes)->mMaterialIndex], _scene->mTextures);
+		_scene->mMaterials[(*_scene->mMeshes)->mMaterialIndex], _scene->mTextures, _fileLocation);
 }
 
 std::vector<std::unique_ptr<Model>> ModelManager::ParseScene()
@@ -80,7 +66,7 @@ std::vector<std::unique_ptr<Model>> ModelManager::ParseScene()
 	for (unsigned int i = 0; i < _scene->mNumMeshes; i++)
 	{
 		auto& mesh = _scene->mMeshes[i];
-		models.push_back(std::make_unique<Model>(mesh, _scene->mMaterials[mesh->mMaterialIndex], _scene->mTextures));
+		models.push_back(std::make_unique<Model>(mesh, _scene->mMaterials[mesh->mMaterialIndex], _scene->mTextures, _fileLocation));
 	}
 
     return models;

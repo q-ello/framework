@@ -37,4 +37,5 @@ private:
 	Assimp::Importer _importer;
 	const aiScene* _scene = nullptr;
 	std::string _sceneName = "";
+	std::wstring _fileLocation;
 };

@@ -1,6 +1,7 @@
 #include "Model.h"
 
-Model::Model(aiMesh** meshes, unsigned int numMeshes, std::string sceneName, aiMaterial* material, aiTexture** textures)
+Model::Model(aiMesh** meshes, unsigned int numMeshes, std::string sceneName, aiMaterial* material, aiTexture** textures, std::wstring fileLocation)
+	: _fileLocation{fileLocation}
 {
 	name = sceneName;
 
@@ -29,7 +30,8 @@ Model::Model(aiMesh** meshes, unsigned int numMeshes, std::string sceneName, aiM
 	isTesselated = _vertices.size() < 10000;
 }
 
-Model::Model(aiMesh* mesh, aiMaterial* material, aiTexture** textures)
+Model::Model(aiMesh* mesh, aiMaterial* material, aiTexture** textures, std::wstring fileLocation)
+	: _fileLocation{fileLocation}
 {
 	name = mesh->mName.C_Str();
 	ParseMesh(mesh);
@@ -184,7 +186,7 @@ bool Model::LoadMatPropTexture(aiMaterial* material, aiTexture** textures, MatPr
 		}
 
 		std::wstring textureFileNameW = std::wstring(textureFilename.begin(), textureFilename.end());
-		_material->properties[BasicUtil::EnumIndex(property)].texture = TextureManager::LoadTexture(textureFileNameW.c_str());
+		_material->properties[BasicUtil::EnumIndex(property)].texture = TextureManager::LoadTexture((_fileLocation + textureFileNameW).c_str());
 		return true;
 	}
 	return false;
@@ -196,6 +198,7 @@ bool Model::LoadMatTexture(aiMaterial* material, aiTexture** textures, MatTex pr
 	if (material->GetTexture(texType, 0, &texPath) == AI_SUCCESS)
 	{
 		std::string textureFilename = texPath.C_Str();
+		OutputDebugStringA(textureFilename.c_str());
 
 		if (textureFilename[0] == '*')
 		{
@@ -207,7 +210,7 @@ bool Model::LoadMatTexture(aiMaterial* material, aiTexture** textures, MatTex pr
 		}
 
 		std::wstring textureFileNameW = std::wstring(textureFilename.begin(), textureFilename.end());
-		_material->textures[BasicUtil::EnumIndex(property)] = TextureManager::LoadTexture(textureFileNameW.c_str());
+		_material->textures[BasicUtil::EnumIndex(property)] = TextureManager::LoadTexture((_fileLocation + textureFileNameW).c_str());
 		return true;
 	}
 	return false;
