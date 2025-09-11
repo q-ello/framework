@@ -104,10 +104,11 @@ void UnlitObjectManager::AddObjectToResource(Microsoft::WRL::ComPtr<ID3D12Device
 		currFrameResource->addUnlitObjectBuffer(device.Get(), obj->uid);
 }
 
-int UnlitObjectManager::addRenderItem(ID3D12Device* device, const std::string& itemName, bool isTesselated, std::unique_ptr<Material> material, BoundingBox aabb)
+int UnlitObjectManager::addRenderItem(ID3D12Device* device, ModelData&& modelData)
 {
 	auto renderItem = std::make_unique<UnlitRenderItem>();
 	renderItem->uid = uidCount++;
+	const std::string& itemName = modelData.croppedName;
 	std::string name(itemName.begin(), itemName.end());
 
 	renderItem->Name = name;

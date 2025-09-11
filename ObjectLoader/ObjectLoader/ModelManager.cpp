@@ -11,7 +11,8 @@ bool ModelManager::ImportObject(WCHAR* filename)
 		aiProcess_MakeLeftHanded |
 		aiProcess_FlipWindingOrder |
 		aiProcess_FlipUVs |
-		aiProcess_CalcTangentSpace
+		aiProcess_CalcTangentSpace |
+		aiProcess_GenUVCoords
 	);
 	if (nullptr == _scene) {
 		MessageBox(0, L"Failed to open file", L"", MB_OK);
@@ -40,7 +41,7 @@ bool ModelManager::ImportObject(WCHAR* filename)
 	};
 
 	_sceneName = _scene->GetShortFilename(s.c_str());
-    return _scene->mNumMeshes > 1;
+    return _scene->mRootNode->mNumMeshes == 0 && _scene->mRootNode->mNumChildren > 1;
 }
 
 std::unique_ptr<Model> ModelManager::ParseAsOneObject()
@@ -50,9 +51,8 @@ std::unique_ptr<Model> ModelManager::ParseAsOneObject()
 		OutputDebugString(L"Cannot parse an empty scene");
 		return std::make_unique<Model>();
 	}
-
-    return std::make_unique<Model>(_scene->mMeshes, _scene->mNumMeshes, _sceneName, 
-		_scene->mMaterials[(*_scene->mMeshes)->mMaterialIndex], _scene->mTextures, _fileLocation);
+    return std::make_unique<Model>(_scene->mRootNode, _sceneName, _scene->mMaterials, _scene->mNumMaterials,
+		_scene->mMeshes, _scene->mTextures, _fileLocation);
 }
 
 std::vector<std::unique_ptr<Model>> ModelManager::ParseScene()
@@ -63,27 +63,49 @@ std::vector<std::unique_ptr<Model>> ModelManager::ParseScene()
 		return std::vector<std::unique_ptr<Model>>();
 	}
 	std::vector<std::unique_ptr<Model>> models{};
-	for (unsigned int i = 0; i < _scene->mNumMeshes; i++)
+	
+	aiNode* rootNode = _scene->mRootNode;
+	for (unsigned int i = 0; i < rootNode->mNumChildren; i++)
 	{
-		auto& mesh = _scene->mMeshes[i];
-		models.push_back(std::make_unique<Model>(mesh, _scene->mMaterials[mesh->mMaterialIndex], _scene->mTextures, _fileLocation));
+		aiNode* childNode = rootNode->mChildren[i];
+		models.push_back(std::make_unique<Model>(childNode, childNode->mName.C_Str(), _scene->mMaterials, _scene->mNumMaterials,
+			_scene->mMeshes, _scene->mTextures, _fileLocation));
 	}
 
     return models;
 }
 
-std::vector<std::string> ModelManager::MeshNames()
+std::map<std::string, std::vector<std::string>> ModelManager::MeshNames()
 {
-	std::vector<std::string> meshNames = {};
-	for (UINT i = 0; i < _scene->mNumMeshes; i++)
+	std::map<std::string, std::vector<std::string>> meshNames = {};
+	for (UINT i = 0; i < _scene->mRootNode->mNumChildren; i++)
 	{
-		meshNames.push_back(_scene->mMeshes[i]->mName.C_Str());
+		std::vector<std::string> nodeMeshNames = {};
+		aiNode* node = _scene->mRootNode->mChildren[i];
+
+		meshNames[node->mName.C_Str()] = NodeMeshNames(node);
 	}
 
 	return meshNames;
 }
 
-UINT ModelManager::MeshCount()
+std::vector<std::string> ModelManager::NodeMeshNames(aiNode* node)
 {
-	return _scene->mNumMeshes;
+	std::vector<std::string> nodeMeshNames = {};
+	for (UINT j = 0; j < node->mNumMeshes; j++)
+	{
+		nodeMeshNames.push_back(_scene->mMeshes[node->mMeshes[j]]->mName.C_Str());
+	}
+	for (UINT j = 0; j < node->mNumChildren; j++)
+	{
+		aiNode* childNode = node->mChildren[j];
+		auto& childMeshNames = NodeMeshNames(childNode);
+		nodeMeshNames.insert(nodeMeshNames.end(), childMeshNames.begin(), childMeshNames.end());
+	}
+	return nodeMeshNames;
+}
+
+UINT ModelManager::ModelCount()
+{
+	return _scene->mRootNode->mNumChildren;
 }

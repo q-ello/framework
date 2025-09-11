@@ -16,6 +16,15 @@
 #include "GeometryManager.h"
 #include "LightingManager.h"
 #include "ModelManager.h"
+#include "Model.h"
+#include <shobjidl.h> 
+#include <sstream>
+#include <commctrl.h>
+#include "imgui/imgui.h"
+#include "imgui/backends/imgui_impl_dx12.h"
+#include "imgui/backends/imgui_impl_win32.h"
+#include "OpaqueObjectManager.h"
+#include "UnlitObjectManager.h"
 
 #define DELETE_ID 333
 
@@ -65,21 +74,22 @@ private:
 
 	//imgui staff
 	void DrawInterface();
-	void DrawObjectsList(int* btnId);
-	void DrawHandSpotlight(int* buttonId);
-	void DrawLightData(int* btnId);
-	void DrawLocalLightData(int* btnId, int lightIndex);
-	void DrawObjectInfo(int* btnId);
-	void DrawMultiObjectTransform(int* btnId);
-	void DrawMultiObjectMaterial(int* btnId);
-	void DrawMaterialProperty(const std::string& label, int index, int* btnId, bool isFloat3, bool hasAdditionalInfo = false, const std::string& additionalInfoLabel = "", int additionalInfoIndex = -1);
-	void DrawMaterialTexture(const std::string& label, int index, int* btnId, bool hasAdditionalInfo = false, const std::string& additionalInfoLabel = "", int additionalInfoIndex = -1);
-	void DrawMaterialARMTexture(const std::string& label, int index, int* btnId);
+	void DrawObjectsList(int& btnId);
+	void DrawHandSpotlight(int& buttonId);
+	void DrawLightData(int& btnId);
+	void DrawLocalLightData(int& btnId, int lightIndex);
+	void DrawObjectInfo(int& btnId);
+	void DrawMultiObjectTransform(int& btnId);
+	void DrawObjectMaterial(int& btnId, int matIndex);
+	void DrawMaterials(int& btnId);
+	void DrawMaterialProperty(Material* material, const std::string& label, size_t index, int& btnId, bool isFloat3, bool hasAdditionalInfo = false, const std::string& additionalInfoLabel = "", size_t additionalInfoIndex = -1);
+	void DrawMaterialTexture(Material* material, const std::string& label, size_t index, int& btnId, bool hasAdditionalInfo = false, const std::string& additionalInfoLabel = "", size_t additionalInfoIndex = -1);
+	void DrawMaterialARMTexture(Material* material, const std::string& label, size_t index, int& btnId);
 	void DrawTransformInput(const std::string& label, int btnId, int transformIndex, float speed);
 	void DrawCameraSpeed();
 	void DrawImportModal();
 	bool DrawIsTransparentCheckbox();
-	bool DrawUseARMTextureCheckbox();
+	bool DrawUseARMTextureCheckbox(Material* material);
 
 	void InitManagers();
 
@@ -111,7 +121,7 @@ private:
 	bool checkForImGui(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) override;
 
 	PSO _selectedType = PSO::Opaque;
-	std::set<int> _selectedMeshes;
+	std::set<int> _selectedModels;
 
 	Camera _camera;
 };

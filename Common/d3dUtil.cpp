@@ -18,6 +18,11 @@ bool d3dUtil::IsKeyDown(int vkeyCode)
     return (GetAsyncKeyState(vkeyCode) & 0x8000) != 0;
 }
 
+std::string d3dUtil::ToString(HRESULT hr)
+{
+    return std::string();
+}
+
 ComPtr<ID3DBlob> d3dUtil::LoadBinary(const std::wstring& filename)
 {
     std::ifstream fin(filename, std::ios::binary);

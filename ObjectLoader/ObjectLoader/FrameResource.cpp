@@ -19,10 +19,10 @@ FrameResource::~FrameResource()
 
 }
 
-void FrameResource::addOpaqueObjectBuffer(ID3D12Device* device, std::uint32_t uid)
+void FrameResource::addOpaqueObjectBuffer(ID3D12Device* device, std::uint32_t uid, int meshesCount, int materialsCount)
 {
-    OpaqueObjCB[uid] = std::make_unique<UploadBuffer<OpaqueObjectConstants>>(device, 1, true);
-    MaterialCB[uid] = std::make_unique<UploadBuffer<MaterialConstants>>(device, 1, true);
+    OpaqueObjCB[uid] = std::make_unique<UploadBuffer<OpaqueObjectConstants>>(device, meshesCount, true);
+    MaterialCB[uid] = std::make_unique<UploadBuffer<MaterialConstants>>(device, materialsCount, true);
 }
 
 void FrameResource::removeOpaqueObjectBuffer(ID3D12Device* device, std::uint32_t uid)

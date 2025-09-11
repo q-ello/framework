@@ -80,12 +80,16 @@ void GeometryManager::BuildNecessaryGeometry()
 ModelData GeometryManager::BuildModelGeometry(Model* model)
 {
 	//check if geometry already exists
+	ModelData data;
+	data.croppedName = model->name;
+	data.materials = std::move(model->materials());
+	data.meshesData = model->meshes();
+	data.transform = model->transform();
+	data.isTesselated = model->isTesselated();
+	data.AABB = model->AABB();
+
 	if (geometries().find(model->name) != geometries().end())
 	{
-		ModelData data;
-		data.croppedName = model->name;
-		data.isTesselated = tesselatable()[model->name];
-		data.material = std::move(model->material());
 		return data;
 	}
 
@@ -125,19 +129,7 @@ ModelData GeometryManager::BuildModelGeometry(Model* model)
 	geo->IndexFormat = DXGI_FORMAT_R32_UINT;
 	geo->IndexBufferByteSize = ibByteSize;
 
-	SubmeshGeometry submesh;
-	submesh.IndexCount = (UINT)model->indices().size();
-	submesh.StartIndexLocation = 0;
-	submesh.BaseVertexLocation = 0;
-
-	geo->DrawArgs[model->name] = submesh;
-
 	geometries()[geo->Name] = std::move(geo);
-
-	ModelData data;
-	data.croppedName = model->name;
-	data.isTesselated = model->isTesselated;
-	data.material = model->material();
 
 	tesselatable()[model->name] = data.isTesselated;
 

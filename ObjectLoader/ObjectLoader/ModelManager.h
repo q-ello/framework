@@ -31,8 +31,9 @@ public:
 	//parse scene as different objects
 	std::vector<std::unique_ptr<Model>> ParseScene();
 
-	std::vector<std::string> MeshNames();
-	UINT MeshCount();
+	std::map<std::string, std::vector<std::string>> MeshNames();
+	std::vector<std::string> NodeMeshNames(aiNode* node);
+	UINT ModelCount();
 private:
 	Assimp::Importer _importer;
 	const aiScene* _scene = nullptr;

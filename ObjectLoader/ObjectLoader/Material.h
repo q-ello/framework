@@ -53,10 +53,12 @@ struct MaterialProperty
 
 struct Material
 {
+	std::string name;
 	std::array<MaterialProperty, BasicUtil::EnumIndex(MatProp::Count)> properties;
 	std::array<TextureHandle, BasicUtil::EnumIndex(MatTex::Count)> textures;
-	std::array<float, BasicUtil::EnumIndex(MatAddInfo::Count)> additionalInfo;
+	std::array<float, BasicUtil::EnumIndex(MatAddInfo::Count)> additionalInfo{};
 	int numFramesDirty = 0;
 	bool useARMTexture = false;
 	ARMLayout armLayout = ARMLayout::AO_Rough_Metal;
+	bool isUsed = false;
 };

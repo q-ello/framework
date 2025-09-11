@@ -12,7 +12,10 @@ struct ModelData
 {
 	std::string croppedName = "";
 	bool isTesselated = false;
-	std::unique_ptr<Material> material;
+	std::vector<std::unique_ptr<Material>> materials;
+	std::vector<Mesh> meshesData;
+	BoundingBox AABB;
+	std::array<DirectX::XMFLOAT3, 3> transform = {};
 };
 
 class GeometryManager

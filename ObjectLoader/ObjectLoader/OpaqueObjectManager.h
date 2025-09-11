@@ -17,16 +17,18 @@ private:
 	void BuildShaders() override;
 
 	void AddObjectToResource(Microsoft::WRL::ComPtr<ID3D12Device> device, FrameResource* currFrameResource) override;
-	int addRenderItem(ID3D12Device* device, const std::string& itemName, bool isTesselated = false, std::unique_ptr<Material> material = nullptr, BoundingBox aabb = BoundingBox()) override;
+	int addRenderItem(ID3D12Device* device, ModelData&& modelData) override;
 	bool deleteObject(int selectedObject) override;
 
 	int objectsCount() override;
-	int visibleObjectsCount() override { return _visibleTesselatedObjects.size() + _visibleUntesselatedObjects.size(); };
+	int visibleObjectsCount() override { return int(_visibleTesselatedObjects.size() + _visibleUntesselatedObjects.size()); };
 
 	std::string objectName(int i) override;
 	EditableRenderItem* object(int i);
 	void Draw(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, bool isWireframe = false) override;
 	void DrawObjects(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, std::vector<uint32_t> indices, std::unordered_map<uint32_t, EditableRenderItem*> objects);
+	void DrawAABBs(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource);
+
 
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> _wireframePSO;
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> _tesselatedPSO;
@@ -42,4 +44,7 @@ private:
 
 	std::vector<uint32_t> _visibleTesselatedObjects{};
 	std::vector<uint32_t> _visibleUntesselatedObjects{};
+
+	UINT _cbMeshElementSize = d3dUtil::CalcConstantBufferByteSize(sizeof(OpaqueObjectConstants));
+	UINT _cbMaterialElementSize = d3dUtil::CalcConstantBufferByteSize(sizeof(MaterialConstants));
 };

@@ -16,55 +16,73 @@ void OpaqueObjectManager::UpdateObjectCBs(FrameResource* currFrameResource, Came
 	for (int i = 0; i < _objects.size(); i++)
 	{
 		auto& ri = _objects[i];
+		XMMATRIX scale = XMMatrixScalingFromVector(XMLoadFloat3(&ri->transform[BasicUtil::EnumIndex(Transform::Scale)]));
+		XMMATRIX rotation = XMMatrixRotationRollPitchYawFromVector(XMLoadFloat3(&ri->transform[BasicUtil::EnumIndex(Transform::Rotation)]) * XM_PI / 180.f);
+		XMMATRIX translation = XMMatrixTranslationFromVector(XMLoadFloat3(&ri->transform[BasicUtil::EnumIndex(Transform::Translation)]));
+
+		XMMATRIX world = scale * rotation * translation;
 		//updating object data
 		if (ri->NumFramesDirty > 0)
 		{
-			XMMATRIX scale = XMMatrixScalingFromVector(XMLoadFloat3(&ri->transform[2]));
-			XMMATRIX rotation = XMMatrixRotationRollPitchYawFromVector(XMLoadFloat3(&ri->transform[1]) * XM_PI / 180.f);
-			XMMATRIX translation = XMMatrixTranslationFromVector(XMLoadFloat3(&ri->transform[0]));
+			size_t j = 0;
+			for (; j < ri->meshesData.size(); j++)
+			{
+				XMMATRIX meshWorld = ri->meshesData[j].defaultWorld * world;
 
-			XMMATRIX world = scale * rotation * translation;
-			XMStoreFloat4x4(&ri->World, world);
+				OpaqueObjectConstants objConstants;
+				XMStoreFloat4x4(&objConstants.World, XMMatrixTranspose(meshWorld));
+				XMStoreFloat4x4(&objConstants.WorldInvTranspose, XMMatrixInverse(&XMMatrixDeterminant(meshWorld), meshWorld));
 
-			OpaqueObjectConstants objConstants;
-			XMStoreFloat4x4(&objConstants.World, XMMatrixTranspose(world));
-			XMStoreFloat4x4(&objConstants.WorldInvTranspose, XMMatrixInverse(&XMMatrixDeterminant(world), world));
+				currObjectsCB[ri->uid].get()->CopyData((int)j, objConstants);
+			}
 
-			currObjectsCB[ri->uid].get()->CopyData(0, objConstants);
+			//last piece for AABB
+			{
+				XMMATRIX scaleAABB = XMMatrixScaling(ri->Bounds.Extents.x * 2.0f, ri->Bounds.Extents.y * 2.0f, ri->Bounds.Extents.z * 2.0f);
+				XMMATRIX translationAABB = XMMatrixTranslation(ri->Bounds.Center.x, ri->Bounds.Center.y, ri->Bounds.Center.z);
+				XMMATRIX AABBWorld = scaleAABB * translationAABB * world;
+
+				OpaqueObjectConstants objConstants;
+				XMStoreFloat4x4(&objConstants.World, DirectX::XMMatrixTranspose(AABBWorld));
+				XMStoreFloat4x4(&objConstants.WorldInvTranspose, XMMatrixInverse(&XMMatrixDeterminant(AABBWorld), AABBWorld));
+
+				currObjectsCB[ri->uid].get()->CopyData((int)j, objConstants);
+			}
 
 			ri->NumFramesDirty--;
 		}
 
-		//updating object's material
-		auto& material = ri->material;
-		if (material->numFramesDirty > 0)
+		for (size_t j = 0; j < ri->materials.size(); j++)
 		{
-			MaterialConstants materialConstants;
-			materialConstants.baseColor = material->properties[BasicUtil::EnumIndex(MatProp::BaseColor)].value;
-			materialConstants.displacementScale = material->additionalInfo[BasicUtil::EnumIndex(MatAddInfo::Displacement)];
-			materialConstants.emissive = material->properties[BasicUtil::EnumIndex(MatProp::Emissive)].value;
-			materialConstants.emissiveIntensity = material->additionalInfo[BasicUtil::EnumIndex(MatAddInfo::Emissive)];
-			materialConstants.metallic = material->properties[BasicUtil::EnumIndex(MatProp::Metallic)].value.x;
-			materialConstants.opacity = material->properties[BasicUtil::EnumIndex(MatProp::Opacity)].value.x;
-			materialConstants.roughness = material->properties[BasicUtil::EnumIndex(MatProp::Roughness)].value.x;
-			materialConstants.useAOMap = material->textures[BasicUtil::EnumIndex(MatTex::AmbOcc)].useTexture;
-			materialConstants.useBaseColorMap = material->properties[BasicUtil::EnumIndex(MatProp::BaseColor)].texture.useTexture;
-			materialConstants.useDisplacementMap = material->textures[BasicUtil::EnumIndex(MatTex::Displacement)].useTexture;
-			materialConstants.useEmissiveMap = material->properties[BasicUtil::EnumIndex(MatProp::Emissive)].texture.useTexture;
-			materialConstants.useMetallicMap = material->properties[BasicUtil::EnumIndex(MatProp::Metallic)].texture.useTexture;
-			materialConstants.useNormalMap = material->textures[BasicUtil::EnumIndex(MatTex::Normal)].useTexture;
-			materialConstants.useOpacityMap = material->properties[BasicUtil::EnumIndex(MatProp::Opacity)].texture.useTexture;
-			materialConstants.useRoughnessMap = material->properties[BasicUtil::EnumIndex(MatProp::Roughness)].texture.useTexture;
-			materialConstants.useARMMap = material->textures[BasicUtil::EnumIndex(MatTex::ARM)].useTexture && material->useARMTexture;
-			materialConstants.ARMLayout = (int)material->armLayout;
+			Material* material = ri->materials[j].get();
+			if (material->numFramesDirty > 0)
+			{
+				MaterialConstants materialConstants;
+				materialConstants.baseColor = material->properties[BasicUtil::EnumIndex(MatProp::BaseColor)].value;
+				materialConstants.displacementScale = material->additionalInfo[BasicUtil::EnumIndex(MatAddInfo::Displacement)];
+				materialConstants.emissive = material->properties[BasicUtil::EnumIndex(MatProp::Emissive)].value;
+				materialConstants.emissiveIntensity = material->additionalInfo[BasicUtil::EnumIndex(MatAddInfo::Emissive)];
+				materialConstants.metallic = material->properties[BasicUtil::EnumIndex(MatProp::Metallic)].value.x;
+				materialConstants.opacity = material->properties[BasicUtil::EnumIndex(MatProp::Opacity)].value.x;
+				materialConstants.roughness = material->properties[BasicUtil::EnumIndex(MatProp::Roughness)].value.x;
+				materialConstants.useAOMap = material->textures[BasicUtil::EnumIndex(MatTex::AmbOcc)].useTexture;
+				materialConstants.useBaseColorMap = material->properties[BasicUtil::EnumIndex(MatProp::BaseColor)].texture.useTexture;
+				materialConstants.useDisplacementMap = material->textures[BasicUtil::EnumIndex(MatTex::Displacement)].useTexture;
+				materialConstants.useEmissiveMap = material->properties[BasicUtil::EnumIndex(MatProp::Emissive)].texture.useTexture;
+				materialConstants.useMetallicMap = material->properties[BasicUtil::EnumIndex(MatProp::Metallic)].texture.useTexture;
+				materialConstants.useNormalMap = material->textures[BasicUtil::EnumIndex(MatTex::Normal)].useTexture;
+				materialConstants.useOpacityMap = material->properties[BasicUtil::EnumIndex(MatProp::Opacity)].texture.useTexture;
+				materialConstants.useRoughnessMap = material->properties[BasicUtil::EnumIndex(MatProp::Roughness)].texture.useTexture;
+				materialConstants.useARMMap = material->textures[BasicUtil::EnumIndex(MatTex::ARM)].useTexture && material->useARMTexture;
+				materialConstants.ARMLayout = (int)material->armLayout;
 
-			currMaterialCB[ri->uid].get()->CopyData(0, materialConstants);
+				currMaterialCB[ri->uid].get()->CopyData((int)j, materialConstants);
 
-			material->numFramesDirty--;
+				material->numFramesDirty--;
+			}
 		}
 
 		//frustum culling
-		XMMATRIX world = XMLoadFloat4x4(&ri->World);
 		XMMATRIX invWorld = XMMatrixInverse(&XMMatrixDeterminant(world), world);
 
 		XMMATRIX viewToLocal = XMMatrixMultiply(invView, invWorld);
@@ -249,12 +267,14 @@ void OpaqueObjectManager::BuildShaders()
 void OpaqueObjectManager::AddObjectToResource(Microsoft::WRL::ComPtr<ID3D12Device> device, FrameResource* currFrameResource)
 {
 	for (auto& obj : _objects)
-		currFrameResource->addOpaqueObjectBuffer(device.Get(), obj->uid);
+		currFrameResource->addOpaqueObjectBuffer(device.Get(), obj->uid, (int)obj->meshesData.size(), (int)obj->materials.size());
 }
 
-int OpaqueObjectManager::addRenderItem(ID3D12Device* device, const std::string& itemName, bool isTesselated, std::unique_ptr<Material> material, BoundingBox AABB)
+int OpaqueObjectManager::addRenderItem(ID3D12Device* device, ModelData&& modelData)
 {
+	const std::string& itemName = modelData.croppedName;
 	std::string name(itemName.begin(), itemName.end());
+	bool isTesselated = modelData.isTesselated;
 
 	auto modelRitem = std::make_unique<EditableRenderItem>();
 	_objectLoaded[itemName]++;
@@ -263,14 +283,28 @@ int OpaqueObjectManager::addRenderItem(ID3D12Device* device, const std::string& 
 	modelRitem->nameCount = _objectCounters[itemName]++;
 	modelRitem->Geo = GeometryManager::geometries()[itemName].get();
 	modelRitem->PrimitiveType = isTesselated ? D3D_PRIMITIVE_TOPOLOGY_3_CONTROL_POINT_PATCHLIST : D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+	modelRitem->isTesselated = isTesselated;
 	modelRitem->IndexCount = modelRitem->Geo->DrawArgs[itemName].IndexCount;
-	modelRitem->material = std::move(material);
-	modelRitem->material->numFramesDirty = gNumFrameResources;
-	modelRitem->Bounds = AABB;
+	modelRitem->materials = std::move(modelData.materials);
+	for (auto& material : modelRitem->materials)
+	{
+		material->numFramesDirty = gNumFrameResources;
+	}
+	modelRitem->Bounds = modelData.AABB;
+	modelRitem->meshesData = modelData.meshesData;
+	modelRitem->transform = modelData.transform;
+
+	for (int i = 0; i < modelRitem->meshesData.size(); i++)
+	{
+		auto& meshData = modelRitem->meshesData[i];
+		meshData.cbOffset = i * _cbMeshElementSize;
+		meshData.matOffset = meshData.materialIndex * _cbMaterialElementSize;
+		modelRitem->materials[meshData.materialIndex]->isUsed = true;
+	}
 
 	for (int i = 0; i < FrameResource::frameResources().size(); ++i)
 	{
-		FrameResource::frameResources()[i]->addOpaqueObjectBuffer(device, modelRitem->uid);
+		FrameResource::frameResources()[i]->addOpaqueObjectBuffer(device, modelRitem->uid, modelRitem->meshesData.size() + 1, modelRitem->materials.size());
 	}
 
 	if (isTesselated)
@@ -293,16 +327,18 @@ bool OpaqueObjectManager::deleteObject(int selectedObject)
 {
 	EditableRenderItem* objectToDelete = _objects[selectedObject].get();
 
-	Material* materialToDelete = objectToDelete->material.get();
-	for (int i = 0; i < BasicUtil::EnumIndex(MatProp::Count); i++)
+	for (auto& materialToDelete : objectToDelete->materials)
 	{
-		const std::string texName = materialToDelete->properties[i].texture.name;
-		TextureManager::deleteTexture(std::wstring(texName.begin(), texName.end()));
-	}
-	for (int i = 0; i < BasicUtil::EnumIndex(MatTex::Count); i++)
-	{
-		const std::string texName = materialToDelete->textures[i].name;
-		TextureManager::deleteTexture(std::wstring(texName.begin(), texName.end()));
+		for (int i = 0; i < BasicUtil::EnumIndex(MatProp::Count); i++)
+		{
+			const std::string texName = materialToDelete->properties[i].texture.name;
+			TextureManager::deleteTexture(std::wstring(texName.begin(), texName.end()));
+		}
+		for (int i = 0; i < BasicUtil::EnumIndex(MatTex::Count); i++)
+		{
+			const std::string texName = materialToDelete->textures[i].name;
+			TextureManager::deleteTexture(std::wstring(texName.begin(), texName.end()));
+		}
 	}
 
 	std::string name = objectToDelete->Name;
@@ -399,6 +435,13 @@ void OpaqueObjectManager::Draw(ID3D12GraphicsCommandList* cmdList, FrameResource
 	cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_3_CONTROL_POINT_PATCHLIST);
 
 	DrawObjects(cmdList, currFrameResource, _visibleTesselatedObjects, _tesselatedObjects);
+
+	if (_drawDebug)
+	{
+		cmdList->SetPipelineState(_wireframePSO.Get());
+		cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+		DrawAABBs(cmdList, currFrameResource);
+	}
 }
 
 void OpaqueObjectManager::DrawObjects(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, std::vector<uint32_t> indices, std::unordered_map<uint32_t, EditableRenderItem*> objects)
@@ -407,33 +450,58 @@ void OpaqueObjectManager::DrawObjects(ID3D12GraphicsCommandList* cmdList, FrameR
 	{
 		auto& ri = objects[idx];
 		auto objectCB = currFrameResource->OpaqueObjCB[ri->uid]->Resource();
-
 		cmdList->IASetVertexBuffers(0, 1, &ri->Geo->VertexBufferView());
 		cmdList->IASetIndexBuffer(&ri->Geo->IndexBufferView());
-
-		D3D12_GPU_VIRTUAL_ADDRESS objCBAddress = objectCB->GetGPUVirtualAddress();
-
-		cmdList->SetGraphicsRootConstantBufferView(8, objCBAddress);
-		
 		auto materialCB = currFrameResource->MaterialCB[ri->uid]->Resource();
-		D3D12_GPU_VIRTUAL_ADDRESS materialCBAddress = materialCB->GetGPUVirtualAddress();
-		cmdList->SetGraphicsRootConstantBufferView(9, materialCBAddress);
 
-		auto heapAlloc = TextureManager::srvHeapAllocator.get();
-		auto material = ri->material.get();
-		constexpr size_t offset = BasicUtil::EnumIndex(MatProp::Count) - 1;
-		for (int i = 0; i < offset; i++)
+		for (size_t i = 0; i < ri->meshesData.size(); i++)
 		{
-			if (i == BasicUtil::EnumIndex(MatProp::Opacity)) i++;
-			CD3DX12_GPU_DESCRIPTOR_HANDLE tex(heapAlloc->GetGpuHandle(material->properties[i].texture.index));
-			cmdList->SetGraphicsRootDescriptorTable(i, tex);
-		}
-		for (int i = 0; i < BasicUtil::EnumIndex(MatTex::Count); i++)
-		{
-			CD3DX12_GPU_DESCRIPTOR_HANDLE tex(heapAlloc->GetGpuHandle(material->textures[i].index));
-			cmdList->SetGraphicsRootDescriptorTable(offset + i, tex);
-		}
+			auto& meshData = ri->meshesData[i];
+			D3D12_GPU_VIRTUAL_ADDRESS meshCBAddress = objectCB->GetGPUVirtualAddress() + meshData.cbOffset;
 
-		cmdList->DrawIndexedInstanced(ri->IndexCount, 1, 0, 0, 0);
+			cmdList->SetGraphicsRootConstantBufferView(8, meshCBAddress);
+
+			D3D12_GPU_VIRTUAL_ADDRESS materialCBAddress = materialCB->GetGPUVirtualAddress() + meshData.matOffset;
+			cmdList->SetGraphicsRootConstantBufferView(9, materialCBAddress);
+
+			auto heapAlloc = TextureManager::srvHeapAllocator.get();
+			auto material = ri->materials[meshData.materialIndex].get();
+			constexpr size_t offset = BasicUtil::EnumIndex(MatProp::Count) - 1;
+			for (int i = 0; i < offset; i++)
+			{
+				if (i == BasicUtil::EnumIndex(MatProp::Opacity)) i++;
+				CD3DX12_GPU_DESCRIPTOR_HANDLE tex(heapAlloc->GetGpuHandle(material->properties[i].texture.index));
+				cmdList->SetGraphicsRootDescriptorTable(i, tex);
+			}
+			for (int i = 0; i < BasicUtil::EnumIndex(MatTex::Count); i++)
+			{
+				CD3DX12_GPU_DESCRIPTOR_HANDLE tex(heapAlloc->GetGpuHandle(material->textures[i].index));
+				cmdList->SetGraphicsRootDescriptorTable(offset + i, tex);
+			}
+
+			cmdList->DrawIndexedInstanced(meshData.indexCount, 1, meshData.indexStart, meshData.vertexStart, 0);
+		}
+	}
+}
+
+void OpaqueObjectManager::DrawAABBs(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource)
+{
+	for (auto& ri : _objects)
+	{
+		auto objectCB = currFrameResource->OpaqueObjCB[ri->uid]->Resource();
+		D3D12_GPU_VIRTUAL_ADDRESS AABBCBAddress = objectCB->GetGPUVirtualAddress() + ri->meshesData.size() * _cbMeshElementSize;
+
+		//draw local lights
+		auto geo = GeometryManager::geometries()["shapeGeo"].get();
+
+		cmdList->IASetVertexBuffers(0, 1, &geo->VertexBufferView());
+		cmdList->IASetIndexBuffer(&geo->IndexBufferView());
+
+		SubmeshGeometry mesh = geo->DrawArgs["box"];
+
+		cmdList->SetGraphicsRootConstantBufferView(8, AABBCBAddress);
+
+		cmdList->DrawIndexedInstanced(mesh.IndexCount, 1, mesh.StartIndexLocation,
+			mesh.BaseVertexLocation, 0);
 	}
 }

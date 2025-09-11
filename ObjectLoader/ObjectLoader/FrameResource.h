@@ -36,10 +36,10 @@ struct MaterialConstants
     float roughness = 1.f;
     float metallic = 1.f;
     float displacementScale = 0.0f;
-    int useARMMap = 0.0f;
+    int useARMMap = 0;
 
     int ARMLayout = 0;
-    float pad[3];
+    float pad[3] = {};
 };
 
 struct GBufferPassConstants
@@ -107,7 +107,7 @@ public:
     FrameResource& operator=(const FrameResource& rhs) = delete;
     ~FrameResource();
 
-    void addOpaqueObjectBuffer(ID3D12Device* device, std::uint32_t uid);
+    void addOpaqueObjectBuffer(ID3D12Device* device, std::uint32_t uid, int meshesCount, int materialsCount);
     void removeOpaqueObjectBuffer(ID3D12Device* device, std::uint32_t uid);
 
     void addUnlitObjectBuffer(ID3D12Device* device, std::uint32_t uid);

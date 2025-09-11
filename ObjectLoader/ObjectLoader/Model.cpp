@@ -1,47 +1,52 @@
 #include "Model.h"
 
-Model::Model(aiMesh** meshes, unsigned int numMeshes, std::string sceneName, aiMaterial* material, aiTexture** textures, std::wstring fileLocation)
-	: _fileLocation{fileLocation}
+
+DirectX::XMMATRIX aiToMatrix(aiMatrix4x4 m)
 {
-	name = sceneName;
-
-	for (unsigned int j = 0; j < numMeshes; j++)
-	{
-		ParseMesh(meshes[j]);
-
-		aiMesh* mesh = meshes[j];
-
-		aiVector3D vMaxAI = mesh->mAABB.mMax;
-		aiVector3D vMinAI = mesh->mAABB.mMin;
-		DirectX::XMVECTOR vMax = DirectX::XMVectorSet(vMaxAI.x, vMaxAI.y, vMaxAI.z, 1);
-		DirectX::XMVECTOR vMin = DirectX::XMVectorSet(vMinAI.x, vMinAI.y, vMinAI.z, 1);
-		if (j > 0)
-		{
-			DirectX::BoundingBox newAabb;
-			DirectX::BoundingBox::CreateFromPoints(newAabb, vMax, vMin);
-			DirectX::BoundingBox::CreateMerged(_aabb, _aabb, newAabb);
-		}
-		else
-		{
-			DirectX::BoundingBox::CreateFromPoints(_aabb, vMax, vMin);
-		}
-	}
-	ParseMaterial(material, textures);
-	isTesselated = _vertices.size() < 10000;
+	return DirectX::XMMATRIX(m.a1, m.a2, m.a3, m.a4,
+		m.b1, m.b2, m.b3, m.b4,
+		m.c1, m.c2, m.c3, m.c4,
+		m.d1, m.d2, m.d3, m.d4);
 }
 
-Model::Model(aiMesh* mesh, aiMaterial* material, aiTexture** textures, std::wstring fileLocation)
-	: _fileLocation{fileLocation}
+Model::Model(aiNode* node, std::string nodeName, aiMaterial** materials, UINT materialsCount, aiMesh** meshes, aiTexture** textures, std::wstring fileLocation)
 {
-	name = mesh->mName.C_Str();
-	ParseMesh(mesh);
-	ParseMaterial(material, textures);
-	isTesselated = _vertices.size() < 10000;
-	aiVector3D vMaxAI = mesh->mAABB.mMax;
-	aiVector3D vMinAI = mesh->mAABB.mMin;
-	DirectX::XMVECTOR vMax = DirectX::XMVectorSet(vMaxAI.x, vMaxAI.y, vMaxAI.z, 1);
-	DirectX::XMVECTOR vMin = DirectX::XMVectorSet(vMinAI.x, vMinAI.y, vMinAI.z, 1);
-	DirectX::BoundingBox::CreateFromPoints(_aabb, vMax, vMin);
+	name = nodeName;
+	_fileLocation = fileLocation;
+
+	auto transform = node->mTransformation;
+
+	aiVector3D translation;
+	aiVector3D rotation;
+	aiVector3D scale;
+
+	transform.Decompose(scale, rotation, translation);
+	_transform[BasicUtil::EnumIndex(Transform::Translation)] = {translation.x, translation.y, translation.z};
+	_transform[BasicUtil::EnumIndex(Transform::Rotation)] = {rotation.x, rotation.y, rotation.z};
+	_transform[BasicUtil::EnumIndex(Transform::Scale)] = {scale.x, scale.y, scale.z};
+
+	for (unsigned int j = 0; j < node->mNumMeshes; j++)
+	{
+		ParseMesh(meshes[j]);
+	}
+
+	for (unsigned int i = 0; i < node->mNumChildren; i++)
+	{
+		ParseNode(node->mChildren[i], meshes);
+	}
+
+	for (unsigned int i = 0; i < materialsCount; i++)
+	{
+		aiMaterial* material = materials[i];
+		ParseMaterial(material, textures);
+	}
+
+	//make AABB
+	{
+		DirectX::XMVECTOR vMax = DirectX::XMLoadFloat3(&_vMax);
+		DirectX::XMVECTOR vMin = DirectX::XMLoadFloat3(&_vMin);
+		DirectX::BoundingBox::CreateFromPoints(_aabb, vMin, vMax);
+	}
 }
 
 Model::~Model()
@@ -58,14 +63,19 @@ std::vector<std::int32_t> Model::indices() const
 	return _indices;
 }
 
-std::unique_ptr<Material> Model::material()
+std::vector<std::unique_ptr<Material>> Model::materials()
 {
-	return std::move(_material);
+	return std::move(_materials);
 }
 
-void Model::ParseMesh(aiMesh* mesh)
+void Model::ParseMesh(aiMesh* mesh, DirectX::XMMATRIX parentWorld)
 {
-	size_t vertexOffset = _vertices.size();
+	Mesh meshData;
+	meshData.vertexStart = _vertices.size();
+	meshData.indexStart = _indices.size();
+	meshData.materialIndex = mesh->mMaterialIndex;
+	meshData.defaultWorld = parentWorld;
+
 	for (unsigned int i = 0; i < mesh->mNumVertices; i++)
 	{
 		Vertex v;
@@ -85,6 +95,14 @@ void Model::ParseMesh(aiMesh* mesh)
 			biNormal = aiVector3D(0.f, 0.f, 0.f);
 		}
 		v.Pos = { pos.x, pos.y, pos.z };
+		_vMin.x = std::min(pos.x, _vMin.x);
+		_vMin.y = std::min(pos.y, _vMin.y);
+		_vMin.z = std::min(pos.z, _vMin.z);
+		_vMax.x = std::max(pos.x, _vMax.x);
+		_vMax.y = std::max(pos.y, _vMax.y);
+		_vMax.z = std::max(pos.z, _vMax.z);
+
+
 		v.TexC = { tex.x, tex.y };
 		v.Normal = { normal.x, normal.y, normal.z };
 		v.Tangent = { tangent.x, tangent.y, tangent.z };
@@ -98,10 +116,14 @@ void Model::ParseMesh(aiMesh* mesh)
 		{
 			continue;
 		}
-		_indices.push_back(mesh->mFaces[i].mIndices[0] + (UINT)vertexOffset);
-		_indices.push_back(mesh->mFaces[i].mIndices[1] + (UINT)vertexOffset);
-		_indices.push_back(mesh->mFaces[i].mIndices[2] + (UINT)vertexOffset);
+		_indices.push_back(mesh->mFaces[i].mIndices[0]);
+		_indices.push_back(mesh->mFaces[i].mIndices[1]);
+		_indices.push_back(mesh->mFaces[i].mIndices[2]);
 	}
+
+	meshData.indexCount = _indices.size() - meshData.indexStart;
+
+	_meshesData.push_back(meshData);
 }
 
 void Model::ParseMaterial(aiMaterial* material, aiTexture** textures)
@@ -109,67 +131,94 @@ void Model::ParseMaterial(aiMaterial* material, aiTexture** textures)
 	if (material == nullptr)
 		return;
 
-	_material = std::make_unique<Material>();
+	auto& newMaterial = std::make_unique<Material>();
+
+	newMaterial->name = material->GetName().C_Str();
 
 	aiColor4D color;
 
 	if (material->Get(AI_MATKEY_BASE_COLOR, color) == AI_SUCCESS)
 	{
-		_material->properties[BasicUtil::EnumIndex(MatProp::BaseColor)].value = { color.r, color.g, color.b };
+		newMaterial->properties[BasicUtil::EnumIndex(MatProp::BaseColor)].value = { color.r, color.g, color.b };
 	}
 	else if (material->Get(AI_MATKEY_COLOR_DIFFUSE, color) == AI_SUCCESS)
 	{
-		_material->properties[BasicUtil::EnumIndex(MatProp::BaseColor)].value = { color.r, color.g, color.b };
+		newMaterial->properties[BasicUtil::EnumIndex(MatProp::BaseColor)].value = { color.r, color.g, color.b };
 	}
 
 	if (material->Get(AI_MATKEY_COLOR_EMISSIVE, color) == AI_SUCCESS)
 	{
-		_material->properties[BasicUtil::EnumIndex(MatProp::Emissive)].value = { color.r, color.g, color.b };
+		newMaterial->properties[BasicUtil::EnumIndex(MatProp::Emissive)].value = { color.r, color.g, color.b };
 	}
 
 	float factor;
 	if (material->Get(AI_MATKEY_METALLIC_FACTOR, factor) == AI_SUCCESS)
 	{
-		_material->properties[BasicUtil::EnumIndex(MatProp::Metallic)].value.x = factor;
+		newMaterial->properties[BasicUtil::EnumIndex(MatProp::Metallic)].value.x = factor;
 	}
 	else
 	{
-		_material->properties[BasicUtil::EnumIndex(MatProp::Metallic)].value.x = 0.f;
+		newMaterial->properties[BasicUtil::EnumIndex(MatProp::Metallic)].value.x = 0.f;
 	}
 
 	if (material->Get(AI_MATKEY_ROUGHNESS_FACTOR, factor) == AI_SUCCESS)
 	{
-		_material->properties[BasicUtil::EnumIndex(MatProp::Roughness)].value.x = factor;
+		newMaterial->properties[BasicUtil::EnumIndex(MatProp::Roughness)].value.x = factor;
 	}
 
 	if (material->Get(AI_MATKEY_OPACITY, factor) == AI_SUCCESS)
 	{
-		_material->properties[BasicUtil::EnumIndex(MatProp::Opacity)].value.x = factor;
+		newMaterial->properties[BasicUtil::EnumIndex(MatProp::Opacity)].value.x = factor;
 	}
 
 	if (material->Get(AI_MATKEY_EMISSIVE_INTENSITY, factor) == AI_SUCCESS)
 	{
-		_material->additionalInfo[BasicUtil::EnumIndex(MatAddInfo::Emissive)] = 0.0f;
+		newMaterial->additionalInfo[BasicUtil::EnumIndex(MatAddInfo::Emissive)] = 0.0f;
 	}
 
-	if (!LoadMatPropTexture(material, textures, MatProp::BaseColor, aiTextureType_BASE_COLOR))
-		LoadMatPropTexture(material, textures, MatProp::BaseColor, aiTextureType_DIFFUSE);
-	if (!LoadMatPropTexture(material, textures, MatProp::Emissive, aiTextureType_EMISSION_COLOR))
-		LoadMatPropTexture(material, textures, MatProp::Emissive, aiTextureType_EMISSIVE);
-	if (!LoadMatPropTexture(material, textures, MatProp::Metallic, aiTextureType_METALNESS))
-		LoadMatPropTexture(material, textures, MatProp::Metallic, aiTextureType_SPECULAR);
-	LoadMatPropTexture(material, textures, MatProp::Opacity, aiTextureType_OPACITY);
-	LoadMatPropTexture(material, textures, MatProp::Roughness, aiTextureType_DIFFUSE_ROUGHNESS);
+	if (!LoadMatPropTexture(material, newMaterial.get(), textures, MatProp::BaseColor, aiTextureType_BASE_COLOR))
+		LoadMatPropTexture(material, newMaterial.get(), textures, MatProp::BaseColor, aiTextureType_DIFFUSE);
+	if (!LoadMatPropTexture(material, newMaterial.get(), textures, MatProp::Emissive, aiTextureType_EMISSION_COLOR))
+		LoadMatPropTexture(material, newMaterial.get(), textures, MatProp::Emissive, aiTextureType_EMISSIVE);
+	if (!LoadMatPropTexture(material, newMaterial.get(), textures, MatProp::Metallic, aiTextureType_METALNESS))
+		LoadMatPropTexture(material, newMaterial.get(), textures, MatProp::Metallic, aiTextureType_SPECULAR);
+	LoadMatPropTexture(material, newMaterial.get(), textures, MatProp::Opacity, aiTextureType_OPACITY);
+	LoadMatPropTexture(material, newMaterial.get(), textures, MatProp::Roughness, aiTextureType_DIFFUSE_ROUGHNESS);
 
-	if (!LoadMatTexture(material, textures, MatTex::AmbOcc, aiTextureType_AMBIENT_OCCLUSION))
-		if (!LoadMatTexture(material, textures, MatTex::AmbOcc, aiTextureType_AMBIENT))
-			LoadMatTexture(material, textures, MatTex::AmbOcc, aiTextureType_LIGHTMAP);
-	LoadMatTexture(material, textures, MatTex::ARM, aiTextureType_UNKNOWN);
-	LoadMatTexture(material, textures, MatTex::Displacement, aiTextureType_DISPLACEMENT);
-	LoadMatTexture(material, textures, MatTex::Normal, aiTextureType_NORMALS);
+	if (!LoadMatTexture(material, newMaterial.get(), textures, MatTex::AmbOcc, aiTextureType_AMBIENT_OCCLUSION))
+		if (!LoadMatTexture(material, newMaterial.get(), textures, MatTex::AmbOcc, aiTextureType_AMBIENT))
+			LoadMatTexture(material, newMaterial.get(), textures, MatTex::AmbOcc, aiTextureType_LIGHTMAP);
+	LoadMatTexture(material, newMaterial.get(), textures, MatTex::ARM, aiTextureType_UNKNOWN);
+	if (!LoadMatTexture(material, newMaterial.get(), textures, MatTex::Displacement, aiTextureType_DISPLACEMENT))
+	{
+		if (LoadMatTexture(material, newMaterial.get(), textures, MatTex::Displacement, aiTextureType_HEIGHT))
+			_isTesselated = true;
+	}
+	else
+	{
+		_isTesselated = true;
+	}
+	LoadMatTexture(material, newMaterial.get(), textures, MatTex::Normal, aiTextureType_NORMALS);
+
+	_materials.push_back(std::move(newMaterial));
 }
 
-bool Model::LoadMatPropTexture(aiMaterial* material, aiTexture** textures, MatProp property, aiTextureType texType)
+void Model::ParseNode(aiNode* node, aiMesh** meshes, DirectX::XMMATRIX parentWorld)
+{
+	DirectX::XMMATRIX nodeWorld = aiToMatrix(node->mTransformation) * parentWorld;
+
+	for (unsigned int j = 0; j < node->mNumMeshes; j++)
+	{
+		ParseMesh(meshes[node->mMeshes[j]], nodeWorld);
+	}
+
+	for (unsigned int i = 0; i < node->mNumChildren; i++)
+	{
+		ParseNode(node->mChildren[i], meshes, nodeWorld);
+	}
+}
+
+bool Model::LoadMatPropTexture(aiMaterial* material, Material* newMaterial, aiTexture** textures, MatProp property, aiTextureType texType)
 {
 	aiString texPath;
 	if (material->GetTexture(texType, 0, &texPath) == AI_SUCCESS)
@@ -181,18 +230,18 @@ bool Model::LoadMatPropTexture(aiMaterial* material, aiTexture** textures, MatPr
 			int texIndex = atoi(texPath.C_Str() + 1);
 			aiTexture* embeddedTex = textures[texIndex];
 			std::wstring texName = std::wstring(name.begin(), name.end()) + L"__embedded_" + std::to_wstring(texIndex);
-			_material->properties[BasicUtil::EnumIndex(property)].texture = TextureManager::LoadEmbeddedTexture(texName, embeddedTex);
+			newMaterial->properties[BasicUtil::EnumIndex(property)].texture = TextureManager::LoadEmbeddedTexture(texName, embeddedTex);
 			return true;
 		}
 
 		std::wstring textureFileNameW = std::wstring(textureFilename.begin(), textureFilename.end());
-		_material->properties[BasicUtil::EnumIndex(property)].texture = TextureManager::LoadTexture((_fileLocation + textureFileNameW).c_str());
+		newMaterial->properties[BasicUtil::EnumIndex(property)].texture = TextureManager::LoadTexture((_fileLocation + textureFileNameW).c_str());
 		return true;
 	}
 	return false;
 }
 
-bool Model::LoadMatTexture(aiMaterial* material, aiTexture** textures, MatTex property, aiTextureType texType)
+bool Model::LoadMatTexture(aiMaterial* material, Material* newMaterial, aiTexture** textures, MatTex property, aiTextureType texType)
 {
 	aiString texPath;
 	if (material->GetTexture(texType, 0, &texPath) == AI_SUCCESS)
@@ -205,12 +254,12 @@ bool Model::LoadMatTexture(aiMaterial* material, aiTexture** textures, MatTex pr
 			int texIndex = atoi(texPath.C_Str() + 1);
 			aiTexture* embeddedTex = textures[texIndex];
 			std::wstring texName = std::wstring(name.begin(), name.end()) + L"__embedded_" + std::to_wstring(texIndex);
-			_material->textures[BasicUtil::EnumIndex(property)] = TextureManager::LoadEmbeddedTexture(texName, embeddedTex);
+			newMaterial->textures[BasicUtil::EnumIndex(property)] = TextureManager::LoadEmbeddedTexture(texName, embeddedTex);
 			return true;
 		}
 
 		std::wstring textureFileNameW = std::wstring(textureFilename.begin(), textureFilename.end());
-		_material->textures[BasicUtil::EnumIndex(property)] = TextureManager::LoadTexture((_fileLocation + textureFileNameW).c_str());
+		newMaterial->textures[BasicUtil::EnumIndex(property)] = TextureManager::LoadTexture((_fileLocation + textureFileNameW).c_str());
 		return true;
 	}
 	return false;

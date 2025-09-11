@@ -14,7 +14,7 @@ public:
 	ObjectManager(ID3D12Device* device);
 	~ObjectManager();
 
-	virtual int addRenderItem(ID3D12Device* device, const std::string& itemName, bool isTesselated = false, std::unique_ptr<Material> material = nullptr, BoundingBox aabb = BoundingBox()) = 0;
+	virtual int addRenderItem(ID3D12Device* device, ModelData&& modelData) = 0;
 	virtual bool deleteObject(int selectedObject) = 0;
 
 	virtual void UpdateObjectCBs(FrameResource* currFrameResource, Camera* camera = nullptr) = 0;
@@ -27,6 +27,10 @@ public:
 
 	virtual void Draw(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, bool isWireframe = false) = 0;
 	void Init();
+	virtual bool* drawDebug()
+	{
+		return &_drawDebug;
+	}
 
 
 protected:
@@ -46,4 +50,6 @@ protected:
 	virtual void BuildRootSignature() = 0;
 	virtual void BuildPSO()= 0;
 	virtual void BuildShaders() = 0;
+
+	bool _drawDebug = false;
 };

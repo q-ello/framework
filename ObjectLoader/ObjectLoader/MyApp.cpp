@@ -1,14 +1,5 @@
 #include "MyApp.h"
-#include "Model.h"
-#include <shobjidl.h> 
-#include <sstream>
-#include <commctrl.h>
 
-#include "imgui/imgui.h"
-#include "imgui/backends/imgui_impl_dx12.h"
-#include "imgui/backends/imgui_impl_win32.h"
-#include "OpaqueObjectManager.h"
-#include "UnlitObjectManager.h"
 
 #pragma comment(lib, "ComCtl32.lib")
 
@@ -45,7 +36,7 @@ bool MyApp::Initialize()
 	BuildDescriptorHeaps();
 	BuildShadersAndInputLayout();
 	GeometryManager::BuildNecessaryGeometry();
-	_objectManagers[PSO::Unlit]->addRenderItem(md3dDevice.Get(), "grid");
+	_objectManagers[PSO::Unlit]->addRenderItem(md3dDevice.Get(), { "grid" });
 	BuildFrameResources();
 	BuildPSOs();
 
@@ -245,7 +236,7 @@ void MyApp::OnMouseWheel(WPARAM btnState)
 	}
 	else if (!io.WantCaptureMouse)
 	{
-		int direction = ((float)GET_WHEEL_DELTA_WPARAM(btnState) > 0) ? 1 : -1;
+		float direction = ((float)GET_WHEEL_DELTA_WPARAM(btnState) > 0) ? 1.f : -1.f;
 		_camera.Walk(direction);
 	}
 }
@@ -360,7 +351,7 @@ void MyApp::BuildFrameResources()
 
 void MyApp::DrawInterface()
 {
-	int* buttonId = new int(0);
+	int buttonId = 0;
 
 	ImGui::SetNextWindowPos({ 0.f, 0.f }, ImGuiCond_Once, { 0.f, 0.f });
 	ImGui::SetNextWindowSize({ 250.f, 500.f }, ImGuiCond_Once);
@@ -392,11 +383,10 @@ void MyApp::DrawInterface()
 
 	//object info
 
-	if (!_selectedMeshes.empty())
+	if (!_selectedModels.empty())
 	{
 		DrawObjectInfo(buttonId);
 	}
-	delete buttonId;
 
 	DrawCameraSpeed();
 
@@ -412,8 +402,10 @@ void MyApp::DrawInterface()
 	ImGui::End();
 }
 
-void MyApp::DrawObjectsList(int* btnId)
+void MyApp::DrawObjectsList(int& btnId)
 {
+	ImGui::Checkbox("Draw Debug", _objectManagers[_selectedType]->drawDebug());
+
 	if (ImGui::CollapsingHeader("Opaque Objects", ImGuiTreeNodeFlags_DefaultOpen))
 	{
 		if (ImGui::Button("Add New"))
@@ -431,8 +423,8 @@ void MyApp::DrawObjectsList(int* btnId)
 					auto model = _modelManager->ParseAsOneObject();
 					//generating it as one mesh
 					ModelData data = GeometryManager::BuildModelGeometry(model.get());
-					_selectedMeshes.clear();
-					_selectedMeshes.insert(_objectManagers[PSO::Opaque]->addRenderItem(md3dDevice.Get(), data.croppedName, data.isTesselated, std::move(data.material), model->AABB()));
+					_selectedModels.clear();
+					_selectedModels.insert(_objectManagers[PSO::Opaque]->addRenderItem(md3dDevice.Get(), std::move(data)));
 				}
 				CoTaskMemFree(pszFilePath);
 			}
@@ -448,10 +440,10 @@ void MyApp::DrawObjectsList(int* btnId)
 
 		for (int i = 0; i < _objectManagers[PSO::Opaque]->objectsCount(); i++)
 		{
-			ImGui::PushID((*btnId)++);
+			ImGui::PushID(btnId++);
 
 			//bool isSelected = _selectedType == PSO::Opaque && i == _selectedObject;
-			bool isSelected = _selectedType == PSO::Opaque && _selectedMeshes.count(i) > 0;
+			bool isSelected = _selectedType == PSO::Opaque && _selectedModels.count(i) > 0;
 
 			ImGui::PushStyleColor(ImGuiCol_Button, isSelected ? ImVec4(0.2f, 0.6f, 1.0f, 1.0f) : ImVec4(0.2f, 0.2f, 0.2f, 1.0f));
 
@@ -461,28 +453,28 @@ void MyApp::DrawObjectsList(int* btnId)
 				//logic for multiple selecting
 				if (_selectedType == PSO::Opaque && ImGui::GetIO().KeyShift && lastClicked != -1)
 				{
-					_selectedMeshes.clear();
+					_selectedModels.clear();
 					int start = min(lastClicked, i);
 					int end = max(lastClicked, i);
 					for (int j = start; j <= end; ++j)
-						_selectedMeshes.insert(j);
+						_selectedModels.insert(j);
 				}
 				else if (ImGui::GetIO().KeyCtrl)
 				{
 					if (isSelected)
 					{
-						_selectedMeshes.erase(i);
+						_selectedModels.erase(i);
 					}
 					else
 					{
-						_selectedMeshes.insert(i);
+						_selectedModels.insert(i);
 					}
 					lastClicked = i;
 				}
 				else
 				{
-					_selectedMeshes.clear();
-					_selectedMeshes.insert(i);
+					_selectedModels.clear();
+					_selectedModels.insert(i);
 					lastClicked = i;
 				}
 				_selectedType = PSO::Opaque;
@@ -492,13 +484,13 @@ void MyApp::DrawObjectsList(int* btnId)
 
 			if (ImGui::BeginPopupContextItem())
 			{
-				ImGui::PushID((*btnId)++);
+				ImGui::PushID(btnId++);
 				if (ImGui::Button("delete"))
 				{
-					if (_selectedMeshes.count(i) > 0)
+					if (_selectedModels.count(i) > 0)
 					{
 						//going from the most index to last
-						for (auto it = _selectedMeshes.rbegin(); it != _selectedMeshes.rend(); it++)
+						for (auto it = _selectedModels.rbegin(); it != _selectedModels.rend(); it++)
 						{
 							if (_objectManagers[PSO::Opaque]->deleteObject(*it))
 							{
@@ -513,7 +505,7 @@ void MyApp::DrawObjectsList(int* btnId)
 							ClearData();
 						}
 					}
-					_selectedMeshes.clear();
+					_selectedModels.clear();
 				}
 				ImGui::PopID();
 				ImGui::EndPopup();
@@ -523,36 +515,36 @@ void MyApp::DrawObjectsList(int* btnId)
 	}
 }
 
-void MyApp::DrawHandSpotlight(int* btnId)
+void MyApp::DrawHandSpotlight(int& btnId)
 {
 	auto light = _lightingManager->mainSpotlight();
 
 	bool lightEnabled = light->active == 1;
-	ImGui::PushID((*btnId)++);
+	ImGui::PushID(btnId++);
 	if (ImGui::Checkbox("Enabled", &lightEnabled))
 	{
 		light->active = (int)lightEnabled;
 	}
 	ImGui::PopID();
 
-	ImGui::PushID((*btnId)++);
+	ImGui::PushID(btnId++);
 	ImGui::ColorEdit3("Color", &light->color.x);
 	ImGui::PopID();
 
-	ImGui::PushID((*btnId)++);
+	ImGui::PushID(btnId++);
 	ImGui::DragFloat("Intensity", &light->intensity, 0.1f, 0.0f, 10.0f);
 	ImGui::PopID();
 
-	ImGui::PushID((*btnId)++);
+	ImGui::PushID(btnId++);
 	ImGui::DragFloat("Radius", &light->radius, 0.1f, 0.0f, 100.0f);
 	ImGui::PopID();
 
-	ImGui::PushID((*btnId)++);
+	ImGui::PushID(btnId++);
 	ImGui::SliderAngle("Angle", &light->angle, 1.0f, 89.f);
 	ImGui::PopID();
 }
 
-void MyApp::DrawLightData(int* btnId)
+void MyApp::DrawLightData(int& btnId)
 {
 	if (ImGui::CollapsingHeader("Directional Light", ImGuiTreeNodeFlags_DefaultOpen))
 	{
@@ -560,7 +552,7 @@ void MyApp::DrawLightData(int* btnId)
 
 		ImGui::Text("Direction");
 		ImGui::SameLine();
-		ImGui::PushID((*btnId)++);
+		ImGui::PushID(btnId++);
 		ImGui::DragFloat3("", _lightingManager->mainLightDirection(), 0.1f);
 		ImGui::PopID();
 
@@ -568,7 +560,7 @@ void MyApp::DrawLightData(int* btnId)
 
 		ImGui::Text("Color");
 		ImGui::SameLine();
-		ImGui::PushID((*btnId)++);
+		ImGui::PushID(btnId++);
 		ImGui::ColorEdit3("", _lightingManager->mainLightColor());
 		ImGui::PopID();
 	}
@@ -591,13 +583,13 @@ void MyApp::DrawLightData(int* btnId)
 	}
 }
 
-void MyApp::DrawLocalLightData(int* btnId, int lightIndex)
+void MyApp::DrawLocalLightData(int& btnId, int lightIndex)
 {
 	if (ImGui::CollapsingHeader(("Light " + std::to_string(lightIndex)).c_str()))
 	{
 		if (ImGui::BeginPopupContextItem())
 		{
-			ImGui::PushID((*btnId)++);
+			ImGui::PushID(btnId++);
 			if (ImGui::Button("delete"))
 			{
 				_lightingManager->deleteLight(lightIndex);
@@ -608,14 +600,14 @@ void MyApp::DrawLocalLightData(int* btnId, int lightIndex)
 		}
 		auto light = _lightingManager->light(lightIndex);
 
-		ImGui::PushID((*btnId)++);
+		ImGui::PushID(btnId++);
 		if (ImGui::RadioButton("Point Light", light->LightData.type == 0) && light->LightData.type != 0)
 		{
 			light->LightData.type = 0;
 			_lightingManager->UpdateWorld(lightIndex);
 		}
 		ImGui::PopID();
-		ImGui::PushID((*btnId)++);
+		ImGui::PushID(btnId++);
 		if (ImGui::RadioButton("Spotlight", light->LightData.type == 1) && light->LightData.type != 1)
 		{
 			light->LightData.type = 1;
@@ -623,32 +615,32 @@ void MyApp::DrawLocalLightData(int* btnId, int lightIndex)
 		}
 		bool lightEnabled = light->LightData.active == 1;
 		ImGui::PopID();
-		ImGui::PushID((*btnId)++);
+		ImGui::PushID(btnId++);
 		if (ImGui::Checkbox("Enabled", &lightEnabled))
 		{
 			light->LightData.active = (int)lightEnabled;
 			light->NumFramesDirty = gNumFrameResources;
 		}
 		ImGui::PopID();
-		ImGui::PushID((*btnId)++);
+		ImGui::PushID(btnId++);
 		if (ImGui::DragFloat3("Position", &light->LightData.position.x, 0.1f))
 		{
 			_lightingManager->UpdateWorld(lightIndex);
 		}
 		ImGui::PopID();
-		ImGui::PushID((*btnId)++);
+		ImGui::PushID(btnId++);
 		if (ImGui::ColorEdit3("Color", &light->LightData.color.x))
 		{
 			light->NumFramesDirty = gNumFrameResources;
 		}
 		ImGui::PopID();
-		ImGui::PushID((*btnId)++);
+		ImGui::PushID(btnId++);
 		if (ImGui::DragFloat("Intensity", &light->LightData.intensity, 0.1f, 0.0f, 10.0f))
 		{
 			light->NumFramesDirty = gNumFrameResources;
 		}
 		ImGui::PopID();
-		ImGui::PushID((*btnId)++);
+		ImGui::PushID(btnId++);
 		if (ImGui::DragFloat("Radius", &light->LightData.radius, 0.1f, 0.0f, 30.0f))
 		{
 			_lightingManager->UpdateWorld(lightIndex);
@@ -656,13 +648,13 @@ void MyApp::DrawLocalLightData(int* btnId, int lightIndex)
 		ImGui::PopID();
 		if (light->LightData.type == 1)
 		{
-			ImGui::PushID((*btnId)++);
+			ImGui::PushID(btnId++);
 			if (ImGui::DragFloat3("Direction", &light->LightData.direction.x, 0.1f))
 			{
 				_lightingManager->UpdateWorld(lightIndex);
 			}
 			ImGui::PopID();
-			ImGui::PushID((*btnId)++);
+			ImGui::PushID(btnId++);
 			if (ImGui::SliderAngle("Angle", &light->LightData.angle, 1.0f, 89.f))
 			{
 				_lightingManager->UpdateWorld(lightIndex);
@@ -672,14 +664,14 @@ void MyApp::DrawLocalLightData(int* btnId, int lightIndex)
 	}
 }
 
-void MyApp::DrawObjectInfo(int* btnId)
+void MyApp::DrawObjectInfo(int& btnId)
 {
 	ImGui::SetNextWindowPos({ static_cast<float>(mClientWidth) - 300.f, 50.f }, ImGuiCond_Once, { 0.f, 0.f });
 	ImGui::SetNextWindowSize({ 250.f, 350.f }, ImGuiCond_Once);
 
-	std::string title = _selectedMeshes.size() == 1
-		? _objectManagers[_selectedType]->object(*_selectedMeshes.begin())->Name + " Info"
-		: std::to_string(_selectedMeshes.size()) + " objects selected";
+	std::string title = _selectedModels.size() == 1
+		? _objectManagers[_selectedType]->object(*_selectedModels.begin())->Name + " Info"
+		: std::to_string(_selectedModels.size()) + " objects selected";
 
 	ImGui::Begin(title.c_str());
 
@@ -688,31 +680,40 @@ void MyApp::DrawObjectInfo(int* btnId)
 		DrawMultiObjectTransform(btnId);
 	}
 
-	if (ImGui::CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen))
+	if (ImGui::CollapsingHeader("Materials", ImGuiTreeNodeFlags_DefaultOpen))
 	{
-		DrawMultiObjectMaterial(btnId);
+		if (_selectedModels.size() > 1)
+		{
+			ImGui::TextDisabled("You cannot adjut materials of multiple objects");
+		}
+		else
+		{
+			DrawMaterials(btnId);
+		}
 	}
 
 	ImGui::End();
 }
 
-void MyApp::DrawMultiObjectTransform(int* btnId)
+void MyApp::DrawMultiObjectTransform(int& btnId)
 {
-	DrawTransformInput("Location: ", (*btnId)++, 0, 0.1f);
-	DrawTransformInput("Rotation: ", (*btnId)++, 1, 1.f);
+	DrawTransformInput("Location: ", btnId++, 0, 0.1f);
+	DrawTransformInput("Rotation: ", btnId++, 1, 1.f);
 
 	auto& manager = _objectManagers[_selectedType];
 
-	XMFLOAT3 firstPos = manager->object(*_selectedMeshes.begin())->transform[2];
-	bool firstScale = manager->object(*_selectedMeshes.begin())->lockedScale;
+	size_t scaleIndex = BasicUtil::EnumIndex(Transform::Scale);
+
+	XMFLOAT3 firstScale = manager->object(*_selectedModels.begin())->transform[scaleIndex];
+	bool firstScaleLock = manager->object(*_selectedModels.begin())->lockedScale;
 	bool allSamePos = true;
 
-	for (int idx : _selectedMeshes)
+	for (int idx : _selectedModels)
 	{
-		if (manager->object(idx)->transform[2].x != firstPos.x ||
-			manager->object(idx)->transform[2].y != firstPos.y ||
-			manager->object(idx)->transform[2].z != firstPos.z ||
-			manager->object(idx)->lockedScale != firstScale)
+		if (manager->object(idx)->transform[scaleIndex].x != firstScale.x ||
+			manager->object(idx)->transform[scaleIndex].y != firstScale.y ||
+			manager->object(idx)->transform[scaleIndex].z != firstScale.z ||
+			manager->object(idx)->lockedScale != firstScaleLock)
 		{
 			allSamePos = false;
 			break;
@@ -725,11 +726,11 @@ void MyApp::DrawMultiObjectTransform(int* btnId)
 	//it is about scale I'm just lazy to change the name
 	if (allSamePos)
 	{
-		bool scale = firstScale;
-		ImGui::PushID((*btnId)++);
+		bool scale = firstScaleLock;
+		ImGui::PushID(btnId++);
 		if (ImGui::Checkbox("", &scale))
 		{
-			for (int idx : _selectedMeshes)
+			for (int idx : _selectedModels)
 			{
 				manager->object(idx)->lockedScale = scale;
 				manager->object(idx)->NumFramesDirty = gNumFrameResources;
@@ -738,14 +739,14 @@ void MyApp::DrawMultiObjectTransform(int* btnId)
 		ImGui::SameLine();
 		ImGui::PopID();
 
-		XMFLOAT3 before = firstPos;
+		XMFLOAT3 before = firstScale;
 		XMFLOAT3 pos = before;
 
-		ImGui::PushID((*btnId)++);
+		ImGui::PushID(btnId++);
 
 		if (ImGui::DragFloat3("", &pos.x, 0.1f))
 		{
-			for (int idx : _selectedMeshes)
+			for (int idx : _selectedModels)
 			{
 				if (scale)
 				{
@@ -772,7 +773,7 @@ void MyApp::DrawMultiObjectTransform(int* btnId)
 					}
 					pos = after;
 				}
-				manager->object(idx)->transform[2] = pos;
+				manager->object(idx)->transform[scaleIndex] = pos;
 				manager->object(idx)->NumFramesDirty = gNumFrameResources;
 			}
 		}
@@ -784,375 +785,288 @@ void MyApp::DrawMultiObjectTransform(int* btnId)
 	}
 }
 
-void MyApp::DrawMultiObjectMaterial(int* btnId)
+void MyApp::DrawObjectMaterial(int& btnId, int matIndex)
 {
+	Material* material = _objectManagers[_selectedType]->object(*_selectedModels.begin())->materials[matIndex].get();
 	bool isTransparent = DrawIsTransparentCheckbox();
-	bool useARM = DrawUseARMTextureCheckbox();
-	DrawMaterialProperty("Base Color", BasicUtil::EnumIndex(MatProp::BaseColor), btnId, true);
-	DrawMaterialProperty("Emissive", BasicUtil::EnumIndex(MatProp::Emissive), btnId, true, true, "Intensity", BasicUtil::EnumIndex(MatAddInfo::Emissive));
+	bool useARM = DrawUseARMTextureCheckbox(material);
+	DrawMaterialProperty(material, "Base Color", BasicUtil::EnumIndex(MatProp::BaseColor), btnId, true);
+	DrawMaterialProperty(material, "Emissive", BasicUtil::EnumIndex(MatProp::Emissive), btnId, true, true, "Intensity", BasicUtil::EnumIndex(MatAddInfo::Emissive));
 	if (!useARM)
 	{
-		DrawMaterialProperty("Roughness", BasicUtil::EnumIndex(MatProp::Roughness), btnId, false);
-		DrawMaterialProperty("Metallic", BasicUtil::EnumIndex(MatProp::Metallic), btnId, false);
+		DrawMaterialProperty(material, "Roughness", BasicUtil::EnumIndex(MatProp::Roughness), btnId, false);
+		DrawMaterialProperty(material, "Metallic", BasicUtil::EnumIndex(MatProp::Metallic), btnId, false);
 	}
 	if (isTransparent)
 	{
-		DrawMaterialProperty("Opacity", BasicUtil::EnumIndex(MatProp::Opacity), btnId, false);
+		DrawMaterialProperty(material, "Opacity", BasicUtil::EnumIndex(MatProp::Opacity), btnId, false);
 	}
 
-	DrawMaterialTexture("Normal", BasicUtil::EnumIndex(MatTex::Normal), btnId);
-	DrawMaterialTexture("Displacement", BasicUtil::EnumIndex(MatTex::Displacement), btnId, true, "Displacement Scale", BasicUtil::EnumIndex(MatAddInfo::Displacement));
+	DrawMaterialTexture(material, "Normal", BasicUtil::EnumIndex(MatTex::Normal), btnId);
+
+	const auto& ri = _objectManagers[_selectedType]->object(*_selectedModels.begin());
+	if (ri->isTesselated)
+	{
+		DrawMaterialTexture(material, "Displacement", BasicUtil::EnumIndex(MatTex::Displacement), btnId, true, "Displacement Scale", BasicUtil::EnumIndex(MatAddInfo::Displacement));
+	}
+
 	if (!useARM)
 	{
-		DrawMaterialTexture("Ambient Occlusion", BasicUtil::EnumIndex(MatTex::AmbOcc), btnId);
+		DrawMaterialTexture(material, "Ambient Occlusion", BasicUtil::EnumIndex(MatTex::AmbOcc), btnId);
 	}
 	else
 	{
-		DrawMaterialARMTexture("ARM", BasicUtil::EnumIndex(MatTex::ARM), btnId);
+		DrawMaterialARMTexture(material, "ARM", BasicUtil::EnumIndex(MatTex::ARM), btnId);
 	}
 }
 
-void MyApp::DrawMaterialProperty(const std::string& label, int index, int* btnId, bool isFloat3, bool hasAdditionalInfo, const std::string& additionalInfoLabel, int additionalInfoIndex)
+void MyApp::DrawMaterials(int& btnId)
+{
+	static int selectedMaterial = -1;
+	const auto& ri = _objectManagers[_selectedType]->object(*_selectedModels.begin());
+
+	std::vector<int> visibleMaterialIndices;
+	for (int i = 0; i < ri->materials.size(); i++)
+	{
+		if (ri->materials[i]->isUsed)
+		{
+			visibleMaterialIndices.push_back(i);
+		}
+	}
+
+	int numMaterials = visibleMaterialIndices.size();
+	int maxVisible = 6; // maximum number of items to show without scrolling
+	float lineHeight = ImGui::GetTextLineHeightWithSpacing();
+
+	float listHeight = lineHeight * (numMaterials < maxVisible ? numMaterials : maxVisible);
+
+	if (ImGui::BeginListBox("##materials", ImVec2(-FLT_MIN, listHeight)))
+	{
+		for (int i : visibleMaterialIndices)
+		{
+			const bool isSelected = (selectedMaterial == i);
+			if (ImGui::Selectable(ri->materials[i].get()->name.c_str(), isSelected))
+				selectedMaterial = i;
+
+			if (isSelected)
+				ImGui::SetItemDefaultFocus();
+		}
+		ImGui::EndListBox();
+	}
+
+	if (selectedMaterial != -1)
+	{
+		DrawObjectMaterial(btnId, selectedMaterial);
+	}
+}
+
+void MyApp::DrawMaterialProperty(Material* material, const std::string& label, size_t index, int& btnId, bool isFloat3, bool hasAdditionalInfo, const std::string& additionalInfoLabel, size_t additionalInfoIndex)
 {
 	auto& manager = _objectManagers[_selectedType];
-	Material* firstMaterial = manager->object(*_selectedMeshes.begin())->material.get();
-	bool textureTabOpen = firstMaterial->properties[index].texture.useTexture;
-	static int selectedTab = textureTabOpen;
-	XMFLOAT3 firstValue = firstMaterial->properties[index].value;
-	int firstTexIndex = firstMaterial->properties[index].texture.index;
-	float firstAddInfo = -1.f;
-	if (hasAdditionalInfo)
-	{
-		firstAddInfo = firstMaterial->additionalInfo[additionalInfoIndex];
-	}
-	bool allSameValues = true;
+	bool textureTabOpen = material->properties[index].texture.useTexture;
 
-	for (int idx : _selectedMeshes)
+	static const int propsNum = material->properties.size();
+	static std::vector<int> selectedTabs;
+	if (selectedTabs.size() == 0)
 	{
-		Material* material = manager->object(idx)->material.get();
-		if (material->properties[index].texture.useTexture != textureTabOpen ||
-			material->properties[index].value.x != firstValue.x ||
-			material->properties[index].value.y != firstValue.y || 
-			material->properties[index].value.z != firstValue.z ||
-			material->properties[index].texture.index != firstTexIndex ||
-			(hasAdditionalInfo && firstAddInfo != material->additionalInfo[additionalInfoIndex])
-			)
-		{
-			allSameValues = false;
-			break;
-		}
+		selectedTabs.resize(propsNum, -1);
+	}
+	
+	if (selectedTabs[index] == -1)
+	{
+		selectedTabs[index] = textureTabOpen;
 	}
 
 	if (ImGui::TreeNode(label.c_str()))
 	{
-		if (allSameValues)
+		if (ImGui::BeginTabBar("Tab bar"))
 		{
-			if (ImGui::BeginTabBar("Tab bar"))
+			if (ImGui::BeginTabItem("Constant"))
 			{
-				if (ImGui::BeginTabItem("Constant"))
+				selectedTabs[index] = 0;
+
+				if (isFloat3)
 				{
-					selectedTab = 0;
-					bool smthChanged = false;
-					XMFLOAT3 newVal;
-
-					if (isFloat3)
+					ImGui::PushID(btnId++);
+					if (ImGui::ColorEdit3("Color", &material->properties[index].value.x))
 					{
-						XMFLOAT3 col = firstValue;
-						ImGui::PushID((*btnId)++);
-						if (ImGui::ColorEdit3("Color", &col.x))
-						{
-							smthChanged = true;
-							newVal = col;
-						}
-						ImGui::PopID();
-					}
-					else
-					{
-						float val = firstValue.x;
-						ImGui::PushID((*btnId)++);
-						if (ImGui::DragFloat("", &val, 0.1f, 0.f, 1.f))
-						{
-							smthChanged = true;
-							newVal = { val, val, val };
-						}
-						ImGui::PopID();
-					}
-
-					if (smthChanged)
-					{
-						for (int idx : _selectedMeshes)
-						{
-							Material* material = manager->object(idx)->material.get();
-							material->properties[index].value = newVal;
-							material->numFramesDirty = gNumFrameResources;
-						}
-					}
-
-					
-					ImGui::EndTabItem();
-
-				}
-				if (ImGui::BeginTabItem("Texture", 0, selectedTab ? ImGuiTabItemFlags_SetSelected : 0))
-				{
-					selectedTab = 1;
-
-					std::string name = BasicUtil::trimName(firstMaterial->properties[index].texture.name, 15);
-
-					TextureHandle texHandle = firstMaterial->properties[index].texture;
-
-					ImGui::PushID((*btnId)++);
-					if (ImGui::Button(name.c_str()))
-					{
-						WCHAR* texturePath;
-						if (BasicUtil::TryToOpenFile(L"Image Files", L"*.dds;*.png;*.jpg;*.jpeg;*.tga;*.bmp", texturePath))
-						{
-							texHandle = TextureManager::LoadTexture(texturePath, firstTexIndex, (int)_selectedMeshes.size());
-							for (int idx : _selectedMeshes)
-							{
-								Material* material = manager->object(idx)->material.get();
-								material->properties[index].texture = texHandle;
-								material->numFramesDirty = gNumFrameResources;
-							}
-							CoTaskMemFree(texturePath);
-						}
+						material->numFramesDirty = gNumFrameResources;
 					}
 					ImGui::PopID();
-					if (ImGui::BeginPopupContextItem())
-					{
-						ImGui::PushID((*btnId)++);
-						if (ImGui::Button("delete") && texHandle.useTexture == true)
-						{
-							const std::string texName = texHandle.name;
-							TextureManager::deleteTexture(std::wstring(texName.begin(), texName.end()), (int)_selectedMeshes.size());
-							for (int idx : _selectedMeshes)
-							{
-								Material* material = manager->object(idx)->material.get();
-								material->properties[index].texture = TextureHandle();
-								material->properties[index].texture.useTexture = true;
-								material->numFramesDirty = gNumFrameResources;
-							}
-						}
-						ImGui::PopID();
-						ImGui::EndPopup();
-					}
-					ImGui::EndTabItem();
 				}
-				ImGui::EndTabBar();
-			}
-
-			if (hasAdditionalInfo)
-			{
-				float val = firstAddInfo;
-
-				ImGui::PushID((*btnId)++);
-				ImGui::Text(additionalInfoLabel.c_str());
-				ImGui::PopID();
-				ImGui::SameLine();
-				ImGui::PushID((*btnId)++);
-				ImGui::SetNextItemWidth(100.f);
-				if (ImGui::DragFloat("", &val, 0.1, 0.0f, 10.f))
+				else
 				{
-					for (int idx : _selectedMeshes)
+					ImGui::PushID(btnId++);
+					if (ImGui::DragFloat("", &material->properties[index].value.x, 0.1f, 0.f, 1.f))
 					{
-						Material* material = manager->object(idx)->material.get();
-						material->additionalInfo[additionalInfoIndex] = val;
 						material->numFramesDirty = gNumFrameResources;
 					}
+					ImGui::PopID();
+				}
+
+				ImGui::EndTabItem();
+
+			}
+			if (ImGui::BeginTabItem("Texture", 0, selectedTabs[index] ? ImGuiTabItemFlags_SetSelected : 0))
+			{
+				selectedTabs[index] = 1;
+
+				std::string name = BasicUtil::trimName(material->properties[index].texture.name, 15);
+
+				TextureHandle texHandle = material->properties[index].texture;
+
+				ImGui::PushID(btnId++);
+				if (ImGui::Button(name.c_str()))
+				{
+					WCHAR* texturePath;
+					if (BasicUtil::TryToOpenFile(L"Image Files", L"*.dds;*.png;*.jpg;*.jpeg;*.tga;*.bmp", texturePath))
+					{
+						texHandle = TextureManager::LoadTexture(texturePath, material->properties[index].texture.index, (int)_selectedModels.size());
+						material->properties[index].texture = texHandle;
+						material->numFramesDirty = gNumFrameResources;
+						CoTaskMemFree(texturePath);
+					}
 				}
 				ImGui::PopID();
+				if (ImGui::BeginPopupContextItem())
+				{
+					ImGui::PushID(btnId++);
+					if (ImGui::Button("delete") && texHandle.useTexture == true)
+					{
+						const std::string texName = texHandle.name;
+						TextureManager::deleteTexture(std::wstring(texName.begin(), texName.end()), (int)_selectedModels.size());
+						material->properties[index].texture = TextureHandle();
+						material->properties[index].texture.useTexture = true;
+						material->numFramesDirty = gNumFrameResources;
+					}
+					ImGui::PopID();
+					ImGui::EndPopup();
+				}
+				ImGui::EndTabItem();
 			}
-		}
-		else
-		{
-			ImGui::TextDisabled("Multiple values");
+			ImGui::EndTabBar();
 		}
 
-		if (allSameValues && textureTabOpen != selectedTab)
+		if (hasAdditionalInfo)
 		{
-			for (int idx : _selectedMeshes)
+			ImGui::PushID(btnId++);
+			ImGui::Text(additionalInfoLabel.c_str());
+			ImGui::PopID();
+			ImGui::SameLine();
+			ImGui::PushID(btnId++);
+			ImGui::SetNextItemWidth(100.f);
+			if (ImGui::DragFloat("", &material->additionalInfo[additionalInfoIndex], 0.1f, 0.0f, 10.f))
 			{
-				Material* material = manager->object(idx)->material.get();
-				material->properties[index].texture.useTexture = selectedTab;
 				material->numFramesDirty = gNumFrameResources;
 			}
+			ImGui::PopID();
+		}
+
+		if (textureTabOpen != bool(selectedTabs[index]))
+		{
+			material->properties[index].texture.useTexture = selectedTabs[index];
+			material->numFramesDirty = gNumFrameResources;
 		}
 
 		ImGui::TreePop();
 	}
 }
 
-void MyApp::DrawMaterialTexture(const std::string& label, int index, int* btnId, bool hasAdditionalInfo, const std::string& additionalInfoLabel, int additionalInfoIndex)
+void MyApp::DrawMaterialTexture(Material* material, const std::string& label, size_t index, int& btnId, bool hasAdditionalInfo, const std::string& additionalInfoLabel, size_t additionalInfoIndex)
 {
 	auto& manager = _objectManagers[_selectedType];
-	Material* firstMaterial = manager->object(*_selectedMeshes.begin())->material.get();
-	int firstTexIndex = firstMaterial->textures[index].index;
-	float firstAddInfo = -1.f;
-	if (hasAdditionalInfo)
-	{
-		firstAddInfo = firstMaterial->additionalInfo[additionalInfoIndex];
-	}
-	bool allSameValues = true;
-
-	for (int idx : _selectedMeshes)
-	{
-		Material* material = manager->object(idx)->material.get();
-		if (material->textures[index].index !=  firstTexIndex ||
-			(hasAdditionalInfo && firstAddInfo != material->additionalInfo[additionalInfoIndex])
-			)
-		{
-			allSameValues = false;
-			break;
-		}
-	}
 
 	if (ImGui::TreeNode(label.c_str()))
 	{
-		if (allSameValues)
+		TextureHandle texHandle = material->textures[index];
+		std::string name = BasicUtil::trimName(texHandle.name, 15);
+
+		ImGui::PushID(btnId++);
+		if (ImGui::Button(name.c_str()))
 		{
-			TextureHandle texHandle = firstMaterial->textures[index];
-			std::string name = BasicUtil::trimName(texHandle.name, 15);
-
-			ImGui::PushID((*btnId)++);
-			if (ImGui::Button(name.c_str()))
+			WCHAR* texturePath;
+			if (BasicUtil::TryToOpenFile(L"Image Files", L"*.dds;*.png;*.jpg;*.jpeg;*.tga;*.bmp", texturePath))
 			{
-				WCHAR* texturePath;
-				if (BasicUtil::TryToOpenFile(L"Image Files", L"*.dds;*.png;*.jpg;*.jpeg;*.tga;*.bmp", texturePath))
-				{
-					texHandle = TextureManager::LoadTexture(texturePath, firstTexIndex, (int)_selectedMeshes.size());
-					for (int idx : _selectedMeshes)
-					{
-						Material* material = manager->object(idx)->material.get();
-						material->textures[index] = texHandle;
-						material->numFramesDirty = gNumFrameResources;
-					}
-					CoTaskMemFree(texturePath);
-				}
-			}
-			ImGui::PopID();
-			if (ImGui::BeginPopupContextItem())
-			{
-				ImGui::PushID((*btnId)++);
-				if (ImGui::Button("delete") && texHandle.useTexture == true)
-				{
-					const std::string texName = texHandle.name;
-					TextureManager::deleteTexture(std::wstring(texName.begin(), texName.end()), (int)_selectedMeshes.size());
-					for (int idx : _selectedMeshes)
-					{
-						Material* material = manager->object(idx)->material.get();
-						material->textures[index] = TextureHandle();
-						material->numFramesDirty = gNumFrameResources;
-					}
-				}
-				ImGui::PopID();
-				ImGui::EndPopup();
-			}
-
-			if (hasAdditionalInfo)
-			{
-				float val = firstAddInfo;
-
-				ImGui::PushID((*btnId)++);
-				ImGui::Text(additionalInfoLabel.c_str());
-				ImGui::PopID();
-				ImGui::SameLine();
-				ImGui::PushID((*btnId)++);
-				ImGui::SetNextItemWidth(50.f);
-				if (ImGui::DragFloat("", &val, 0.1, 0.0f, 10.f))
-				{
-					for (int idx : _selectedMeshes)
-					{
-						Material* material = manager->object(idx)->material.get();
-						material->additionalInfo[additionalInfoIndex] = val;
-						material->numFramesDirty = gNumFrameResources;
-					}
-				}
-				ImGui::PopID();
+				texHandle = TextureManager::LoadTexture(texturePath, material->textures[index].index, (int)_selectedModels.size());
+				material->textures[index] = texHandle;
+				material->numFramesDirty = gNumFrameResources;
+				CoTaskMemFree(texturePath);
 			}
 		}
-		else
+		ImGui::PopID();
+		if (ImGui::BeginPopupContextItem())
 		{
-			ImGui::TextDisabled("Multiple values");
+			ImGui::PushID(btnId++);
+			if (ImGui::Button("delete") && texHandle.useTexture == true)
+			{
+				const std::string texName = texHandle.name;
+				TextureManager::deleteTexture(std::wstring(texName.begin(), texName.end()), (int)_selectedModels.size());
+				material->textures[index] = TextureHandle();
+				material->numFramesDirty = gNumFrameResources;
+			}
+			ImGui::PopID();
+			ImGui::EndPopup();
+		}
+
+		if (hasAdditionalInfo)
+		{
+			ImGui::PushID(btnId++);
+			ImGui::Text(additionalInfoLabel.c_str());
+			ImGui::PopID();
+			ImGui::SameLine();
+			ImGui::PushID(btnId++);
+			ImGui::SetNextItemWidth(50.f);
+			if (ImGui::DragFloat("", &material->additionalInfo[additionalInfoIndex], 0.1f, 0.0f, 10.f))
+			{
+				material->numFramesDirty = gNumFrameResources;
+			}
+			ImGui::PopID();
 		}
 
 		ImGui::TreePop();
 	}
 }
 
-void MyApp::DrawMaterialARMTexture(const std::string& label, int index, int* btnId)
+void MyApp::DrawMaterialARMTexture(Material* material, const std::string& label, size_t index, int& btnId)
 {
-	auto& manager = _objectManagers[_selectedType];
-	Material* firstMaterial = manager->object(*_selectedMeshes.begin())->material.get();
-	int firstTexIndex = firstMaterial->textures[index].index;
-	ARMLayout firstARMLayout = firstMaterial->armLayout;
-	bool allSameValues = true;
-
-	for (int idx : _selectedMeshes)
-	{
-		Material* material = manager->object(idx)->material.get();
-		if (material->textures[index].index != firstTexIndex ||
-			firstARMLayout != material->armLayout)
-		{
-			allSameValues = false;
-			break;
-		}
-	}
-
 	if (ImGui::TreeNode(label.c_str()))
 	{
-		if (allSameValues)
+		static const char* layouts[] = { "AO-Rough-Metal", "Rough-Metal-AO", };
+		int layout = (int)material->armLayout;
+		if (ImGui::Combo("Layout", &layout, layouts, IM_ARRAYSIZE(layouts)))
 		{
-			static const char* layouts[] = { "AO-Rough-Metal", "Rough-Metal-AO", };
-			int layout = (int)firstARMLayout;
-			if (ImGui::Combo("Layout", &layout, layouts, IM_ARRAYSIZE(layouts)))
-			{
-				for (auto idx : _selectedMeshes)
-				{
-					manager->object(idx)->material->armLayout = (ARMLayout)layout;
-					manager->object(idx)->material->numFramesDirty = gNumFrameResources;
-				}
-			}
+			material->armLayout = (ARMLayout)layout;
+			material->numFramesDirty = gNumFrameResources;
+		}
 
-			TextureHandle texHandle = firstMaterial->textures[index];
-			std::string name = BasicUtil::trimName(texHandle.name, 15);
+		TextureHandle texHandle = material->textures[index];
+		std::string name = BasicUtil::trimName(texHandle.name, 15);
 
-			ImGui::PushID((*btnId)++);
-			if (ImGui::Button(name.c_str()))
+		ImGui::PushID(btnId++);
+		if (ImGui::Button(name.c_str()))
+		{
+			WCHAR* texturePath;
+			if (BasicUtil::TryToOpenFile(L"Image Files", L"*.dds;*.png;*.jpg;*.jpeg;*.tga;*.bmp", texturePath))
 			{
-				WCHAR* texturePath;
-				if (BasicUtil::TryToOpenFile(L"Image Files", L"*.dds;*.png;*.jpg;*.jpeg;*.tga;*.bmp", texturePath))
-				{
-					texHandle = TextureManager::LoadTexture(texturePath, firstTexIndex, (int)_selectedMeshes.size());
-					for (int idx : _selectedMeshes)
-					{
-						Material* material = manager->object(idx)->material.get();
-						material->textures[index] = texHandle;
-						material->numFramesDirty = gNumFrameResources;
-					}
-					CoTaskMemFree(texturePath);
-				}
-			}
-			ImGui::PopID();
-			if (ImGui::BeginPopupContextItem())
-			{
-				ImGui::PushID((*btnId)++);
-				if (ImGui::Button("delete") && texHandle.useTexture == true)
-				{
-					const std::string texName = texHandle.name;
-					TextureManager::deleteTexture(std::wstring(texName.begin(), texName.end()), (int)_selectedMeshes.size());
-					for (int idx : _selectedMeshes)
-					{
-						Material* material = manager->object(idx)->material.get();
-						material->textures[index] = TextureHandle();
-						material->numFramesDirty = gNumFrameResources;
-					}
-				}
-				ImGui::PopID();
-				ImGui::EndPopup();
+				texHandle = TextureManager::LoadTexture(texturePath, material->textures[index].index, (int)_selectedModels.size());
+				material->textures[index] = texHandle;
+				material->numFramesDirty = gNumFrameResources;
+				CoTaskMemFree(texturePath);
 			}
 		}
-		else
+		ImGui::PopID();
+		if (ImGui::BeginPopupContextItem())
 		{
-			ImGui::TextDisabled("Multiple values");
+			ImGui::PushID(btnId++);
+			if (ImGui::Button("delete") && texHandle.useTexture == true)
+			{
+				const std::string texName = texHandle.name;
+				TextureManager::deleteTexture(std::wstring(texName.begin(), texName.end()), (int)_selectedModels.size());
+				material->textures[index] = TextureHandle();
+				material->numFramesDirty = gNumFrameResources;
+			}
+			ImGui::PopID();
+			ImGui::EndPopup();
 		}
 
 		ImGui::TreePop();
@@ -1163,10 +1077,10 @@ void MyApp::DrawTransformInput(const std::string& label, int btnId, int transfor
 {
 	auto& manager = _objectManagers[_selectedType];
 
-	XMFLOAT3 firstPos = manager->object(*_selectedMeshes.begin())->transform[transformIndex];
+	XMFLOAT3 firstPos = manager->object(*_selectedModels.begin())->transform[transformIndex];
 	bool allSamePos = true;
 
-	for (int idx : _selectedMeshes)
+	for (int idx : _selectedModels)
 	{
 		if (manager->object(idx)->transform[transformIndex].x != firstPos.x ||
 			manager->object(idx)->transform[transformIndex].y != firstPos.y ||
@@ -1186,7 +1100,7 @@ void MyApp::DrawTransformInput(const std::string& label, int btnId, int transfor
 
 		if (ImGui::DragFloat3("", &pos.x, speed))
 		{
-			for (int idx : _selectedMeshes)
+			for (int idx : _selectedModels)
 			{
 				manager->object(idx)->transform[transformIndex] = pos;
 				manager->object(idx)->NumFramesDirty = gNumFrameResources;
@@ -1216,9 +1130,8 @@ void MyApp::DrawImportModal()
 
 	if (ImGui::BeginPopupModal("Multiple meshes", NULL, ImGuiWindowFlags_AlwaysAutoResize))
 	{
-		ImGui::Text(("This file has " + std::to_string(_modelManager->MeshCount()) + " meshes. How do you want to import it?").c_str());
+		ImGui::Text(("This file has " + std::to_string(_modelManager->ModelCount()) + " models. How do you want to import it?").c_str());
 		ImGui::Spacing();
-
 
 		// Begin a scrollable child
 		ImVec2 listSize = ImVec2(400, 300); // Width x Height
@@ -1226,30 +1139,35 @@ void MyApp::DrawImportModal()
 
 		for (auto& name : _modelManager->MeshNames())
 		{
-			ImGui::BulletText(name.c_str());
+			ImGui::Text(name.first.c_str());
+			for (auto& meshName : name.second)
+			{
+				ImGui::BulletText(meshName.c_str());
+			}
+			ImGui::Spacing();
 		}
 
 		ImGui::EndChild();
 
 		ImGui::Spacing();
 
-		if (ImGui::Button("Import as one mesh"))
+		if (ImGui::Button("Import as one model"))
 		{
 			//merge meshes into one file
-			ModelData data = GeometryManager::BuildModelGeometry(_modelManager->ParseAsOneObject().get());
-			_selectedMeshes.clear();
-			_selectedMeshes.insert(_objectManagers[PSO::Opaque]->addRenderItem(md3dDevice.Get(), data.croppedName, data.isTesselated, std::move(data.material)));
+			ModelData data = std::move(GeometryManager::BuildModelGeometry(_modelManager->ParseAsOneObject().get()));
+			_selectedModels.clear();
+			_selectedModels.insert(_objectManagers[PSO::Opaque]->addRenderItem(md3dDevice.Get(), std::move(data)));
 			ImGui::CloseCurrentPopup();
 		}
 
 		if (ImGui::Button("Import as separate objects"))
 		{
-			_selectedMeshes.clear();
+			_selectedModels.clear();
 
 			for (auto& model : _modelManager->ParseScene())
 			{
-				ModelData data = GeometryManager::BuildModelGeometry(model.get());
-				_selectedMeshes.insert(_objectManagers[PSO::Opaque]->addRenderItem(md3dDevice.Get(), data.croppedName, data.isTesselated, std::move(data.material)));
+				ModelData data = std::move(GeometryManager::BuildModelGeometry(model.get()));
+				_selectedModels.insert(_objectManagers[PSO::Opaque]->addRenderItem(md3dDevice.Get(), std::move(data)));
 			}
 			ImGui::CloseCurrentPopup();
 		}
@@ -1266,66 +1184,24 @@ bool MyApp::DrawIsTransparentCheckbox()
 {
 	auto& manager = _objectManagers[_selectedType];
 
-	bool firstState = manager->object(*_selectedMeshes.begin())->isTransparent;
+	auto object = manager->object(*_selectedModels.begin());
 
-	bool allSameState = true;
-
-	for (int idx : _selectedMeshes)
+	if (ImGui::Checkbox("Is transparent", &object->isTransparent))
 	{
-		if (manager->object(idx)->isTransparent != firstState)
-		{
-			allSameState = false;
-			break;
-		}
+		object->NumFramesDirty = gNumFrameResources;
 	}
 
-	if (!allSameState)
-		return false;
-
-	bool state = firstState;
-	if (ImGui::Checkbox("Is transparent", &state))
-	{
-		for (int idx : _selectedMeshes)
-		{
-			manager->object(idx)->isTransparent = state;
-			manager->object(idx)->NumFramesDirty = gNumFrameResources;
-		}
-	}
-
-	return state;
+	return object->isTransparent;
 }
 
-bool MyApp::DrawUseARMTextureCheckbox()
+bool MyApp::DrawUseARMTextureCheckbox(Material* material)
 {
-	auto& manager = _objectManagers[_selectedType];
-
-	bool firstState = manager->object(*_selectedMeshes.begin())->material->useARMTexture;
-
-	bool allSameState = true;
-
-	for (int idx : _selectedMeshes)
+	if (ImGui::Checkbox("Use ARM Texture", &material->useARMTexture))
 	{
-		if (manager->object(idx)->material->useARMTexture != firstState)
-		{
-			allSameState = false;
-			break;
-		}
+		material->numFramesDirty = gNumFrameResources;
 	}
 
-	if (!allSameState)
-		return false;
-
-	bool state = firstState;
-	if (ImGui::Checkbox("Use ARM Texture", &state))
-	{
-		for (int idx : _selectedMeshes)
-		{
-			manager->object(idx)->material->useARMTexture = state;
-			manager->object(idx)->NumFramesDirty = gNumFrameResources;
-		}
-	}
-
-	return state;
+	return material->useARMTexture;
 }
 
 void MyApp::ClearData()
