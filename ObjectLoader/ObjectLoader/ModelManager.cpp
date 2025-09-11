@@ -51,6 +51,12 @@ std::unique_ptr<Model> ModelManager::ParseAsOneObject()
 		OutputDebugString(L"Cannot parse an empty scene");
 		return std::make_unique<Model>();
 	}
+	//sometimes there is a stupid additional depth that breaks my aabb, I don't like that
+	if (_scene->mRootNode->mNumMeshes == 0 && _scene->mRootNode->mNumChildren == 1)
+	{
+		return std::make_unique<Model>(_scene->mRootNode->mChildren[0], _sceneName, _scene->mMaterials, _scene->mNumMaterials,
+			_scene->mMeshes, _scene->mTextures, _fileLocation);
+	}
     return std::make_unique<Model>(_scene->mRootNode, _sceneName, _scene->mMaterials, _scene->mNumMaterials,
 		_scene->mMeshes, _scene->mTextures, _fileLocation);
 }
