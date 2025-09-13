@@ -19,27 +19,6 @@ bool ModelManager::ImportObject(WCHAR* filename)
 		return false;
 	}
 
-	const std::vector<aiTextureType> textureTypes = {
-		aiTextureType_DIFFUSE,
-		aiTextureType_SPECULAR,
-		aiTextureType_AMBIENT,
-		aiTextureType_EMISSIVE,
-		aiTextureType_HEIGHT,
-		aiTextureType_NORMALS,
-		aiTextureType_SHININESS,
-		aiTextureType_OPACITY,
-		aiTextureType_DISPLACEMENT,
-		aiTextureType_LIGHTMAP,
-		aiTextureType_REFLECTION,
-		aiTextureType_BASE_COLOR,             // glTF2
-		aiTextureType_NORMAL_CAMERA,
-		aiTextureType_EMISSION_COLOR,     // glTF2
-		aiTextureType_METALNESS,               // glTF2
-		aiTextureType_DIFFUSE_ROUGHNESS,      // glTF2
-		aiTextureType_AMBIENT_OCCLUSION,              // glTF2
-		aiTextureType_UNKNOWN
-	};
-
 	_sceneName = _scene->GetShortFilename(s.c_str());
 	if (_scene->mRootNode->mNumMeshes > 0 || _scene->mRootNode->mNumChildren == 1)
 	{
@@ -97,6 +76,39 @@ bool ModelManager::ImportObject(WCHAR* filename)
     return _modelNodes.size() > 1;
 }
 
+bool ModelManager::ImportLODObject(WCHAR* filename, int meshesCount)
+{
+	std::wstring ws(filename);
+	std::string s(ws.begin(), ws.end());
+	_scene = _importer.ReadFile(s,
+		aiProcess_Triangulate |
+		aiProcess_JoinIdenticalVertices |
+		aiProcess_MakeLeftHanded |
+		aiProcess_FlipWindingOrder |
+		aiProcess_FlipUVs |
+		aiProcess_CalcTangentSpace |
+		aiProcess_GenUVCoords
+	);
+	if (nullptr == _scene) {
+		MessageBox(0, L"Failed to open file", L"", MB_OK);
+		return false;
+	}
+
+	if (_scene->mRootNode->mNumChildren > 1 || (_scene->mRootNode->mNumChildren > 0 && _scene->mRootNode->mNumMeshes > 0))
+	{
+		MessageBox(0, L"This file cannot be LOD: it has more than one object.", L"", MB_OK);
+		return false;
+	}
+
+	if (meshesCount != NodeMeshCount(_scene->mRootNode))
+	{
+		MessageBox(0, L"This file cannot be LOD: the mesh count doesn't match.", L"", MB_OK);
+		return false;
+	}
+
+	return (_scene->mRootNode->mNumMeshes > 0 || _scene->mRootNode->mNumChildren == 1);
+}
+
 std::unique_ptr<Model> ModelManager::ParseAsOneObject()
 {
 	if (_scene == nullptr)
@@ -123,6 +135,28 @@ std::unique_ptr<Model> ModelManager::ParseAsOneObject()
 	//or else if there is a lot models then who cares
     return std::make_unique<Model>(std::vector<aiNode*>{_scene->mRootNode->mChildren[0]}, _sceneName, _scene->mMaterials, _scene->mNumMaterials,
 		_scene->mMeshes, _scene->mTextures, _fileLocation);
+}
+
+LOD ModelManager::ParseAsLODObject()
+{
+	if (_scene == nullptr)
+	{
+		OutputDebugString(L"Cannot parse an empty scene");
+		return LOD();
+	}
+
+	std::unique_ptr<Model> lodModel = nullptr;
+
+	if (_scene->mRootNode->mNumMeshes > 0)
+	{
+		lodModel = std::make_unique<Model>(_scene->mRootNode, _scene->mMeshes);
+	}
+	else
+	{
+		lodModel = std::make_unique<Model>(_scene->mRootNode->mChildren[0], _scene->mMeshes);
+	}
+
+	return *lodModel->lods().begin();
 }
 
 std::vector<std::unique_ptr<Model>> ModelManager::ParseScene()
@@ -180,6 +214,19 @@ std::vector<std::string> ModelManager::NodeMeshNames(aiNode* node)
 		nodeMeshNames.insert(nodeMeshNames.end(), childMeshNames.begin(), childMeshNames.end());
 	}
 	return nodeMeshNames;
+}
+
+int ModelManager::NodeMeshCount(aiNode* node)
+{
+	int meshCount = 0;
+	for (int i = 0; i < node->mNumChildren; i++)
+	{
+		meshCount += NodeMeshCount(node->mChildren[i]);
+	}
+
+	meshCount += node->mNumMeshes;
+
+	return meshCount;
 }
 
 UINT ModelManager::ModelCount()

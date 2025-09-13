@@ -26,13 +26,17 @@ public:
 
 	//import object and say is there a single model (false) or is there more (true)
 	bool ImportObject(WCHAR* filename);
+	//import object as lod, true if file is acceptable
+	bool ImportLODObject(WCHAR* filename, int meshesCount);
 	//parse everything as a single mesh even if it is a scene
 	std::unique_ptr<Model> ParseAsOneObject();
+	//parse model as lod
+	LOD ParseAsLODObject();
 	//parse scene as different objects
 	std::vector<std::unique_ptr<Model>> ParseScene();
 
 	std::map<std::string, std::vector<std::string>> MeshNames();
-	std::vector<std::string> NodeMeshNames(aiNode* node);
+	
 	UINT ModelCount();
 private:
 	Assimp::Importer _importer;
@@ -40,4 +44,6 @@ private:
 	std::string _sceneName = "";
 	std::wstring _fileLocation;
 	std::map<std::string, std::vector<aiNode*>> _modelNodes;
+	std::vector<std::string> NodeMeshNames(aiNode* node);
+	int NodeMeshCount(aiNode* node);
 };

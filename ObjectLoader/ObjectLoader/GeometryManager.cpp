@@ -1,8 +1,8 @@
 #include "GeometryManager.h"
 
-std::unordered_map<std::string, std::unique_ptr<MeshGeometry>>& GeometryManager::geometries()
+std::unordered_map<std::string, std::vector<std::shared_ptr<MeshGeometry>>>& GeometryManager::geometries()
 {
-	static std::unordered_map<std::string, std::unique_ptr<MeshGeometry>> geometries;
+	static std::unordered_map<std::string, std::vector<std::shared_ptr<MeshGeometry>>> geometries;
 	return geometries;
 }
 
@@ -51,7 +51,7 @@ void GeometryManager::BuildNecessaryGeometry()
 	const UINT vbByteSize = (UINT)vertices.size() * sizeof(LightVertex);
 	const UINT ibByteSize = (UINT)indices.size() * sizeof(std::uint16_t);
 
-	auto geo = std::make_unique<MeshGeometry>();
+	auto geo = std::make_shared<MeshGeometry>();
 	geo->Name = "shapeGeo";
 
 	ThrowIfFailed(D3DCreateBlob(vbByteSize, &geo->VertexBufferCPU));
@@ -74,7 +74,10 @@ void GeometryManager::BuildNecessaryGeometry()
 	geo->DrawArgs["grid"] = gridSubmesh;
 	geo->DrawArgs["box"] = boxSubmesh;
 
-	geometries()[geo->Name] = std::move(geo);
+	geometries().emplace(
+		geo->Name,
+		std::vector<std::shared_ptr<MeshGeometry>>{ geo }
+	);
 }
 
 ModelData GeometryManager::BuildModelGeometry(Model* model)
@@ -83,7 +86,15 @@ ModelData GeometryManager::BuildModelGeometry(Model* model)
 	ModelData data;
 	data.croppedName = model->name;
 	data.materials = std::move(model->materials());
-	data.lodsData = model->lods();
+
+	for (auto& lod : model->lods())
+	{
+		LODData lodData;
+		lodData.meshes = lod.meshes;
+		lodData.vertexCount = (int)lod.vertices.size();
+		data.lodsData.push_back(lodData);
+	}
+
 	data.transform = model->transform();
 	data.isTesselated = model->isTesselated();
 	data.AABB = model->AABB();
@@ -93,47 +104,100 @@ ModelData GeometryManager::BuildModelGeometry(Model* model)
 		return data;
 	}
 
-	//veryfying that model does actually have some data
-	if (model->vertices().empty() || model->indices().empty())
+	//verifying that model does actually have some data
+	if (model->lods().empty())
 	{
 		OutputDebugString(L"[ERROR] Model data is empty! Aborting geometry creation.\n");
 		return ModelData();
 	}
 
-	// Pack the indices of all the meshes into one index buffer.
-	//
+	//making different buffers for different lods
+	std::vector <std::shared_ptr<MeshGeometry>> lodBuffers{};
+	for (auto& lod : model->lods())
+	{
+		// Pack the indices of all the meshes into one index buffer.
+		const UINT vbByteSize = (UINT)lod.vertices.size() * sizeof(Vertex);
 
-	const UINT vbByteSize = (UINT)model->vertices().size() * sizeof(Vertex);
+		const UINT ibByteSize = (UINT)lod.indices.size() * sizeof(std::int32_t);
 
-	const UINT ibByteSize = (UINT)model->indices().size() * sizeof(std::int32_t);
+		auto geo = std::make_shared<MeshGeometry>();
 
-	auto geo = std::make_unique<MeshGeometry>();
+		ThrowIfFailed(D3DCreateBlob(vbByteSize, &geo->VertexBufferCPU));
+		CopyMemory(geo->VertexBufferCPU->GetBufferPointer(), lod.vertices.data(), vbByteSize);
 
-	geo->Name = model->name;
+		ThrowIfFailed(D3DCreateBlob(ibByteSize, &geo->IndexBufferCPU));
+		CopyMemory(geo->IndexBufferCPU->GetBufferPointer(), lod.indices.data(), ibByteSize);
+
+		geo->VertexBufferGPU = d3dUtil::CreateDefaultBuffer(UploadManager::device,
+			UploadManager::uploadCmdList.Get(), lod.vertices.data(), vbByteSize, geo->VertexBufferUploader);
+
+		geo->IndexBufferGPU = d3dUtil::CreateDefaultBuffer(UploadManager::device,
+			UploadManager::uploadCmdList.Get(), lod.indices.data(), ibByteSize, geo->IndexBufferUploader);
+
+		geo->VertexByteStride = sizeof(Vertex);
+		geo->VertexBufferByteSize = vbByteSize;
+		geo->IndexFormat = DXGI_FORMAT_R32_UINT;
+		geo->IndexBufferByteSize = ibByteSize;
+
+		lodBuffers.push_back(std::move(geo));
+	}
+
+	geometries().emplace(
+		model->name,
+		std::move(lodBuffers)
+	);
+
+	tesselatable()[model->name] = data.isTesselated;
+
+	return data;
+}
+
+void GeometryManager::AddLODGeometry(std::string name, int lodIdx, LOD lod)
+{
+	LODData data;
+
+	data.meshes = lod.meshes;
+	data.vertexCount = (int)lod.vertices.size();
+
+	if (geometries().find(name) == geometries().end())
+	{
+		return;
+	}
+
+	//verifying that model does actually have some data
+	if (lod.indices.empty())
+	{
+		OutputDebugString(L"[ERROR] LOD data is empty! Aborting geometry creation.\n");
+		return;
+	}
+
+	//making a buffer for given lod
+	const UINT vbByteSize = (UINT)lod.vertices.size() * sizeof(Vertex);
+
+	const UINT ibByteSize = (UINT)lod.indices.size() * sizeof(std::int32_t);
+
+	auto geo = std::make_shared<MeshGeometry>();
 
 	ThrowIfFailed(D3DCreateBlob(vbByteSize, &geo->VertexBufferCPU));
-	CopyMemory(geo->VertexBufferCPU->GetBufferPointer(), model->vertices().data(), vbByteSize);
-
+	CopyMemory(geo->VertexBufferCPU->GetBufferPointer(), lod.vertices.data(), vbByteSize);
 
 	ThrowIfFailed(D3DCreateBlob(ibByteSize, &geo->IndexBufferCPU));
-	CopyMemory(geo->IndexBufferCPU->GetBufferPointer(), model->indices().data(), ibByteSize);
+	CopyMemory(geo->IndexBufferCPU->GetBufferPointer(), lod.indices.data(), ibByteSize);
 
 	geo->VertexBufferGPU = d3dUtil::CreateDefaultBuffer(UploadManager::device,
-		UploadManager::uploadCmdList.Get(), model->vertices().data(), vbByteSize, geo->VertexBufferUploader);
+		UploadManager::uploadCmdList.Get(), lod.vertices.data(), vbByteSize, geo->VertexBufferUploader);
 
 	geo->IndexBufferGPU = d3dUtil::CreateDefaultBuffer(UploadManager::device,
-		UploadManager::uploadCmdList.Get(), model->indices().data(), ibByteSize, geo->IndexBufferUploader);
+		UploadManager::uploadCmdList.Get(), lod.indices.data(), ibByteSize, geo->IndexBufferUploader);
 
 	geo->VertexByteStride = sizeof(Vertex);
 	geo->VertexBufferByteSize = vbByteSize;
 	geo->IndexFormat = DXGI_FORMAT_R32_UINT;
 	geo->IndexBufferByteSize = ibByteSize;
 
-	geometries()[geo->Name] = std::move(geo);
+	auto& geos = geometries()[name];
 
-	tesselatable()[model->name] = data.isTesselated;
-
-	return data;
+	geos.emplace(geos.begin() + lodIdx, std::move(geo));
 }
 
 void GeometryManager::UnloadModel(const std::string& modelName)

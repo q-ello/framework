@@ -31,10 +31,10 @@ class Model
 public:
 	Model(){};
 	Model(std::vector<aiNode*> lods, std::string name, aiMaterial** materials, UINT materialsCount, aiMesh** meshes, aiTexture** textures, std::wstring fileLocation);
+	//lod
+	Model(aiNode* lod, aiMesh** meshes);
 	~Model();
 
-	std::vector<Vertex> vertices() const;
-	std::vector<std::int32_t> indices() const;
 	std::string name = "";
 	std::vector<std::unique_ptr<Material>> materials();
 	DirectX::BoundingBox AABB() const
@@ -42,7 +42,7 @@ public:
 		return _aabb;
 	}
 
-	std::vector<std::vector<Mesh>> lods() const
+	std::vector<LOD> lods() const
 	{
 		return std::move(_lods);
 	}
@@ -58,10 +58,7 @@ public:
 	}
 
 private:
-	std::vector<Vertex> _vertices;
-	std::vector<std::int32_t> _indices;
-	
-	std::vector<std::vector<Mesh>> _lods = {};
+	std::vector<LOD> _lods = {};
 
 	std::vector<std::unique_ptr<Material>> _materials = {};
 
@@ -74,9 +71,10 @@ private:
 
 	bool _isTesselated = false;
 
-	Mesh ParseMesh(aiMesh* mesh,DirectX::XMMATRIX parentWorld = DirectX::XMMatrixIdentity(), bool forLod = false);
+	Mesh ParseMesh(aiMesh* mesh, std::vector<Vertex>& vertices, std::vector<std::int32_t>& indices, bool forLod = false, DirectX::XMMATRIX parentWorld = DirectX::XMMatrixIdentity());
 	void ParseMaterial(aiMaterial* material, aiTexture** textures);
-	std::vector<Mesh> ParseNode(aiNode* node, aiMesh** meshes, bool forLod = false, DirectX::XMMATRIX parentWorld = DirectX::XMMatrixIdentity());
+	std::vector<Mesh> ParseNode(aiNode* node, aiMesh** meshes, std::vector<Vertex>& vertices, std::vector<std::int32_t>& indices, bool forLod = false, DirectX::XMMATRIX parentWorld = DirectX::XMMatrixIdentity());
+	LOD ParseLOD(aiNode* node, aiMesh** meshes, bool mainLod);
 
 	//helper
 	bool LoadMatPropTexture(aiMaterial* material, Material* newMaterial, aiTexture** textures, MatProp property, aiTextureType texType);

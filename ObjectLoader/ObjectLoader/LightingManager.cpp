@@ -193,7 +193,7 @@ void LightingManager::DrawDirLight(ID3D12GraphicsCommandList* cmdList, FrameReso
 void LightingManager::DrawLocalLights(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource)
 {
 	//draw local lights
-	auto geo = GeometryManager::geometries()["shapeGeo"].get();
+	MeshGeometry* geo = GeometryManager::geometries()["shapeGeo"].begin()->get();
 
 	cmdList->IASetVertexBuffers(0, 1, &geo->VertexBufferView());
 	cmdList->IASetIndexBuffer(&geo->IndexBufferView());
@@ -209,7 +209,7 @@ void LightingManager::DrawLocalLights(ID3D12GraphicsCommandList* cmdList, FrameR
 
 void LightingManager::DrawDebug(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource)
 {
-	auto geo = GeometryManager::geometries()["shapeGeo"].get();
+	auto geo = GeometryManager::geometries()["shapeGeo"].begin()->get();
 	SubmeshGeometry mesh = geo->DrawArgs["box"];
 	cmdList->SetPipelineState(_localLightsWireframePSO.Get());
 	cmdList->DrawIndexedInstanced(mesh.IndexCount, (UINT)_lightisInsideFrustum, mesh.StartIndexLocation, mesh.BaseVertexLocation, 0);

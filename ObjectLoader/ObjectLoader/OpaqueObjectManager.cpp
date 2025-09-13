@@ -1,7 +1,7 @@
 #pragma once
 #include "OpaqueObjectManager.h"
 
-void OpaqueObjectManager::UpdateObjectCBs(FrameResource* currFrameResource, Camera* camera)
+void EditableObjectManager::UpdateObjectCBs(FrameResource* currFrameResource, Camera* camera)
 {
 	auto& currObjectsCB = currFrameResource->OpaqueObjCB;
 	auto& currMaterialCB = currFrameResource->MaterialCB;
@@ -25,10 +25,10 @@ void OpaqueObjectManager::UpdateObjectCBs(FrameResource* currFrameResource, Came
 		if (ri->NumFramesDirty > 0)
 		{
 			size_t j = 0;
-			auto currentLod = ri->currentLod;
-			for (; j < currentLod->size(); j++)
+			auto currentLod = ri->lodsData[ri->currentLODIdx];
+			for (; j < currentLod.meshes.size(); j++)
 			{
-				XMMATRIX meshWorld = currentLod->at(j).defaultWorld * world;
+				XMMATRIX meshWorld = currentLod.meshes.at(j).defaultWorld * world;
 
 				OpaqueObjectConstants objConstants;
 				XMStoreFloat4x4(&objConstants.World, XMMatrixTranspose(meshWorld));
@@ -104,7 +104,7 @@ void OpaqueObjectManager::UpdateObjectCBs(FrameResource* currFrameResource, Came
 	}
 }
 
-void OpaqueObjectManager::BuildInputLayout()
+void EditableObjectManager::BuildInputLayout()
 {
 	_inputLayout =
 	{
@@ -116,7 +116,7 @@ void OpaqueObjectManager::BuildInputLayout()
 	};
 }
 
-void OpaqueObjectManager::BuildRootSignature()
+void EditableObjectManager::BuildRootSignature()
 {
 	//first gbuffer root signature
 	//two tables for 
@@ -181,7 +181,7 @@ void OpaqueObjectManager::BuildRootSignature()
 		IID_PPV_ARGS(_rootSignature.GetAddressOf())));
 }
 
-void OpaqueObjectManager::BuildPSO()
+void EditableObjectManager::BuildPSO()
 {
 	//for untesselated objects
 	D3D12_GRAPHICS_PIPELINE_STATE_DESC PSODesc;
@@ -255,7 +255,7 @@ void OpaqueObjectManager::BuildPSO()
 	ThrowIfFailed(_device->CreateGraphicsPipelineState(&wireframeTesselatedPSODesc, IID_PPV_ARGS(&_wireframeTesselatedPSO)));
 }
 
-void OpaqueObjectManager::BuildShaders()
+void EditableObjectManager::BuildShaders()
 {
 	_vsShader = d3dUtil::CompileShader(L"Shaders\\GBuffer.hlsl", nullptr, "GBufferVS", "vs_5_1");
 	_psShader = d3dUtil::CompileShader(L"Shaders\\GBuffer.hlsl", nullptr, "GBufferPS", "ps_5_1");
@@ -265,13 +265,23 @@ void OpaqueObjectManager::BuildShaders()
 	_wireframePSShader = d3dUtil::CompileShader(L"Shaders\\GBuffer.hlsl", nullptr, "WireframePS", "ps_5_1");
 }
 
-void OpaqueObjectManager::AddObjectToResource(Microsoft::WRL::ComPtr<ID3D12Device> device, FrameResource* currFrameResource)
+void EditableObjectManager::CountLODOffsets(LODData* lod, int i)
+{
+	for (int j = 0; j < lod->meshes.size(); j++)
+	{
+		auto& meshData = lod->meshes[j];
+		meshData.cbOffset = i * _cbMeshElementSize;
+		meshData.matOffset = meshData.materialIndex * _cbMaterialElementSize;
+	}
+}
+
+void EditableObjectManager::AddObjectToResource(Microsoft::WRL::ComPtr<ID3D12Device> device, FrameResource* currFrameResource)
 {
 	for (auto& obj : _objects)
 		currFrameResource->addOpaqueObjectBuffer(device.Get(), obj->uid, (int)obj->lodsData.size(), (int)obj->materials.size());
 }
 
-int OpaqueObjectManager::addRenderItem(ID3D12Device* device, ModelData&& modelData)
+int EditableObjectManager::addRenderItem(ID3D12Device* device, ModelData&& modelData)
 {
 	const std::string& itemName = modelData.croppedName;
 	std::string name(itemName.begin(), itemName.end());
@@ -282,7 +292,7 @@ int OpaqueObjectManager::addRenderItem(ID3D12Device* device, ModelData&& modelDa
 	modelRitem->uid = uidCount++;
 	modelRitem->Name = name;
 	modelRitem->nameCount = _objectCounters[itemName]++;
-	modelRitem->Geo = GeometryManager::geometries()[itemName].get();
+	modelRitem->Geo = &GeometryManager::geometries()[itemName];
 	modelRitem->PrimitiveType = isTesselated ? D3D_PRIMITIVE_TOPOLOGY_3_CONTROL_POINT_PATCHLIST : D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 	modelRitem->isTesselated = isTesselated;
 	modelRitem->materials = std::move(modelData.materials);
@@ -293,21 +303,19 @@ int OpaqueObjectManager::addRenderItem(ID3D12Device* device, ModelData&& modelDa
 	modelRitem->Bounds = modelData.AABB;
 	modelRitem->lodsData = modelData.lodsData;
 	modelRitem->transform = modelData.transform;
-	modelRitem->currentLod = &modelRitem->lodsData[0];
+
+	auto& lod = modelRitem->lodsData.begin();
+
+	for (int j = 0; j < lod->meshes.size(); j++)
+	{
+		auto& meshData = lod->meshes[j];
+		modelRitem->materials[meshData.materialIndex]->isUsed = true;
+	}
 
 	for (int i = 0; i < modelRitem->lodsData.size(); i++)
 	{
 		auto& lodData = modelRitem->lodsData[i];
-		for (int j = 0; j < lodData.size(); j++)
-		{
-			auto& meshData = lodData[j];
-			meshData.cbOffset = i * _cbMeshElementSize;
-			meshData.matOffset = meshData.materialIndex * _cbMaterialElementSize;
-			if (i == 0)
-			{
-				modelRitem->materials[meshData.materialIndex]->isUsed = true;
-			}
-		}
+		CountLODOffsets(&lodData, i);
 	}
 
 	for (int i = 0; i < FrameResource::frameResources().size(); ++i)
@@ -331,7 +339,21 @@ int OpaqueObjectManager::addRenderItem(ID3D12Device* device, ModelData&& modelDa
 	return (int)_objects.size() - 1;
 }
 
-bool OpaqueObjectManager::deleteObject(int selectedObject)
+int EditableObjectManager::addLOD(ID3D12Device* device, LODData lod, EditableRenderItem* ri)
+{
+	int i = 0;
+	for (; i < ri->lodsData.size(); i++)
+	{
+		if (lod.vertexCount > ri->lodsData[i].vertexCount)
+			break;
+	}
+	CountLODOffsets(&lod, i);
+
+	ri->lodsData.emplace(ri->lodsData.begin() + i, lod);
+	return i;
+}
+
+bool EditableObjectManager::deleteObject(int selectedObject)
 {
 	EditableRenderItem* objectToDelete = _objects[selectedObject].get();
 
@@ -400,23 +422,23 @@ bool OpaqueObjectManager::deleteObject(int selectedObject)
 	return false;
 }
 
-int OpaqueObjectManager::objectsCount()
+int EditableObjectManager::objectsCount()
 {
 	return (int)_objects.size();
 }
 
-std::string OpaqueObjectManager::objectName(int i)
+std::string EditableObjectManager::objectName(int i)
 {
 	return _objects[i]->Name +
 		(_objects[i]->nameCount == 0 ? "" : std::to_string(_objects[i]->nameCount));
 }
 
-EditableRenderItem* OpaqueObjectManager::object(int i)
+EditableRenderItem* EditableObjectManager::object(int i)
 {
 	return _objects[i].get();
 }
 
-void OpaqueObjectManager::Draw(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, bool isWireframe)
+void EditableObjectManager::Draw(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, bool isWireframe)
 {
 	if (_objects.size() == 0)
 	{
@@ -452,21 +474,24 @@ void OpaqueObjectManager::Draw(ID3D12GraphicsCommandList* cmdList, FrameResource
 	}
 }
 
-void OpaqueObjectManager::DrawObjects(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, std::vector<uint32_t> indices, std::unordered_map<uint32_t, EditableRenderItem*> objects)
+void EditableObjectManager::DrawObjects(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, std::vector<uint32_t> indices, std::unordered_map<uint32_t, EditableRenderItem*> objects)
 {
 	for (auto& idx : indices)
 	{
 		auto& ri = objects[idx];
 		auto objectCB = currFrameResource->OpaqueObjCB[ri->uid]->Resource();
-		cmdList->IASetVertexBuffers(0, 1, &ri->Geo->VertexBufferView());
-		cmdList->IASetIndexBuffer(&ri->Geo->IndexBufferView());
+
+		int curLODIdx = ri->currentLODIdx;
+		MeshGeometry* curLODGeo = ri->Geo->at(curLODIdx).get();
+		cmdList->IASetVertexBuffers(0, 1, &curLODGeo->VertexBufferView());
+		cmdList->IASetIndexBuffer(&curLODGeo->IndexBufferView());
 		auto materialCB = currFrameResource->MaterialCB[ri->uid]->Resource();
 
-		auto currentLod = ri->currentLod;
+		auto currentLOD = ri->lodsData[curLODIdx];
 
-		for (size_t i = 0; i < currentLod->size(); i++)
+		for (size_t i = 0; i < currentLOD.meshes.size(); i++)
 		{
-			auto& meshData = currentLod->at(i);
+			auto& meshData = currentLOD.meshes.at(i);
 			D3D12_GPU_VIRTUAL_ADDRESS meshCBAddress = objectCB->GetGPUVirtualAddress() + meshData.cbOffset;
 
 			cmdList->SetGraphicsRootConstantBufferView(8, meshCBAddress);
@@ -494,7 +519,7 @@ void OpaqueObjectManager::DrawObjects(ID3D12GraphicsCommandList* cmdList, FrameR
 	}
 }
 
-void OpaqueObjectManager::DrawAABBs(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource)
+void EditableObjectManager::DrawAABBs(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource)
 {
 	for (auto& ri : _objects)
 	{
@@ -502,7 +527,7 @@ void OpaqueObjectManager::DrawAABBs(ID3D12GraphicsCommandList* cmdList, FrameRes
 		D3D12_GPU_VIRTUAL_ADDRESS AABBCBAddress = objectCB->GetGPUVirtualAddress() + ri->lodsData.size() * _cbMeshElementSize;
 
 		//draw local lights
-		auto geo = GeometryManager::geometries()["shapeGeo"].get();
+		MeshGeometry* geo = (GeometryManager::geometries()["shapeGeo"].begin())->get();
 
 		cmdList->IASetVertexBuffers(0, 1, &geo->VertexBufferView());
 		cmdList->IASetIndexBuffer(&geo->IndexBufferView());

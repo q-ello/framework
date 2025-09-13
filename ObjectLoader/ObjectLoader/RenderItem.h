@@ -2,6 +2,7 @@
 #include <string>
 #include "BasicUtil.h"
 #include "Material.h"
+#include "VertexData.h"
 
 using namespace DirectX;
 
@@ -16,7 +17,7 @@ struct RenderItem
 
 	int NumFramesDirty = gNumFrameResources;
 
-	MeshGeometry* Geo = nullptr;
+	std::vector<std::shared_ptr<MeshGeometry>>* Geo{ nullptr };
 
 	// Primitive topology.
 	D3D12_PRIMITIVE_TOPOLOGY PrimitiveType = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
@@ -33,6 +34,19 @@ struct Mesh
 	int matOffset;
 };
 
+struct LOD
+{
+	std::vector<Vertex> vertices{};
+	std::vector<std::int32_t> indices{};
+	std::vector<Mesh> meshes{};
+};
+
+struct LODData
+{
+	int vertexCount;
+	std::vector<Mesh> meshes;
+};
+
 struct EditableRenderItem : public RenderItem
 {
 	std::array<DirectX::XMFLOAT3, 3> transform = {};
@@ -40,8 +54,8 @@ struct EditableRenderItem : public RenderItem
 	std::vector<std::unique_ptr<Material>> materials;
 	bool isTransparent = false;
 	BoundingBox Bounds;
-	std::vector<std::vector<Mesh>> lodsData;
-	std::vector<Mesh>* currentLod = nullptr;
+	std::vector<LODData> lodsData;
+	int currentLODIdx = 0;
 	bool isTesselated = false;
 };
 

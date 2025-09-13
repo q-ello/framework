@@ -8,6 +8,9 @@ class UnlitObjectManager : public ObjectManager
 
 public:
 	void UpdateObjectCBs(FrameResource* currFrameResource, Camera* camera = nullptr) override;
+	int addRenderItem(ID3D12Device* device, ModelData&& modelData) override;
+	void Draw(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, bool isWireframe = false) override;
+	void AddObjectToResource(Microsoft::WRL::ComPtr<ID3D12Device> device, FrameResource* currFrameResource) override;
 
 private:
 	std::vector<std::unique_ptr<UnlitRenderItem>> _objects;
@@ -17,8 +20,6 @@ private:
 	void BuildPSO() override;
 	void BuildShaders() override;
 
-	void AddObjectToResource(Microsoft::WRL::ComPtr<ID3D12Device> device, FrameResource* currFrameResource) override;
-	int addRenderItem(ID3D12Device* device, ModelData&& modelData) override;
 	bool deleteObject(int selectedObject) override;
 	
 	int objectsCount() override;
@@ -26,5 +27,4 @@ private:
 	std::string objectName(int i) override;
 	EditableRenderItem* object(int i) override { return nullptr; };
 	
-	void Draw(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, bool isWireframe = false) override;
 };

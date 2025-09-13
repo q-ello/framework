@@ -13,7 +13,7 @@ struct ModelData
 	std::string croppedName = "";
 	bool isTesselated = false;
 	std::vector<std::unique_ptr<Material>> materials;
-	std::vector<std::vector<Mesh>> lodsData;
+	std::vector<LODData> lodsData{};
 	BoundingBox AABB;
 	std::array<DirectX::XMFLOAT3, 3> transform = {};
 };
@@ -21,10 +21,11 @@ struct ModelData
 class GeometryManager
 {
 public:
-	static std::unordered_map<std::string, std::unique_ptr<MeshGeometry>>& geometries();
+	static std::unordered_map<std::string, std::vector<std::shared_ptr<MeshGeometry>>>& geometries();
 	static std::unordered_map<std::string, bool>& tesselatable();
 
 	static void BuildNecessaryGeometry();
-	static ModelData GeometryManager::BuildModelGeometry(Model* model);
+	static ModelData BuildModelGeometry(Model* model);
+	static void AddLODGeometry(std::string name, int lodIdx, LOD lod);
 	static void UnloadModel(const std::string& modelName);
 };

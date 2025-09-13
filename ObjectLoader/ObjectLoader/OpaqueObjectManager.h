@@ -2,11 +2,24 @@
 #include "ObjectManager.h"
 #include "Camera.h"
 
-class OpaqueObjectManager : public ObjectManager
+class EditableObjectManager : public ObjectManager
 {
 	using ObjectManager::ObjectManager;
 public:
 	void UpdateObjectCBs(FrameResource* currFrameResource, Camera* camera) override;
+	void AddObjectToResource(Microsoft::WRL::ComPtr<ID3D12Device> device, FrameResource* currFrameResource) override;
+	int addRenderItem(ID3D12Device* device, ModelData&& modelData) override;
+	int addLOD(ID3D12Device* device, LODData lod, EditableRenderItem* ri);
+	bool deleteObject(int selectedObject) override;
+
+	int visibleObjectsCount() override { return int(_visibleTesselatedObjects.size() + _visibleUntesselatedObjects.size()); };
+	int objectsCount() override;
+
+	std::string objectName(int i) override;
+	EditableRenderItem* object(int i);
+	void Draw(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, bool isWireframe = false) override;
+	void DrawObjects(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, std::vector<uint32_t> indices, std::unordered_map<uint32_t, EditableRenderItem*> objects);
+	void DrawAABBs(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource);
 
 private:
 	std::vector<std::unique_ptr<EditableRenderItem>> _objects;
@@ -16,19 +29,7 @@ private:
 	void BuildPSO() override;
 	void BuildShaders() override;
 
-	void AddObjectToResource(Microsoft::WRL::ComPtr<ID3D12Device> device, FrameResource* currFrameResource) override;
-	int addRenderItem(ID3D12Device* device, ModelData&& modelData) override;
-	bool deleteObject(int selectedObject) override;
-
-	int objectsCount() override;
-	int visibleObjectsCount() override { return int(_visibleTesselatedObjects.size() + _visibleUntesselatedObjects.size()); };
-
-	std::string objectName(int i) override;
-	EditableRenderItem* object(int i);
-	void Draw(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, bool isWireframe = false) override;
-	void DrawObjects(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, std::vector<uint32_t> indices, std::unordered_map<uint32_t, EditableRenderItem*> objects);
-	void DrawAABBs(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource);
-
+	void CountLODOffsets(LODData* lod, int i);
 
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> _wireframePSO;
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> _tesselatedPSO;

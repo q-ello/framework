@@ -36,7 +36,7 @@ bool MyApp::Initialize()
 	BuildDescriptorHeaps();
 	BuildShadersAndInputLayout();
 	GeometryManager::BuildNecessaryGeometry();
-	_objectManagers[PSO::Unlit]->addRenderItem(md3dDevice.Get(), { "grid" });
+	_gridManager->addRenderItem(md3dDevice.Get(), { "grid" });
 	BuildFrameResources();
 	BuildPSOs();
 
@@ -154,7 +154,7 @@ void MyApp::Draw(const GameTimer& gt)
 	//drawing grid
 	_gBuffer->ChangeDSVState(D3D12_RESOURCE_STATE_DEPTH_WRITE);
 	mCommandList->OMSetRenderTargets(1, &CurrentBackBufferView(), true, &_gBuffer->DepthStencilView());
-	_objectManagers[PSO::Unlit]->Draw(mCommandList.Get(), mCurrFrameResource);
+	_gridManager->Draw(mCommandList.Get(), mCurrFrameResource);
 
 	//ImGui draw
 	ID3D12DescriptorHeap* descriptorHeaps[] = {_imGuiDescriptorHeap.Get()};
@@ -275,11 +275,8 @@ void MyApp::OnKeyboardInput(const GameTimer& gt)
 
 void MyApp::UpdateObjectCBs(const GameTimer& gt)
 {
-	for (int i = 0; i < (int)PSO::Count; i++)
-	{
-		PSO type = (PSO)i;
-		_objectManagers[type]->UpdateObjectCBs(mCurrFrameResource, &_camera);
-	}
+	_gridManager->UpdateObjectCBs(mCurrFrameResource, &_camera);
+	_objectsManager->UpdateObjectCBs(mCurrFrameResource, &_camera);
 }
 
 void MyApp::UpdateMainPassCBs(const GameTimer& gt)
@@ -341,11 +338,8 @@ void MyApp::BuildFrameResources()
 	{
 		FrameResource::frameResources().push_back(std::make_unique<FrameResource>(md3dDevice.Get(),
 			1));
-		for (int j = 0; j < (int)PSO::Count; j++)
-		{
-			PSO type = (PSO)j;
-			_objectManagers[type]->AddObjectToResource(md3dDevice, FrameResource::frameResources()[i].get());
-		}
+		_gridManager->AddObjectToResource(md3dDevice, FrameResource::frameResources()[i].get());
+		_objectsManager->AddObjectToResource(md3dDevice, FrameResource::frameResources()[i].get());
 	}
 }
 
@@ -392,42 +386,26 @@ void MyApp::DrawInterface()
 
 	//debug info
 	ImGui::Begin("Debug info");
-	auto manager = _objectManagers[PSO::Opaque].get();
-	auto visObjectsCnt = manager->visibleObjectsCount();
-	auto objectsCnt = manager->objectsCount();
+	auto visObjectsCnt = _objectsManager->visibleObjectsCount();
+	auto objectsCnt = _objectsManager->objectsCount();
 	ImGui::Text(("Objects drawn: " + std::to_string(visObjectsCnt) + "/" + std::to_string(objectsCnt)).c_str());
 	auto visLights = _lightingManager->lightsInsideFrustum();
 	auto lightsCnt = _lightingManager->lightsCount();
 	ImGui::Text(("Lights drawn: " + std::to_string(visLights) + "/" + std::to_string(lightsCnt)).c_str());
 	ImGui::End();
+
+	DrawToasts();
 }
 
 void MyApp::DrawObjectsList(int& btnId)
 {
-	ImGui::Checkbox("Draw Debug", _objectManagers[_selectedType]->drawDebug());
+	ImGui::Checkbox("Draw Debug", _objectsManager->drawDebug());
 
 	if (ImGui::CollapsingHeader("Opaque Objects", ImGuiTreeNodeFlags_DefaultOpen))
 	{
 		if (ImGui::Button("Add New"))
 		{
-			PWSTR pszFilePath;
-			if (BasicUtil::TryToOpenFile(L"3D Object", L"*.obj;*.fbx;*.glb", pszFilePath))
-			{
-				_selectedType = PSO::Opaque;
-				if (_modelManager->ImportObject(pszFilePath))
-				{
-					ImGui::OpenPopup("Multiple meshes");
-				}
-				else
-				{
-					auto model = _modelManager->ParseAsOneObject();
-					//generating it as one mesh
-					ModelData data = GeometryManager::BuildModelGeometry(model.get());
-					_selectedModels.clear();
-					_selectedModels.insert(_objectManagers[PSO::Opaque]->addRenderItem(md3dDevice.Get(), std::move(data)));
-				}
-				CoTaskMemFree(pszFilePath);
-			}
+			AddModel();
 		}
 
 		// import multiple meshes modal
@@ -438,20 +416,20 @@ void MyApp::DrawObjectsList(int& btnId)
 		//for shift spacing
 		static int lastClicked = -1;
 
-		for (int i = 0; i < _objectManagers[PSO::Opaque]->objectsCount(); i++)
+		for (int i = 0; i < _objectsManager->objectsCount(); i++)
 		{
 			ImGui::PushID(btnId++);
 
 			//bool isSelected = _selectedType == PSO::Opaque && i == _selectedObject;
-			bool isSelected = _selectedType == PSO::Opaque && _selectedModels.count(i) > 0;
+			bool isSelected = _selectedModels.count(i) > 0;
 
 			ImGui::PushStyleColor(ImGuiCol_Button, isSelected ? ImVec4(0.2f, 0.6f, 1.0f, 1.0f) : ImVec4(0.2f, 0.2f, 0.2f, 1.0f));
 
-			std::string name = BasicUtil::trimName(_objectManagers[PSO::Opaque]->objectName(i), 15);
+			std::string name = BasicUtil::trimName(_objectsManager->objectName(i), 15);
 			if (ImGui::Button(name.c_str()))
 			{
 				//logic for multiple selecting
-				if (_selectedType == PSO::Opaque && ImGui::GetIO().KeyShift && lastClicked != -1)
+				if (ImGui::GetIO().KeyShift && lastClicked != -1)
 				{
 					_selectedModels.clear();
 					int start = min(lastClicked, i);
@@ -477,7 +455,6 @@ void MyApp::DrawObjectsList(int& btnId)
 					_selectedModels.insert(i);
 					lastClicked = i;
 				}
-				_selectedType = PSO::Opaque;
 			}
 			ImGui::PopStyleColor();
 			ImGui::PopID();
@@ -492,7 +469,7 @@ void MyApp::DrawObjectsList(int& btnId)
 						//going from the most index to last
 						for (auto it = _selectedModels.rbegin(); it != _selectedModels.rend(); it++)
 						{
-							if (_objectManagers[PSO::Opaque]->deleteObject(*it))
+							if (_objectsManager->deleteObject(*it))
 							{
 								ClearData();
 							}
@@ -500,7 +477,7 @@ void MyApp::DrawObjectsList(int& btnId)
 					}
 					else
 					{
-						if (_objectManagers[PSO::Opaque]->deleteObject(i))
+						if (_objectsManager->deleteObject(i))
 						{
 							ClearData();
 						}
@@ -670,7 +647,7 @@ void MyApp::DrawObjectInfo(int& btnId)
 	ImGui::SetNextWindowSize({ 250.f, 350.f }, ImGuiCond_Once);
 
 	std::string title = _selectedModels.size() == 1
-		? _objectManagers[_selectedType]->object(*_selectedModels.begin())->Name + " Info"
+		? _objectsManager->object(*_selectedModels.begin())->Name + " Info"
 		: std::to_string(_selectedModels.size()) + " objects selected";
 
 	ImGui::Begin(title.c_str());
@@ -684,11 +661,23 @@ void MyApp::DrawObjectInfo(int& btnId)
 	{
 		if (_selectedModels.size() > 1)
 		{
-			ImGui::TextDisabled("You cannot adjut materials of multiple objects");
+			ImGui::TextWrapped("You cannot adjust materials of multiple objects");
 		}
 		else
 		{
 			DrawMaterials(btnId);
+		}
+	}
+
+	if (ImGui::CollapsingHeader("LODs"))
+	{
+		if (_selectedModels.size() > 1)
+		{
+			ImGui::TextWrapped("You cannot adjust LODS of multiple objects");
+		}
+		else
+		{
+			DrawLODs(btnId);
 		}
 	}
 
@@ -700,9 +689,9 @@ void MyApp::DrawMultiObjectTransform(int& btnId)
 	DrawTransformInput("Location: ", btnId++, 0, 0.1f);
 	DrawTransformInput("Rotation: ", btnId++, 1, 1.f);
 
-	auto& manager = _objectManagers[_selectedType];
+	auto& manager = _objectsManager;
 
-	size_t scaleIndex = BasicUtil::EnumIndex(Transform::Scale);
+	constexpr size_t scaleIndex = BasicUtil::EnumIndex(Transform::Scale);
 
 	XMFLOAT3 firstScale = manager->object(*_selectedModels.begin())->transform[scaleIndex];
 	bool firstScaleLock = manager->object(*_selectedModels.begin())->lockedScale;
@@ -787,7 +776,7 @@ void MyApp::DrawMultiObjectTransform(int& btnId)
 
 void MyApp::DrawObjectMaterial(int& btnId, int matIndex)
 {
-	Material* material = _objectManagers[_selectedType]->object(*_selectedModels.begin())->materials[matIndex].get();
+	Material* material = _objectsManager->object(*_selectedModels.begin())->materials[matIndex].get();
 	bool isTransparent = DrawIsTransparentCheckbox();
 	bool useARM = DrawUseARMTextureCheckbox(material);
 	DrawMaterialProperty(material, "Base Color", BasicUtil::EnumIndex(MatProp::BaseColor), btnId, true);
@@ -804,7 +793,7 @@ void MyApp::DrawObjectMaterial(int& btnId, int matIndex)
 
 	DrawMaterialTexture(material, "Normal", BasicUtil::EnumIndex(MatTex::Normal), btnId);
 
-	const auto& ri = _objectManagers[_selectedType]->object(*_selectedModels.begin());
+	const auto& ri = _objectsManager->object(*_selectedModels.begin());
 	if (ri->isTesselated)
 	{
 		DrawMaterialTexture(material, "Displacement", BasicUtil::EnumIndex(MatTex::Displacement), btnId, true, "Displacement Scale", BasicUtil::EnumIndex(MatAddInfo::Displacement));
@@ -823,7 +812,7 @@ void MyApp::DrawObjectMaterial(int& btnId, int matIndex)
 void MyApp::DrawMaterials(int& btnId)
 {
 	static int selectedMaterial = -1;
-	const auto& ri = _objectManagers[_selectedType]->object(*_selectedModels.begin());
+	const auto& ri = _objectsManager->object(*_selectedModels.begin());
 
 	std::vector<int> visibleMaterialIndices;
 	for (int i = 0; i < ri->materials.size(); i++)
@@ -834,7 +823,7 @@ void MyApp::DrawMaterials(int& btnId)
 		}
 	}
 
-	int numMaterials = visibleMaterialIndices.size();
+	int numMaterials = (int)visibleMaterialIndices.size();
 	int maxVisible = 6; // maximum number of items to show without scrolling
 	float lineHeight = ImGui::GetTextLineHeightWithSpacing();
 
@@ -862,10 +851,10 @@ void MyApp::DrawMaterials(int& btnId)
 
 void MyApp::DrawMaterialProperty(Material* material, const std::string& label, size_t index, int& btnId, bool isFloat3, bool hasAdditionalInfo, const std::string& additionalInfoLabel, size_t additionalInfoIndex)
 {
-	auto& manager = _objectManagers[_selectedType];
+	auto& manager = _objectsManager;
 	bool textureTabOpen = material->properties[index].texture.useTexture;
 
-	static const int propsNum = material->properties.size();
+	static const int propsNum = (int)material->properties.size();
 	static std::vector<int> selectedTabs;
 	if (selectedTabs.size() == 0)
 	{
@@ -974,7 +963,7 @@ void MyApp::DrawMaterialProperty(Material* material, const std::string& label, s
 
 void MyApp::DrawMaterialTexture(Material* material, const std::string& label, size_t index, int& btnId, bool hasAdditionalInfo, const std::string& additionalInfoLabel, size_t additionalInfoIndex)
 {
-	auto& manager = _objectManagers[_selectedType];
+	auto& manager = _objectsManager;
 
 	if (ImGui::TreeNode(label.c_str()))
 	{
@@ -1075,7 +1064,7 @@ void MyApp::DrawMaterialARMTexture(Material* material, const std::string& label,
 
 void MyApp::DrawTransformInput(const std::string& label, int btnId, int transformIndex, float speed)
 {
-	auto& manager = _objectManagers[_selectedType];
+	auto& manager = _objectsManager;
 
 	XMFLOAT3 firstPos = manager->object(*_selectedModels.begin())->transform[transformIndex];
 	bool allSamePos = true;
@@ -1111,6 +1100,84 @@ void MyApp::DrawTransformInput(const std::string& label, int btnId, int transfor
 	else
 	{
 		ImGui::TextDisabled("Multiple values");
+	}
+}
+
+void MyApp::DrawLODs(int& btnId)
+{
+	const auto& ri = _objectsManager->object(*_selectedModels.begin());
+
+	auto& lods = ri->lodsData;
+
+	if (ImGui::BeginListBox("##lods", ImVec2(-FLT_MIN, ImGui::GetTextLineHeightWithSpacing() * lods.size())))
+	{
+		for (int i = 0; i < lods.size(); i++)
+		{
+			const bool isSelected = ri->currentLODIdx == i;
+
+			std::string label = "LOD " + std::to_string(i);
+			if (_fixedLOD)
+			{
+				if (ImGui::Selectable(label.c_str(), isSelected))
+				{
+					ri->currentLODIdx = i;
+				}
+			}
+			else
+			{
+				ImGui::BeginDisabled(); // disables the selectable but keeps highlight
+				ImGui::Selectable(label.c_str(), isSelected);
+				ImGui::EndDisabled();
+			}
+		}
+		ImGui::EndListBox();
+	}
+
+	if (lods.size() < 6)
+	{
+		if (ImGui::Button("Add LOD"))
+		{
+			AddLOD();
+		}
+	}
+}
+
+void MyApp::AddToast(const std::string& msg, float lifetime)
+{
+	_notifications.push_back({ msg, lifetime, (float)ImGui::GetTime() });
+}
+
+void MyApp::DrawToasts()
+{
+	const float pad = 10.0f;
+	ImVec2 screen = ImGui::GetIO().DisplaySize;
+
+	float y = pad;
+	for (size_t i = 0; i < _notifications.size(); )
+	{
+		float age = (float)ImGui::GetTime() - _notifications[i].creationTime;
+		float alpha = 1.0f - (age / _notifications[i].lifetime);
+
+		if (alpha <= 0.0f) {
+			_notifications.erase(_notifications.begin() + i);
+			continue;
+		}
+
+		ImGui::SetNextWindowBgAlpha(alpha); // fade background
+		ImGui::SetNextWindowPos(ImVec2(screen.x - 250 - pad, y), ImGuiCond_Always);
+
+		ImGui::Begin(("##toast" + std::to_string(i)).c_str(), nullptr,
+			ImGuiWindowFlags_NoDecoration |
+			ImGuiWindowFlags_AlwaysAutoResize |
+			ImGuiWindowFlags_NoSavedSettings |
+			ImGuiWindowFlags_NoNav |
+			ImGuiWindowFlags_NoMove);
+
+		ImGui::TextUnformatted(_notifications[i].message.c_str());
+		ImGui::End();
+
+		y += 40.0f; // stack spacing
+		++i;
 	}
 }
 
@@ -1156,7 +1223,7 @@ void MyApp::DrawImportModal()
 			//merge meshes into one file
 			ModelData data = std::move(GeometryManager::BuildModelGeometry(_modelManager->ParseAsOneObject().get()));
 			_selectedModels.clear();
-			_selectedModels.insert(_objectManagers[PSO::Opaque]->addRenderItem(md3dDevice.Get(), std::move(data)));
+			_selectedModels.insert(_objectsManager->addRenderItem(md3dDevice.Get(), std::move(data)));
 			ImGui::CloseCurrentPopup();
 		}
 
@@ -1169,7 +1236,7 @@ void MyApp::DrawImportModal()
 				ModelData data = std::move(GeometryManager::BuildModelGeometry(model.get()));
 				if (data.lodsData.empty())
 					continue;
-				_selectedModels.insert(_objectManagers[PSO::Opaque]->addRenderItem(md3dDevice.Get(), std::move(data)));
+				_selectedModels.insert(_objectsManager->addRenderItem(md3dDevice.Get(), std::move(data)));
 			}
 			ImGui::CloseCurrentPopup();
 		}
@@ -1184,7 +1251,7 @@ void MyApp::DrawImportModal()
 
 bool MyApp::DrawIsTransparentCheckbox()
 {
-	auto& manager = _objectManagers[_selectedType];
+	auto& manager = _objectsManager;
 
 	auto object = manager->object(*_selectedModels.begin());
 
@@ -1204,6 +1271,47 @@ bool MyApp::DrawUseARMTextureCheckbox(Material* material)
 	}
 
 	return material->useARMTexture;
+}
+
+void MyApp::AddModel()
+{
+	PWSTR pszFilePath;
+	if (BasicUtil::TryToOpenFile(L"3D Object", L"*.obj;*.fbx;*.glb", pszFilePath))
+	{
+		if (_modelManager->ImportObject(pszFilePath))
+		{
+			ImGui::OpenPopup("Multiple meshes");
+		}
+		else
+		{
+			auto model = _modelManager->ParseAsOneObject();
+			//generating it as one mesh
+			ModelData data = GeometryManager::BuildModelGeometry(model.get());
+			_selectedModels.clear();
+			_selectedModels.insert(_objectsManager->addRenderItem(md3dDevice.Get(), std::move(data)));
+		}
+		CoTaskMemFree(pszFilePath);
+	}
+}
+
+void MyApp::AddLOD()
+{
+	PWSTR pszFilePath;
+	if (BasicUtil::TryToOpenFile(L"3D Object", L"*.obj;*.fbx;*.glb", pszFilePath))
+	{
+		const auto& ri = _objectsManager->object(*_selectedModels.begin());
+
+		if (_modelManager->ImportLODObject(pszFilePath, (int)ri->lodsData.begin()->meshes.size()))
+		{
+			auto lod = _modelManager->ParseAsLODObject();
+			LODData data = { (int)lod.vertices.size(), lod.meshes };
+			//generating it as one mesh
+			int LODIdx = _objectsManager->addLOD(md3dDevice.Get(), data, ri);
+			GeometryManager::AddLODGeometry(ri->Name, LODIdx, lod);
+			AddToast("Your LOD was added as LOD" + std::to_string(LODIdx) + "!");
+		}
+		CoTaskMemFree(pszFilePath);
+	}
 }
 
 void MyApp::ClearData()
@@ -1233,10 +1341,10 @@ void MyApp::ClearData()
 void MyApp::InitManagers()
 {
 	TextureManager::Init(md3dDevice.Get());
-	_objectManagers[PSO::Opaque] = std::make_unique<OpaqueObjectManager>(md3dDevice.Get());
-	_objectManagers[PSO::Opaque]->Init();
-	_objectManagers[PSO::Unlit] = std::make_unique<UnlitObjectManager>(md3dDevice.Get());
-	_objectManagers[PSO::Unlit]->Init();
+	_objectsManager = std::make_unique<EditableObjectManager>(md3dDevice.Get());
+	_objectsManager->Init();
+	_gridManager = std::make_unique<UnlitObjectManager>(md3dDevice.Get());
+	_gridManager->Init();
 	
 	_lightingManager = std::make_unique<LightingManager>();
 	_lightingManager->Init(_gBuffer->InfoCount(false), md3dDevice.Get(), _gBuffer->lightingHandle());
@@ -1251,7 +1359,7 @@ void MyApp::GBufferPass()
 	_gBuffer->ClearInfo(Colors::Transparent);
 	mCommandList->OMSetRenderTargets(_gBuffer->InfoCount(), _gBuffer->RTVs().data(),
 		false, &_gBuffer->DepthStencilView());
-	_objectManagers[PSO::Opaque]->Draw(mCommandList.Get(), mCurrFrameResource, _isWireframe);
+	_objectsManager->Draw(mCommandList.Get(), mCurrFrameResource, _isWireframe);
 }
 
 void MyApp::LightingPass()
@@ -1291,7 +1399,7 @@ void MyApp::WireframePass()
 	mCommandList->ClearRenderTargetView(CurrentBackBufferView(), Colors::LightSteelBlue, 0, nullptr);
 	mCommandList->OMSetRenderTargets(1, &CurrentBackBufferView(), true, &_gBuffer->DepthStencilView());
 
-	_objectManagers[PSO::Opaque]->Draw(mCommandList.Get(), mCurrFrameResource, _isWireframe);
+	_objectsManager->Draw(mCommandList.Get(), mCurrFrameResource, _isWireframe);
 }
 
 //some wndproc stuff

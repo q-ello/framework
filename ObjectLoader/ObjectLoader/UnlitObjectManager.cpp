@@ -113,9 +113,9 @@ int UnlitObjectManager::addRenderItem(ID3D12Device* device, ModelData&& modelDat
 
 	renderItem->Name = name;
 	renderItem->nameCount = _objectCounters[itemName]++;
-	renderItem->Geo = GeometryManager::geometries()["shapeGeo"].get();
+	renderItem->Geo = &GeometryManager::geometries()["shapeGeo"];
 	renderItem->PrimitiveType = D3D11_PRIMITIVE_TOPOLOGY_LINELIST;
-	renderItem->IndexCount = renderItem->Geo->DrawArgs[itemName].IndexCount;
+	renderItem->IndexCount = renderItem->Geo->begin()->get()->DrawArgs[itemName].IndexCount;
 
 	for (int i = 0; i < FrameResource::frameResources().size(); ++i)
 	{
@@ -183,8 +183,9 @@ void UnlitObjectManager::Draw(ID3D12GraphicsCommandList* cmdList, FrameResource*
 		auto& ri = _objects[i];
 		auto objectCB = currFrameResource->UnlitObjCB[ri->uid]->Resource();
 
-		cmdList->IASetVertexBuffers(0, 1, &ri->Geo->VertexBufferView());
-		cmdList->IASetIndexBuffer(&ri->Geo->IndexBufferView());
+		auto geo = ri->Geo->begin()->get();
+		cmdList->IASetVertexBuffers(0, 1, &geo->VertexBufferView());
+		cmdList->IASetIndexBuffer(&geo->IndexBufferView());
 		cmdList->IASetPrimitiveTopology(ri->PrimitiveType);
 
 		D3D12_GPU_VIRTUAL_ADDRESS objCBAddress = objectCB->GetGPUVirtualAddress();

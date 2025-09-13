@@ -26,6 +26,12 @@
 #include "OpaqueObjectManager.h"
 #include "UnlitObjectManager.h"
 
+struct Toast {
+	std::string message;
+	float lifetime;     // seconds to live
+	float creationTime; // ImGui::GetTime() when created
+};
+
 #define DELETE_ID 333
 
 using Microsoft::WRL::ComPtr;
@@ -80,16 +86,27 @@ private:
 	void DrawLocalLightData(int& btnId, int lightIndex);
 	void DrawObjectInfo(int& btnId);
 	void DrawMultiObjectTransform(int& btnId);
+	void DrawTransformInput(const std::string& label, int btnId, int transformIndex, float speed);
 	void DrawObjectMaterial(int& btnId, int matIndex);
+	bool DrawIsTransparentCheckbox();
+	bool DrawUseARMTextureCheckbox(Material* material);
 	void DrawMaterials(int& btnId);
 	void DrawMaterialProperty(Material* material, const std::string& label, size_t index, int& btnId, bool isFloat3, bool hasAdditionalInfo = false, const std::string& additionalInfoLabel = "", size_t additionalInfoIndex = -1);
 	void DrawMaterialTexture(Material* material, const std::string& label, size_t index, int& btnId, bool hasAdditionalInfo = false, const std::string& additionalInfoLabel = "", size_t additionalInfoIndex = -1);
 	void DrawMaterialARMTexture(Material* material, const std::string& label, size_t index, int& btnId);
-	void DrawTransformInput(const std::string& label, int btnId, int transformIndex, float speed);
+	void DrawLODs(int& btnId);
+
+	void AddToast(const std::string& msg, float lifetime = 3.0f);
+	void DrawToasts();
+
 	void DrawCameraSpeed();
+
+	//modals
 	void DrawImportModal();
-	bool DrawIsTransparentCheckbox();
-	bool DrawUseARMTextureCheckbox(Material* material);
+
+	//loading
+	void AddModel();
+	void AddLOD();
 
 	void InitManagers();
 
@@ -106,7 +123,8 @@ private:
 
 	std::unordered_map<std::string, ComPtr<ID3DBlob>> mShaders;
 
-	std::unordered_map<PSO, std::unique_ptr<ObjectManager>> _objectManagers;
+	std::unique_ptr<UnlitObjectManager> _gridManager;
+	std::unique_ptr < EditableObjectManager> _objectsManager;
 	std::unique_ptr<LightingManager> _lightingManager = nullptr;
 
 	GBufferPassConstants _GBufferCB;
@@ -115,14 +133,16 @@ private:
 	float _cameraSpeed = 0.01f;
 	float _mbDown = false;
 	bool _isWireframe = false;
+	bool _fixedLOD = false;
 
 	POINT _lastMousePos;
 
 	bool checkForImGui(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) override;
 
-	PSO _selectedType = PSO::Opaque;
 	std::set<int> _selectedModels;
 
 	Camera _camera;
+
+	std::vector<Toast> _notifications;
 };
 
