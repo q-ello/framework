@@ -9,31 +9,39 @@ DirectX::XMMATRIX aiToMatrix(aiMatrix4x4 m)
 		m.d1, m.d2, m.d3, m.d4);
 }
 
-Model::Model(aiNode* node, std::string nodeName, aiMaterial** materials, UINT materialsCount, aiMesh** meshes, aiTexture** textures, std::wstring fileLocation)
+Model::Model(std::vector<aiNode*> lods, std::string modelName, aiMaterial** materials, UINT materialsCount, aiMesh** meshes, aiTexture** textures, std::wstring fileLocation)
 {
-	name = nodeName;
+	name = modelName;
 	_fileLocation = fileLocation;
 
-	auto transform = node->mTransformation;
+	//parsing lod0
+	aiNode* lod0 = *lods.begin();
+
+	auto transform = (lod0)->mTransformation;
 
 	aiVector3D translation;
 	aiVector3D rotation;
 	aiVector3D scale;
 
 	transform.Decompose(scale, rotation, translation);
-	_transform[BasicUtil::EnumIndex(Transform::Translation)] = {translation.x, translation.y, translation.z};
-	_transform[BasicUtil::EnumIndex(Transform::Rotation)] = {rotation.x, rotation.y, rotation.z};
-	_transform[BasicUtil::EnumIndex(Transform::Scale)] = {scale.x, scale.y, scale.z};
+	_transform[BasicUtil::EnumIndex(Transform::Translation)] = { translation.x, translation.y, translation.z };
+	_transform[BasicUtil::EnumIndex(Transform::Rotation)] = { rotation.x, rotation.y, rotation.z };
+	_transform[BasicUtil::EnumIndex(Transform::Scale)] = { scale.x, scale.y, scale.z };
 
-	for (unsigned int j = 0; j < node->mNumMeshes; j++)
+	std::vector<Mesh> lod0MeshesData;
+
+	for (unsigned int j = 0; j < lod0->mNumMeshes; j++)
 	{
-		ParseMesh(meshes[j]);
+		lod0MeshesData.push_back(ParseMesh(meshes[j]));
 	}
 
-	for (unsigned int i = 0; i < node->mNumChildren; i++)
+	for (unsigned int i = 0; i < lod0->mNumChildren; i++)
 	{
-		ParseNode(node->mChildren[i], meshes);
+		auto& lod0ChildMeshesData = ParseNode(lod0->mChildren[i], meshes);
+		lod0MeshesData.insert(lod0MeshesData.end(), lod0ChildMeshesData.begin(), lod0ChildMeshesData.end());
 	}
+
+	_lods.push_back(std::move(lod0MeshesData));
 
 	for (unsigned int i = 0; i < materialsCount; i++)
 	{
@@ -46,6 +54,17 @@ Model::Model(aiNode* node, std::string nodeName, aiMaterial** materials, UINT ma
 		DirectX::XMVECTOR vMax = DirectX::XMLoadFloat3(&_vMax);
 		DirectX::XMVECTOR vMin = DirectX::XMLoadFloat3(&_vMin);
 		DirectX::BoundingBox::CreateFromPoints(_aabb, vMin, vMax);
+	}
+
+	//parsing other lods
+	if (lods.size() == 1)
+		return;
+
+	for (auto lodIt = lods.begin() + 1; lodIt != lods.end(); lodIt++)
+	{
+		aiNode* lod = *lodIt;
+		std::vector<Mesh> lodMeshesData = ParseNode(lod, meshes, true);
+		_lods.push_back(std::move(lodMeshesData));
 	}
 }
 
@@ -68,7 +87,7 @@ std::vector<std::unique_ptr<Material>> Model::materials()
 	return std::move(_materials);
 }
 
-void Model::ParseMesh(aiMesh* mesh, DirectX::XMMATRIX parentWorld)
+Mesh Model::ParseMesh(aiMesh* mesh, DirectX::XMMATRIX parentWorld, bool forLod)
 {
 	Mesh meshData;
 	meshData.vertexStart = _vertices.size();
@@ -95,13 +114,16 @@ void Model::ParseMesh(aiMesh* mesh, DirectX::XMMATRIX parentWorld)
 			biNormal = aiVector3D(0.f, 0.f, 0.f);
 		}
 		v.Pos = { pos.x, pos.y, pos.z };
-		_vMin.x = std::min(pos.x, _vMin.x);
-		_vMin.y = std::min(pos.y, _vMin.y);
-		_vMin.z = std::min(pos.z, _vMin.z);
-		_vMax.x = std::max(pos.x, _vMax.x);
-		_vMax.y = std::max(pos.y, _vMax.y);
-		_vMax.z = std::max(pos.z, _vMax.z);
 
+		if (!forLod)
+		{
+			_vMin.x = std::min(pos.x, _vMin.x);
+			_vMin.y = std::min(pos.y, _vMin.y);
+			_vMin.z = std::min(pos.z, _vMin.z);
+			_vMax.x = std::max(pos.x, _vMax.x);
+			_vMax.y = std::max(pos.y, _vMax.y);
+			_vMax.z = std::max(pos.z, _vMax.z);
+		}
 
 		v.TexC = { tex.x, tex.y };
 		v.Normal = { normal.x, normal.y, normal.z };
@@ -123,7 +145,7 @@ void Model::ParseMesh(aiMesh* mesh, DirectX::XMMATRIX parentWorld)
 
 	meshData.indexCount = _indices.size() - meshData.indexStart;
 
-	_meshesData.push_back(meshData);
+	return std::move(meshData);
 }
 
 void Model::ParseMaterial(aiMaterial* material, aiTexture** textures)
@@ -203,19 +225,23 @@ void Model::ParseMaterial(aiMaterial* material, aiTexture** textures)
 	_materials.push_back(std::move(newMaterial));
 }
 
-void Model::ParseNode(aiNode* node, aiMesh** meshes, DirectX::XMMATRIX parentWorld)
+std::vector<Mesh> Model::ParseNode(aiNode* node, aiMesh** meshes, bool forLod, DirectX::XMMATRIX parentWorld)
 {
+	std::vector<Mesh> nodeMeshesData;
 	DirectX::XMMATRIX nodeWorld = aiToMatrix(node->mTransformation) * parentWorld;
 
 	for (unsigned int j = 0; j < node->mNumMeshes; j++)
 	{
-		ParseMesh(meshes[node->mMeshes[j]], nodeWorld);
+		nodeMeshesData.push_back(ParseMesh(meshes[node->mMeshes[j]], nodeWorld, forLod));
 	}
 
 	for (unsigned int i = 0; i < node->mNumChildren; i++)
 	{
-		ParseNode(node->mChildren[i], meshes, nodeWorld);
+		auto& childNodeMeshesData = ParseNode(node->mChildren[i], meshes, forLod, nodeWorld);
+		nodeMeshesData.insert(nodeMeshesData.end(), childNodeMeshesData.begin(), childNodeMeshesData.end());
 	}
+
+	return nodeMeshesData;
 }
 
 bool Model::LoadMatPropTexture(aiMaterial* material, Material* newMaterial, aiTexture** textures, MatProp property, aiTextureType texType)

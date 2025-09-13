@@ -20,8 +20,6 @@ struct RenderItem
 
 	// Primitive topology.
 	D3D12_PRIMITIVE_TOPOLOGY PrimitiveType = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
-
-	UINT IndexCount = 0;
 };
 
 struct Mesh
@@ -42,11 +40,13 @@ struct EditableRenderItem : public RenderItem
 	std::vector<std::unique_ptr<Material>> materials;
 	bool isTransparent = false;
 	BoundingBox Bounds;
-	std::vector<Mesh> meshesData;
+	std::vector<std::vector<Mesh>> lodsData;
+	std::vector<Mesh>* currentLod = nullptr;
 	bool isTesselated = false;
 };
 
 struct UnlitRenderItem : public RenderItem
 {
 	XMFLOAT4 Color = {.0f, .0f, .0f, 1.f};
+	UINT IndexCount = 0;
 };

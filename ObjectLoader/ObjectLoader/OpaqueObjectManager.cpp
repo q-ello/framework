@@ -25,9 +25,10 @@ void OpaqueObjectManager::UpdateObjectCBs(FrameResource* currFrameResource, Came
 		if (ri->NumFramesDirty > 0)
 		{
 			size_t j = 0;
-			for (; j < ri->meshesData.size(); j++)
+			auto currentLod = ri->currentLod;
+			for (; j < currentLod->size(); j++)
 			{
-				XMMATRIX meshWorld = ri->meshesData[j].defaultWorld * world;
+				XMMATRIX meshWorld = currentLod->at(j).defaultWorld * world;
 
 				OpaqueObjectConstants objConstants;
 				XMStoreFloat4x4(&objConstants.World, XMMatrixTranspose(meshWorld));
@@ -267,7 +268,7 @@ void OpaqueObjectManager::BuildShaders()
 void OpaqueObjectManager::AddObjectToResource(Microsoft::WRL::ComPtr<ID3D12Device> device, FrameResource* currFrameResource)
 {
 	for (auto& obj : _objects)
-		currFrameResource->addOpaqueObjectBuffer(device.Get(), obj->uid, (int)obj->meshesData.size(), (int)obj->materials.size());
+		currFrameResource->addOpaqueObjectBuffer(device.Get(), obj->uid, (int)obj->lodsData.size(), (int)obj->materials.size());
 }
 
 int OpaqueObjectManager::addRenderItem(ID3D12Device* device, ModelData&& modelData)
@@ -284,27 +285,34 @@ int OpaqueObjectManager::addRenderItem(ID3D12Device* device, ModelData&& modelDa
 	modelRitem->Geo = GeometryManager::geometries()[itemName].get();
 	modelRitem->PrimitiveType = isTesselated ? D3D_PRIMITIVE_TOPOLOGY_3_CONTROL_POINT_PATCHLIST : D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 	modelRitem->isTesselated = isTesselated;
-	modelRitem->IndexCount = modelRitem->Geo->DrawArgs[itemName].IndexCount;
 	modelRitem->materials = std::move(modelData.materials);
 	for (auto& material : modelRitem->materials)
 	{
 		material->numFramesDirty = gNumFrameResources;
 	}
 	modelRitem->Bounds = modelData.AABB;
-	modelRitem->meshesData = modelData.meshesData;
+	modelRitem->lodsData = modelData.lodsData;
 	modelRitem->transform = modelData.transform;
+	modelRitem->currentLod = &modelRitem->lodsData[0];
 
-	for (int i = 0; i < modelRitem->meshesData.size(); i++)
+	for (int i = 0; i < modelRitem->lodsData.size(); i++)
 	{
-		auto& meshData = modelRitem->meshesData[i];
-		meshData.cbOffset = i * _cbMeshElementSize;
-		meshData.matOffset = meshData.materialIndex * _cbMaterialElementSize;
-		modelRitem->materials[meshData.materialIndex]->isUsed = true;
+		auto& lodData = modelRitem->lodsData[i];
+		for (int j = 0; j < lodData.size(); j++)
+		{
+			auto& meshData = lodData[j];
+			meshData.cbOffset = i * _cbMeshElementSize;
+			meshData.matOffset = meshData.materialIndex * _cbMaterialElementSize;
+			if (i == 0)
+			{
+				modelRitem->materials[meshData.materialIndex]->isUsed = true;
+			}
+		}
 	}
 
 	for (int i = 0; i < FrameResource::frameResources().size(); ++i)
 	{
-		FrameResource::frameResources()[i]->addOpaqueObjectBuffer(device, modelRitem->uid, modelRitem->meshesData.size() + 1, modelRitem->materials.size());
+		FrameResource::frameResources()[i]->addOpaqueObjectBuffer(device, modelRitem->uid, modelRitem->lodsData.size() + 1, modelRitem->materials.size());
 	}
 
 	if (isTesselated)
@@ -454,9 +462,11 @@ void OpaqueObjectManager::DrawObjects(ID3D12GraphicsCommandList* cmdList, FrameR
 		cmdList->IASetIndexBuffer(&ri->Geo->IndexBufferView());
 		auto materialCB = currFrameResource->MaterialCB[ri->uid]->Resource();
 
-		for (size_t i = 0; i < ri->meshesData.size(); i++)
+		auto currentLod = ri->currentLod;
+
+		for (size_t i = 0; i < currentLod->size(); i++)
 		{
-			auto& meshData = ri->meshesData[i];
+			auto& meshData = currentLod->at(i);
 			D3D12_GPU_VIRTUAL_ADDRESS meshCBAddress = objectCB->GetGPUVirtualAddress() + meshData.cbOffset;
 
 			cmdList->SetGraphicsRootConstantBufferView(8, meshCBAddress);
@@ -489,7 +499,7 @@ void OpaqueObjectManager::DrawAABBs(ID3D12GraphicsCommandList* cmdList, FrameRes
 	for (auto& ri : _objects)
 	{
 		auto objectCB = currFrameResource->OpaqueObjCB[ri->uid]->Resource();
-		D3D12_GPU_VIRTUAL_ADDRESS AABBCBAddress = objectCB->GetGPUVirtualAddress() + ri->meshesData.size() * _cbMeshElementSize;
+		D3D12_GPU_VIRTUAL_ADDRESS AABBCBAddress = objectCB->GetGPUVirtualAddress() + ri->lodsData.size() * _cbMeshElementSize;
 
 		//draw local lights
 		auto geo = GeometryManager::geometries()["shapeGeo"].get();

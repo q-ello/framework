@@ -83,7 +83,7 @@ ModelData GeometryManager::BuildModelGeometry(Model* model)
 	ModelData data;
 	data.croppedName = model->name;
 	data.materials = std::move(model->materials());
-	data.meshesData = model->meshes();
+	data.lodsData = model->lods();
 	data.transform = model->transform();
 	data.isTesselated = model->isTesselated();
 	data.AABB = model->AABB();

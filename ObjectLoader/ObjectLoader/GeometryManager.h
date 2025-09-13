@@ -13,7 +13,7 @@ struct ModelData
 	std::string croppedName = "";
 	bool isTesselated = false;
 	std::vector<std::unique_ptr<Material>> materials;
-	std::vector<Mesh> meshesData;
+	std::vector<std::vector<Mesh>> lodsData;
 	BoundingBox AABB;
 	std::array<DirectX::XMFLOAT3, 3> transform = {};
 };

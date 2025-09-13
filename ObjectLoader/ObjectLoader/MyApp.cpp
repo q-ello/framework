@@ -1167,6 +1167,8 @@ void MyApp::DrawImportModal()
 			for (auto& model : _modelManager->ParseScene())
 			{
 				ModelData data = std::move(GeometryManager::BuildModelGeometry(model.get()));
+				if (data.lodsData.empty())
+					continue;
 				_selectedModels.insert(_objectManagers[PSO::Opaque]->addRenderItem(md3dDevice.Get(), std::move(data)));
 			}
 			ImGui::CloseCurrentPopup();

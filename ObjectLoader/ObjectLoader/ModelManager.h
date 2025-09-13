@@ -24,7 +24,7 @@ public:
 	ModelManager(ModelManager&&) = default;
 	ModelManager& operator=(ModelManager&&) = default;
 
-	//import object and say is there a single mesh (false) or is there more (true)
+	//import object and say is there a single model (false) or is there more (true)
 	bool ImportObject(WCHAR* filename);
 	//parse everything as a single mesh even if it is a scene
 	std::unique_ptr<Model> ParseAsOneObject();
@@ -39,4 +39,5 @@ private:
 	const aiScene* _scene = nullptr;
 	std::string _sceneName = "";
 	std::wstring _fileLocation;
+	std::map<std::string, std::vector<aiNode*>> _modelNodes;
 };
