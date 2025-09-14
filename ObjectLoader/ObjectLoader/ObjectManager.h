@@ -25,7 +25,7 @@ public:
 	virtual EditableRenderItem* object(int i) = 0;
 	virtual std::string objectName(int i) = 0;
 
-	virtual void Draw(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, bool isWireframe = false) = 0;
+	virtual void Draw(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, float screenHeight = 0.f, bool isWireframe = false) = 0;
 	void Init();
 	virtual bool* drawDebug()
 	{

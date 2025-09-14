@@ -167,7 +167,7 @@ std::string UnlitObjectManager::objectName(int i)
 		(_objects[i]->nameCount == 0 ? "" : std::to_string(_objects[i]->nameCount));
 }
 
-void UnlitObjectManager::Draw(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, bool isWireframe)
+void UnlitObjectManager::Draw(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, float screenHeight, bool isWireframe)
 {
 	cmdList->SetGraphicsRootSignature(_rootSignature.Get());
 	cmdList->SetPipelineState(_pso.Get());

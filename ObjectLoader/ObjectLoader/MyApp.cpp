@@ -1360,7 +1360,7 @@ void MyApp::GBufferPass()
 	_gBuffer->ClearInfo(Colors::Transparent);
 	mCommandList->OMSetRenderTargets(_gBuffer->InfoCount(), _gBuffer->RTVs().data(),
 		false, &_gBuffer->DepthStencilView());
-	_objectsManager->Draw(mCommandList.Get(), mCurrFrameResource, _isWireframe);
+	_objectsManager->Draw(mCommandList.Get(), mCurrFrameResource, mClientHeight, _isWireframe);
 }
 
 void MyApp::LightingPass()
@@ -1400,7 +1400,7 @@ void MyApp::WireframePass()
 	mCommandList->ClearRenderTargetView(CurrentBackBufferView(), Colors::LightSteelBlue, 0, nullptr);
 	mCommandList->OMSetRenderTargets(1, &CurrentBackBufferView(), true, &_gBuffer->DepthStencilView());
 
-	_objectsManager->Draw(mCommandList.Get(), mCurrFrameResource, _isWireframe);
+	_objectsManager->Draw(mCommandList.Get(), mCurrFrameResource, mClientHeight, _isWireframe);
 }
 
 //some wndproc stuff

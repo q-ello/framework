@@ -280,50 +280,48 @@ void EditableObjectManager::CountLODOffsets(LODData* lod, int i)
 	}
 }
 
-void EditableObjectManager::CountLODIndex(EditableRenderItem* ri)
+void EditableObjectManager::CountLODIndex(EditableRenderItem* ri, float screenHeight)
 {
 	auto cameraPos = _camera->GetPosition();
+	BoundingSphere riSphere;
+	riSphere.Center = ri->Bounds.Center;
+	riSphere.Radius = XMVectorGetX(XMVector3Length(XMLoadFloat3(&ri->Bounds.Extents)));
 
-	BoundingBox worldAABB;
-
+	BoundingSphere worldSphere;
 	XMMATRIX scale = XMMatrixScalingFromVector(XMLoadFloat3(&ri->transform[BasicUtil::EnumIndex(Transform::Scale)]));
 	XMMATRIX rotation = XMMatrixRotationRollPitchYawFromVector(XMLoadFloat3(&ri->transform[BasicUtil::EnumIndex(Transform::Rotation)]) * XM_PI / 180.f);
 	XMMATRIX translation = XMMatrixTranslationFromVector(XMLoadFloat3(&ri->transform[BasicUtil::EnumIndex(Transform::Translation)]));
-
 	XMMATRIX world = scale * rotation * translation;
+	riSphere.Transform(worldSphere, world);
+	XMVECTOR worldPos = XMLoadFloat3(&worldSphere.Center);
 
-	ri->Bounds.Transform(worldAABB, world);
+	float size = ComputeScreenSize(worldPos, worldSphere.Radius, screenHeight);
 
-	XMVECTOR worldPos = XMLoadFloat3(&worldAABB.Center);
+	int preferableLOD;
 
-	float distance;
+	if (size > 200.0f) preferableLOD = 0;
+	else if (size > 150.0f)  preferableLOD = 1;
+	else if (size > 100.0f)  preferableLOD = 2;
+	else if (size > 70.0f)  preferableLOD = 3; 
+	else if (size > 30.0f)  preferableLOD = 4;
+	else preferableLOD = 5;
 
-	XMStoreFloat(&distance, XMVector3Length(worldPos - cameraPos));
+	int maxIndex = ri->lodsData.size() - 1;
 
-	if (ri->lodsData.size() >= 6 && distance >= 60)
-	{
-		ri->currentLODIdx = 5;
-	}
-	else if (ri->lodsData.size() >= 5 && distance >= 50)
-	{
-		ri->currentLODIdx = 4;
-	}
-	else if (ri->lodsData.size() >= 4 && distance >= 40)
-	{
-		ri->currentLODIdx = 3;
-	}
-	else if (ri->lodsData.size() >= 3 && distance >= 30)
-	{
-		ri->currentLODIdx = 2;
-	}
-	else if (ri->lodsData.size() >= 2 && distance >= 20)
-	{
-		ri->currentLODIdx = 1;
-	}
-	else
-	{
-		ri->currentLODIdx = 0;
-	}
+	ri->currentLODIdx = std::min(preferableLOD, maxIndex);
+}
+
+float EditableObjectManager::ComputeScreenSize(XMVECTOR& center, float radius, float screenHeight)
+{
+	center = XMVector3TransformCoord(center, _camera->GetView());
+
+	float dist = XMVectorGetZ(center);
+	if (dist <= 0.0f)
+		return FLT_MAX; // behind camera treat as very large
+
+	float projectedSize = (radius / dist) * (screenHeight / (2.0f * tanf(_camera->GetFovY() * 0.5f)));
+
+	return projectedSize; // in pixels (height of sphere on screen)
 }
 
 void EditableObjectManager::AddObjectToResource(Microsoft::WRL::ComPtr<ID3D12Device> device, FrameResource* currFrameResource)
@@ -489,7 +487,7 @@ EditableRenderItem* EditableObjectManager::object(int i)
 	return _objects[i].get();
 }
 
-void EditableObjectManager::Draw(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, bool isWireframe)
+void EditableObjectManager::Draw(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, float screenHeight, bool isWireframe)
 {
 	if (_objects.size() == 0)
 	{
@@ -508,14 +506,14 @@ void EditableObjectManager::Draw(ID3D12GraphicsCommandList* cmdList, FrameResour
 	cmdList->SetGraphicsRootConstantBufferView(10, passCB->GetGPUVirtualAddress());
 	cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-	DrawObjects(cmdList, currFrameResource, _visibleUntesselatedObjects, _untesselatedObjects);
+	DrawObjects(cmdList, currFrameResource, _visibleUntesselatedObjects, _untesselatedObjects, screenHeight);
 	
 	//draw with tesselation
 	cmdList->SetPipelineState(isWireframe ? _wireframeTesselatedPSO.Get() : _tesselatedPSO.Get());
 
 	cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_3_CONTROL_POINT_PATCHLIST);
 
-	DrawObjects(cmdList, currFrameResource, _visibleTesselatedObjects, _tesselatedObjects);
+	DrawObjects(cmdList, currFrameResource, _visibleTesselatedObjects, _tesselatedObjects, screenHeight);
 
 	if (_drawDebug)
 	{
@@ -525,13 +523,13 @@ void EditableObjectManager::Draw(ID3D12GraphicsCommandList* cmdList, FrameResour
 	}
 }
 
-void EditableObjectManager::DrawObjects(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, std::vector<uint32_t> indices, std::unordered_map<uint32_t, EditableRenderItem*> objects)
+void EditableObjectManager::DrawObjects(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, std::vector<uint32_t> indices, std::unordered_map<uint32_t, EditableRenderItem*> objects, float screenHeight)
 {
 	for (auto& idx : indices)
 	{
 		auto& ri = objects[idx];
 		auto objectCB = currFrameResource->OpaqueObjCB[ri->uid]->Resource();
-		CountLODIndex(ri);
+		CountLODIndex(ri, screenHeight);
 
 		int curLODIdx = ri->currentLODIdx;
 		MeshGeometry* curLODGeo = ri->Geo->at(curLODIdx).get();

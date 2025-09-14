@@ -307,7 +307,7 @@ void Model::AlignMeshes()
 	{
 		DirectX::XMFLOAT3 offset;
 
-		if (offset.x == _aabb.Center.x && offset.y == _aabb.Center.y && offset.z == _aabb.Center.z)
+		if (lodIt->aabb.Center.x == _aabb.Center.x && lodIt->aabb.Center.y == _aabb.Center.y && lodIt->aabb.Center.z == _aabb.Center.z)
 			continue;
 		offset.x = _aabb.Center.x - lodIt->aabb.Center.x;
 		offset.y = _aabb.Center.y - lodIt->aabb.Center.y;

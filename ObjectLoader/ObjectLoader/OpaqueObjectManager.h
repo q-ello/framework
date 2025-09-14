@@ -1,4 +1,5 @@
 #pragma once
+#define NOMINMAX
 #include "ObjectManager.h"
 #include "Camera.h"
 
@@ -18,8 +19,8 @@ public:
 
 	std::string objectName(int i) override;
 	EditableRenderItem* object(int i);
-	void Draw(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, bool isWireframe = false) override;
-	void DrawObjects(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, std::vector<uint32_t> indices, std::unordered_map<uint32_t, EditableRenderItem*> objects);
+	void Draw(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, float screenHeight, bool isWireframe = false) override;
+	void DrawObjects(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, std::vector<uint32_t> indices, std::unordered_map<uint32_t, EditableRenderItem*> objects, float screenHeight);
 	void DrawAABBs(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource);
 
 private:
@@ -31,7 +32,8 @@ private:
 	void BuildShaders() override;
 
 	void CountLODOffsets(LODData* lod, int i);
-	void CountLODIndex(EditableRenderItem* ri);
+	void CountLODIndex(EditableRenderItem* ri, float screenHeight);
+	float ComputeScreenSize(XMVECTOR& center, float radius, float screenHeight);
 
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> _wireframePSO;
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> _tesselatedPSO;
