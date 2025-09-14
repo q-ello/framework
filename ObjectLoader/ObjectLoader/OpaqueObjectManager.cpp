@@ -1,7 +1,7 @@
 #pragma once
 #include "OpaqueObjectManager.h"
 
-void EditableObjectManager::UpdateObjectCBs(FrameResource* currFrameResource, Camera* camera)
+void EditableObjectManager::UpdateObjectCBs(FrameResource* currFrameResource)
 {
 	auto& currObjectsCB = currFrameResource->OpaqueObjCB;
 	auto& currMaterialCB = currFrameResource->MaterialCB;
@@ -10,7 +10,7 @@ void EditableObjectManager::UpdateObjectCBs(FrameResource* currFrameResource, Ca
 	_visibleTesselatedObjects.clear();
 	_visibleUntesselatedObjects.clear();
 
-	XMMATRIX view = camera->GetView();
+	XMMATRIX view = _camera->GetView();
 	XMMATRIX invView = XMMatrixInverse(&XMMatrixDeterminant(view), view);
 
 	for (int i = 0; i < _objects.size(); i++)
@@ -89,7 +89,7 @@ void EditableObjectManager::UpdateObjectCBs(FrameResource* currFrameResource, Ca
 		XMMATRIX viewToLocal = XMMatrixMultiply(invView, invWorld);
 
 		BoundingFrustum localSpaceFrustum;
-		camera->CameraFrustum().Transform(localSpaceFrustum, viewToLocal);
+		_camera->CameraFrustum().Transform(localSpaceFrustum, viewToLocal);
 		if ((localSpaceFrustum.Contains(ri->Bounds) != DirectX::DISJOINT))
 		{
 			if (_tesselatedObjects.find(ri->uid) != _tesselatedObjects.end())
@@ -102,6 +102,11 @@ void EditableObjectManager::UpdateObjectCBs(FrameResource* currFrameResource, Ca
 			}
 		}
 	}
+}
+
+void EditableObjectManager::SetCamera(Camera* camera)
+{
+	_camera = camera;
 }
 
 void EditableObjectManager::BuildInputLayout()
@@ -275,6 +280,52 @@ void EditableObjectManager::CountLODOffsets(LODData* lod, int i)
 	}
 }
 
+void EditableObjectManager::CountLODIndex(EditableRenderItem* ri)
+{
+	auto cameraPos = _camera->GetPosition();
+
+	BoundingBox worldAABB;
+
+	XMMATRIX scale = XMMatrixScalingFromVector(XMLoadFloat3(&ri->transform[BasicUtil::EnumIndex(Transform::Scale)]));
+	XMMATRIX rotation = XMMatrixRotationRollPitchYawFromVector(XMLoadFloat3(&ri->transform[BasicUtil::EnumIndex(Transform::Rotation)]) * XM_PI / 180.f);
+	XMMATRIX translation = XMMatrixTranslationFromVector(XMLoadFloat3(&ri->transform[BasicUtil::EnumIndex(Transform::Translation)]));
+
+	XMMATRIX world = scale * rotation * translation;
+
+	ri->Bounds.Transform(worldAABB, world);
+
+	XMVECTOR worldPos = XMLoadFloat3(&worldAABB.Center);
+
+	float distance;
+
+	XMStoreFloat(&distance, XMVector3Length(worldPos - cameraPos));
+
+	if (ri->lodsData.size() >= 6 && distance >= 60)
+	{
+		ri->currentLODIdx = 5;
+	}
+	else if (ri->lodsData.size() >= 5 && distance >= 50)
+	{
+		ri->currentLODIdx = 4;
+	}
+	else if (ri->lodsData.size() >= 4 && distance >= 40)
+	{
+		ri->currentLODIdx = 3;
+	}
+	else if (ri->lodsData.size() >= 3 && distance >= 30)
+	{
+		ri->currentLODIdx = 2;
+	}
+	else if (ri->lodsData.size() >= 2 && distance >= 20)
+	{
+		ri->currentLODIdx = 1;
+	}
+	else
+	{
+		ri->currentLODIdx = 0;
+	}
+}
+
 void EditableObjectManager::AddObjectToResource(Microsoft::WRL::ComPtr<ID3D12Device> device, FrameResource* currFrameResource)
 {
 	for (auto& obj : _objects)
@@ -344,7 +395,7 @@ int EditableObjectManager::addLOD(ID3D12Device* device, LODData lod, EditableRen
 	int i = 0;
 	for (; i < ri->lodsData.size(); i++)
 	{
-		if (lod.vertexCount > ri->lodsData[i].vertexCount)
+		if (lod.triangleCount > ri->lodsData[i].triangleCount)
 			break;
 	}
 	CountLODOffsets(&lod, i);
@@ -480,6 +531,7 @@ void EditableObjectManager::DrawObjects(ID3D12GraphicsCommandList* cmdList, Fram
 	{
 		auto& ri = objects[idx];
 		auto objectCB = currFrameResource->OpaqueObjCB[ri->uid]->Resource();
+		CountLODIndex(ri);
 
 		int curLODIdx = ri->currentLODIdx;
 		MeshGeometry* curLODGeo = ri->Geo->at(curLODIdx).get();

@@ -7,7 +7,7 @@ class UnlitObjectManager : public ObjectManager
 	using ObjectManager::ObjectManager;
 
 public:
-	void UpdateObjectCBs(FrameResource* currFrameResource, Camera* camera = nullptr) override;
+	void UpdateObjectCBs(FrameResource* currFrameResource) override;
 	int addRenderItem(ID3D12Device* device, ModelData&& modelData) override;
 	void Draw(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, bool isWireframe = false) override;
 	void AddObjectToResource(Microsoft::WRL::ComPtr<ID3D12Device> device, FrameResource* currFrameResource) override;

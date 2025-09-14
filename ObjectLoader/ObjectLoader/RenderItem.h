@@ -39,11 +39,14 @@ struct LOD
 	std::vector<Vertex> vertices{};
 	std::vector<std::int32_t> indices{};
 	std::vector<Mesh> meshes{};
+	DirectX::XMFLOAT3 vMax = { -FLT_MAX, -FLT_MAX, -FLT_MAX };
+	DirectX::XMFLOAT3 vMin = { FLT_MAX, FLT_MAX, FLT_MAX };
+	BoundingBox aabb;
 };
 
 struct LODData
 {
-	int vertexCount;
+	int triangleCount;
 	std::vector<Mesh> meshes;
 };
 

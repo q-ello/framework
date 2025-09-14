@@ -1,6 +1,6 @@
 #include "UnlitObjectManager.h"
 
-void UnlitObjectManager::UpdateObjectCBs(FrameResource* currFrameResource, Camera* camera)
+void UnlitObjectManager::UpdateObjectCBs(FrameResource* currFrameResource)
 {
 	auto& currObjectsCB = currFrameResource->UnlitObjCB;
 	for (int i = 0; i < _objects.size(); i++)

@@ -275,8 +275,8 @@ void MyApp::OnKeyboardInput(const GameTimer& gt)
 
 void MyApp::UpdateObjectCBs(const GameTimer& gt)
 {
-	_gridManager->UpdateObjectCBs(mCurrFrameResource, &_camera);
-	_objectsManager->UpdateObjectCBs(mCurrFrameResource, &_camera);
+	_gridManager->UpdateObjectCBs(mCurrFrameResource);
+	_objectsManager->UpdateObjectCBs(mCurrFrameResource);
 }
 
 void MyApp::UpdateMainPassCBs(const GameTimer& gt)
@@ -1115,7 +1115,7 @@ void MyApp::DrawLODs(int& btnId)
 		{
 			const bool isSelected = ri->currentLODIdx == i;
 
-			std::string label = "LOD " + std::to_string(i);
+			std::string label = "LOD " + std::to_string(i) + " (" + std::to_string(lods[i].triangleCount) + " triangles)";
 			if (_fixedLOD)
 			{
 				if (ImGui::Selectable(label.c_str(), isSelected))
@@ -1304,7 +1304,7 @@ void MyApp::AddLOD()
 		if (_modelManager->ImportLODObject(pszFilePath, (int)ri->lodsData.begin()->meshes.size()))
 		{
 			auto lod = _modelManager->ParseAsLODObject();
-			LODData data = { (int)lod.vertices.size(), lod.meshes };
+			LODData data = { (int)lod.indices.size() / 3, lod.meshes };
 			//generating it as one mesh
 			int LODIdx = _objectsManager->addLOD(md3dDevice.Get(), data, ri);
 			GeometryManager::AddLODGeometry(ri->Name, LODIdx, lod);
@@ -1343,6 +1343,7 @@ void MyApp::InitManagers()
 	TextureManager::Init(md3dDevice.Get());
 	_objectsManager = std::make_unique<EditableObjectManager>(md3dDevice.Get());
 	_objectsManager->Init();
+	_objectsManager->SetCamera(&_camera);
 	_gridManager = std::make_unique<UnlitObjectManager>(md3dDevice.Get());
 	_gridManager->Init();
 	

@@ -71,15 +71,14 @@ private:
 
 	bool _isTesselated = false;
 
-	Mesh ParseMesh(aiMesh* mesh, std::vector<Vertex>& vertices, std::vector<std::int32_t>& indices, bool forLod = false, DirectX::XMMATRIX parentWorld = DirectX::XMMatrixIdentity());
+	Mesh ParseMesh(aiMesh* mesh, LOD& lod, DirectX::XMMATRIX parentWorld = DirectX::XMMatrixIdentity());
 	void ParseMaterial(aiMaterial* material, aiTexture** textures);
-	std::vector<Mesh> ParseNode(aiNode* node, aiMesh** meshes, std::vector<Vertex>& vertices, std::vector<std::int32_t>& indices, bool forLod = false, DirectX::XMMATRIX parentWorld = DirectX::XMMatrixIdentity());
-	LOD ParseLOD(aiNode* node, aiMesh** meshes, bool mainLod);
+	std::vector<Mesh> ParseNode(aiNode* node, aiMesh** meshes, LOD& lod, DirectX::XMMATRIX parentWorld = DirectX::XMMatrixIdentity());
+	LOD ParseLOD(aiNode* node, aiMesh** meshes);
 
 	//helper
 	bool LoadMatPropTexture(aiMaterial* material, Material* newMaterial, aiTexture** textures, MatProp property, aiTextureType texType);
 	bool LoadMatTexture(aiMaterial* material, Material* newMaterial, aiTexture** textures, MatTex property, aiTextureType texType);
-
-	DirectX::XMFLOAT3 _vMin = { FLT_MAX, FLT_MAX, FLT_MAX };
-	DirectX::XMFLOAT3 _vMax = { -FLT_MAX, -FLT_MAX, -FLT_MAX };
+	void CalculateAABB();
+	void AlignMeshes();
 };

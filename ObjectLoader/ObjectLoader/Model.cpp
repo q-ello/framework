@@ -28,7 +28,7 @@ Model::Model(std::vector<aiNode*> lods, std::string modelName, aiMaterial** mate
 
 	for (auto lodIt = lods.begin(); lodIt != lods.end(); lodIt++)
 	{
-		_lods.push_back(ParseLOD(*lodIt, meshes, lodIt == lods.begin()));
+		_lods.push_back(ParseLOD(*lodIt, meshes));
 	}
 
 	for (unsigned int i = 0; i < materialsCount; i++)
@@ -37,21 +37,16 @@ Model::Model(std::vector<aiNode*> lods, std::string modelName, aiMaterial** mate
 		ParseMaterial(material, textures);
 	}
 
-	//make AABB
-	{
-		DirectX::XMVECTOR vMax = DirectX::XMLoadFloat3(&_vMax);
-		DirectX::XMVECTOR vMin = DirectX::XMLoadFloat3(&_vMin);
-		DirectX::BoundingBox::CreateFromPoints(_aabb, vMin, vMax);
-	}
+	//centering the aabb because lods are placed in different spaces
+	CalculateAABB();
 
-	//parsing other lods
-	if (lods.size() == 1)
-		return;
+	//moving vertices so that they are in the same place when we change them
+	AlignMeshes();
 }
 
 Model::Model(aiNode* lod, aiMesh** meshes)
 {
-	_lods.push_back(ParseLOD(lod, meshes, true));
+	_lods.push_back(ParseLOD(lod, meshes));
 }
 
 Model::~Model()
@@ -63,11 +58,11 @@ std::vector<std::unique_ptr<Material>> Model::materials()
 	return std::move(_materials);
 }
 
-Mesh Model::ParseMesh(aiMesh* mesh, std::vector<Vertex>& vertices, std::vector<std::int32_t>& indices, bool forLod, DirectX::XMMATRIX parentWorld)
+Mesh Model::ParseMesh(aiMesh* mesh, LOD& lod, DirectX::XMMATRIX parentWorld)
 {
 	Mesh meshData;
-	meshData.vertexStart = vertices.size();
-	meshData.indexStart = indices.size();
+	meshData.vertexStart = lod.vertices.size();
+	meshData.indexStart = lod.indices.size();
 	meshData.materialIndex = mesh->mMaterialIndex;
 	meshData.defaultWorld = parentWorld;
 
@@ -91,21 +86,18 @@ Mesh Model::ParseMesh(aiMesh* mesh, std::vector<Vertex>& vertices, std::vector<s
 		}
 		v.Pos = { pos.x, pos.y, pos.z };
 
-		if (!forLod)
-		{
-			_vMin.x = std::min(pos.x, _vMin.x);
-			_vMin.y = std::min(pos.y, _vMin.y);
-			_vMin.z = std::min(pos.z, _vMin.z);
-			_vMax.x = std::max(pos.x, _vMax.x);
-			_vMax.y = std::max(pos.y, _vMax.y);
-			_vMax.z = std::max(pos.z, _vMax.z);
-		}
+		lod.vMin.x = std::min(pos.x, lod.vMin.x);
+		lod.vMin.y = std::min(pos.y, lod.vMin.y);
+		lod.vMin.z = std::min(pos.z, lod.vMin.z);
+		lod.vMax.x = std::max(pos.x, lod.vMax.x);
+		lod.vMax.y = std::max(pos.y, lod.vMax.y);
+		lod.vMax.z = std::max(pos.z, lod.vMax.z);
 
 		v.TexC = { tex.x, tex.y };
 		v.Normal = { normal.x, normal.y, normal.z };
 		v.Tangent = { tangent.x, tangent.y, tangent.z };
 		v.BiNormal = { biNormal.x, biNormal.y, biNormal.z };
-		vertices.push_back(v);
+		lod.vertices.push_back(v);
 	}
 
 	for (unsigned int i = 0; i < mesh->mNumFaces; i++)
@@ -114,12 +106,12 @@ Mesh Model::ParseMesh(aiMesh* mesh, std::vector<Vertex>& vertices, std::vector<s
 		{
 			continue;
 		}
-		indices.push_back(mesh->mFaces[i].mIndices[0]);
-		indices.push_back(mesh->mFaces[i].mIndices[1]);
-		indices.push_back(mesh->mFaces[i].mIndices[2]);
+		lod.indices.push_back(mesh->mFaces[i].mIndices[0]);
+		lod.indices.push_back(mesh->mFaces[i].mIndices[1]);
+		lod.indices.push_back(mesh->mFaces[i].mIndices[2]);
 	}
 
-	meshData.indexCount = indices.size() - meshData.indexStart;
+	meshData.indexCount = lod.indices.size() - meshData.indexStart;
 
 	return std::move(meshData);
 }
@@ -201,38 +193,45 @@ void Model::ParseMaterial(aiMaterial* material, aiTexture** textures)
 	_materials.push_back(std::move(newMaterial));
 }
 
-std::vector<Mesh> Model::ParseNode(aiNode* node, aiMesh** meshes, std::vector<Vertex>& vertices, std::vector<std::int32_t>& indices, bool forLod, DirectX::XMMATRIX parentWorld)
+std::vector<Mesh> Model::ParseNode(aiNode* node, aiMesh** meshes, LOD& lod, DirectX::XMMATRIX parentWorld)
 {
 	std::vector<Mesh> nodeMeshesData;
 	DirectX::XMMATRIX nodeWorld = aiToMatrix(node->mTransformation) * parentWorld;
 
 	for (unsigned int j = 0; j < node->mNumMeshes; j++)
 	{
-		nodeMeshesData.push_back(ParseMesh(meshes[node->mMeshes[j]], vertices, indices, forLod, nodeWorld));
+		nodeMeshesData.push_back(ParseMesh(meshes[node->mMeshes[j]], lod, nodeWorld));
 	}
 
 	for (unsigned int i = 0; i < node->mNumChildren; i++)
 	{
-		auto& childNodeMeshesData = ParseNode(node->mChildren[i], meshes, vertices, indices, forLod, nodeWorld);
+		auto& childNodeMeshesData = ParseNode(node->mChildren[i], meshes, lod, nodeWorld);
 		nodeMeshesData.insert(nodeMeshesData.end(), childNodeMeshesData.begin(), childNodeMeshesData.end());
 	}
 
 	return nodeMeshesData;
 }
 
-LOD Model::ParseLOD(aiNode* node, aiMesh** meshes, bool mainLod)
+LOD Model::ParseLOD(aiNode* node, aiMesh** meshes)
 {
 	LOD lod;
 
 	for (unsigned int j = 0; j < node->mNumMeshes; j++)
 	{
-		lod.meshes.push_back(ParseMesh(meshes[j], lod.vertices, lod.indices, !mainLod));
+		lod.meshes.push_back(ParseMesh(meshes[node->mMeshes[j]], lod));
 	}
 
 	for (unsigned int i = 0; i < node->mNumChildren; i++)
 	{
-		auto& lodChildMeshesData = ParseNode(node->mChildren[i], meshes, lod.vertices, lod.indices, !mainLod);
+		auto& lodChildMeshesData = ParseNode(node->mChildren[i], meshes, lod);
 		lod.meshes.insert(lod.meshes.end(), lodChildMeshesData.begin(), lodChildMeshesData.end());
+	}
+
+	//make AABB
+	{
+		DirectX::XMVECTOR vMax = DirectX::XMLoadFloat3(&lod.vMax);
+		DirectX::XMVECTOR vMin = DirectX::XMLoadFloat3(&lod.vMin);
+		DirectX::BoundingBox::CreateFromPoints(lod.aabb, vMin, vMax);
 	}
 
 	return lod;
@@ -283,4 +282,42 @@ bool Model::LoadMatTexture(aiMaterial* material, Material* newMaterial, aiTextur
 		return true;
 	}
 	return false;
+}
+
+void Model::CalculateAABB()
+{
+	_aabb = _lods.begin()->aabb;
+	DirectX::XMFLOAT3 aabbCenter = { 0, 0, 0 };
+	for (auto lodIt = _lods.begin(); lodIt != _lods.end(); lodIt++)
+	{
+		aabbCenter.x += lodIt->aabb.Center.x;
+		aabbCenter.y += lodIt->aabb.Center.y;
+		aabbCenter.z += lodIt->aabb.Center.z;
+	}
+	aabbCenter.x /= _lods.size();
+	aabbCenter.y /= _lods.size();
+	aabbCenter.z /= _lods.size();
+
+	_aabb.Center = aabbCenter;
+}
+
+void Model::AlignMeshes()
+{
+	for (auto lodIt = _lods.begin(); lodIt != _lods.end(); lodIt++)
+	{
+		DirectX::XMFLOAT3 offset;
+
+		if (offset.x == _aabb.Center.x && offset.y == _aabb.Center.y && offset.z == _aabb.Center.z)
+			continue;
+		offset.x = _aabb.Center.x - lodIt->aabb.Center.x;
+		offset.y = _aabb.Center.y - lodIt->aabb.Center.y;
+		offset.z = _aabb.Center.z - lodIt->aabb.Center.z;
+
+		for (auto& vertex : lodIt->vertices)
+		{
+			vertex.Pos.x += offset.x;
+			vertex.Pos.y += offset.y;
+			vertex.Pos.z += offset.z;
+		}
+	}
 }

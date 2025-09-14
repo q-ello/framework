@@ -91,7 +91,7 @@ ModelData GeometryManager::BuildModelGeometry(Model* model)
 	{
 		LODData lodData;
 		lodData.meshes = lod.meshes;
-		lodData.vertexCount = (int)lod.vertices.size();
+		lodData.triangleCount = (int)lod.indices.size() / 3;
 		data.lodsData.push_back(lodData);
 	}
 
@@ -157,7 +157,7 @@ void GeometryManager::AddLODGeometry(std::string name, int lodIdx, LOD lod)
 	LODData data;
 
 	data.meshes = lod.meshes;
-	data.vertexCount = (int)lod.vertices.size();
+	data.triangleCount = (int)lod.indices.size();
 
 	if (geometries().find(name) == geometries().end())
 	{

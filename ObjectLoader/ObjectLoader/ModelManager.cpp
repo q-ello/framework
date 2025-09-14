@@ -1,4 +1,38 @@
 #include "ModelManager.h"
+#include <regex>
+#include <string>
+
+struct LODNameInfo {
+	std::string baseName;
+	int lodIndex;
+};
+
+LODNameInfo parseLODName(const std::string& nodeName)
+{
+	// Matches:
+	//   name_LOD0
+	//   name_LOD.000
+	//   name_LOD.000_MESH.005
+	//   name_LOD1
+	//   nameLOD1
+	static std::regex lodRegex(R"(^(.*?)(?:_?LOD[._]?(\d+))(?:_.*)?$)",
+		std::regex::icase);
+
+	std::smatch match;
+
+	LODNameInfo info;
+
+	if (std::regex_match(nodeName, match, lodRegex))
+	{
+		info.baseName = match[1].str();
+		info.lodIndex = std::stoi(match[2].str());
+		return info;
+	}
+	info.baseName = nodeName;
+	info.lodIndex = 0;
+	return info;
+}
+
 
 bool ModelManager::ImportObject(WCHAR* filename)
 {
@@ -25,54 +59,30 @@ bool ModelManager::ImportObject(WCHAR* filename)
 		return false;
 	}
 
-	//we can have lods, so we need to group them properly
-	std::vector<aiNode*> lods;
-
 	for (int i = 0; i < _scene->mRootNode->mNumChildren; i++)
 	{
 		aiNode* node = _scene->mRootNode->mChildren[i];
-		if (std::string(node->mName.C_Str()).find("LOD") != std::string::npos)
-		{
-			if (node->mName.C_Str()[node->mName.length - 1] == '0')
-			{
-				std::string nodeName(node->mName.C_Str());
-				_modelNodes[nodeName.substr(0, nodeName.find("LOD"))] = { node };
-			}
-			else
-			{
-				//just store it for later processing
-				lods.push_back(node);
-			}
-		}
-		else
-		{
-			if (node->mNumMeshes == 0)
-			{
-				continue;
-			}
-			_modelNodes[node->mName.C_Str()] = { node };
-		}
-	}
-	//now process the lods and add them to the right model
-	for (aiNode* lodNode : lods)
-	{
-		for (auto& pair : _modelNodes)
-		{
-			if (std::string(lodNode->mName.C_Str()).find(pair.first) != std::string::npos)
-			{
-				int index = lodNode->mName.C_Str()[lodNode->mName.length - 1] - '0';
-				// Ensure the vector is large enough
-				if (pair.second.size() <= index)
-				{
-					pair.second.resize(index + 1, nullptr);
-				}
-				pair.second[index] = lodNode;
-				break;
-			}
-		}
-	}
+		if (node->mNumMeshes == 0 && node->mNumChildren == 0)
+			continue;
 
-	//check if there is many models, or just one with many lods
+		LODNameInfo lodInfo = parseLODName(node->mName.C_Str());
+
+		std::vector<aiNode*>* lods;
+
+		if (_modelNodes.find(lodInfo.baseName) == _modelNodes.end())
+		{
+			_modelNodes[lodInfo.baseName] = {};
+		}
+
+		lods = &_modelNodes[lodInfo.baseName];
+
+		if (lods->size() < lodInfo.lodIndex)
+			lods->resize(lodInfo.lodIndex + 1);
+
+		lods->at(lodInfo.lodIndex) = node;
+	}
+	
+	//check if there are many models, or just one with many lods
     return _modelNodes.size() > 1;
 }
 

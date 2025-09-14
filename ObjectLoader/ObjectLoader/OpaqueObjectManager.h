@@ -6,7 +6,8 @@ class EditableObjectManager : public ObjectManager
 {
 	using ObjectManager::ObjectManager;
 public:
-	void UpdateObjectCBs(FrameResource* currFrameResource, Camera* camera) override;
+	void UpdateObjectCBs(FrameResource* currFrameResource) override;
+	void SetCamera(Camera* camera);
 	void AddObjectToResource(Microsoft::WRL::ComPtr<ID3D12Device> device, FrameResource* currFrameResource) override;
 	int addRenderItem(ID3D12Device* device, ModelData&& modelData) override;
 	int addLOD(ID3D12Device* device, LODData lod, EditableRenderItem* ri);
@@ -30,6 +31,7 @@ private:
 	void BuildShaders() override;
 
 	void CountLODOffsets(LODData* lod, int i);
+	void CountLODIndex(EditableRenderItem* ri);
 
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> _wireframePSO;
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> _tesselatedPSO;
@@ -48,4 +50,6 @@ private:
 
 	UINT _cbMeshElementSize = d3dUtil::CalcConstantBufferByteSize(sizeof(OpaqueObjectConstants));
 	UINT _cbMaterialElementSize = d3dUtil::CalcConstantBufferByteSize(sizeof(MaterialConstants));
+
+	Camera* _camera;
 };

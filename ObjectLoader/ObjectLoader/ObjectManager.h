@@ -17,7 +17,7 @@ public:
 	virtual int addRenderItem(ID3D12Device* device, ModelData&& modelData) = 0;
 	virtual bool deleteObject(int selectedObject) = 0;
 
-	virtual void UpdateObjectCBs(FrameResource* currFrameResource, Camera* camera = nullptr) = 0;
+	virtual void UpdateObjectCBs(FrameResource* currFrameResource) = 0;
 	virtual void AddObjectToResource(Microsoft::WRL::ComPtr<ID3D12Device> device, FrameResource* currFrameResource) = 0;
 
 	virtual int objectsCount() = 0;
