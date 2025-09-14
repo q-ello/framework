@@ -8,8 +8,8 @@ class UnlitObjectManager : public ObjectManager
 
 public:
 	void UpdateObjectCBs(FrameResource* currFrameResource) override;
-	int addRenderItem(ID3D12Device* device, ModelData&& modelData) override;
-	void Draw(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, float screenHeight = 0.f, bool isWireframe = false) override;
+	int AddRenderItem(ID3D12Device* device, ModelData&& modelData) override;
+	void Draw(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, float screenHeight = 0.f, bool isWireframe = false);
 	void AddObjectToResource(Microsoft::WRL::ComPtr<ID3D12Device> device, FrameResource* currFrameResource) override;
 
 private:
@@ -20,10 +20,10 @@ private:
 	void BuildPSO() override;
 	void BuildShaders() override;
 
-	bool deleteObject(int selectedObject) override;
+	bool DeleteObject(int selectedObject) override;
 	
-	int objectsCount() override;
-	int visibleObjectsCount() override { return objectsCount(); };
+	int ObjectsCount() override;
+	int VisibleObjectsCount() override { return ObjectsCount(); };
 	std::string objectName(int i) override;
 	EditableRenderItem* object(int i) override { return nullptr; };
 	

@@ -14,18 +14,17 @@ public:
 	ObjectManager(ID3D12Device* device);
 	~ObjectManager();
 
-	virtual int addRenderItem(ID3D12Device* device, ModelData&& modelData) = 0;
-	virtual bool deleteObject(int selectedObject) = 0;
+	virtual int AddRenderItem(ID3D12Device* device, ModelData&& modelData) = 0;
+	virtual bool DeleteObject(int selectedObject) = 0;
 
 	virtual void UpdateObjectCBs(FrameResource* currFrameResource) = 0;
 	virtual void AddObjectToResource(Microsoft::WRL::ComPtr<ID3D12Device> device, FrameResource* currFrameResource) = 0;
 
-	virtual int objectsCount() = 0;
-	virtual int visibleObjectsCount() = 0;
+	virtual int ObjectsCount() = 0;
+	virtual int VisibleObjectsCount() = 0;
 	virtual EditableRenderItem* object(int i) = 0;
 	virtual std::string objectName(int i) = 0;
 
-	virtual void Draw(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, float screenHeight = 0.f, bool isWireframe = false) = 0;
 	void Init();
 	virtual bool* drawDebug()
 	{

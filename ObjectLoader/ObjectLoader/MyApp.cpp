@@ -36,7 +36,7 @@ bool MyApp::Initialize()
 	BuildDescriptorHeaps();
 	BuildShadersAndInputLayout();
 	GeometryManager::BuildNecessaryGeometry();
-	_gridManager->addRenderItem(md3dDevice.Get(), { "grid" });
+	_gridManager->AddRenderItem(md3dDevice.Get(), { "grid" });
 	BuildFrameResources();
 	BuildPSOs();
 
@@ -382,12 +382,12 @@ void MyApp::DrawInterface()
 		DrawObjectInfo(buttonId);
 	}
 
-	DrawCameraSpeed();
+	DrawHeader();
 
 	//debug info
 	ImGui::Begin("Debug info");
-	auto visObjectsCnt = _objectsManager->visibleObjectsCount();
-	auto objectsCnt = _objectsManager->objectsCount();
+	auto visObjectsCnt = _objectsManager->VisibleObjectsCount();
+	auto objectsCnt = _objectsManager->ObjectsCount();
 	ImGui::Text(("Objects drawn: " + std::to_string(visObjectsCnt) + "/" + std::to_string(objectsCnt)).c_str());
 	auto visLights = _lightingManager->lightsInsideFrustum();
 	auto lightsCnt = _lightingManager->lightsCount();
@@ -416,7 +416,7 @@ void MyApp::DrawObjectsList(int& btnId)
 		//for shift spacing
 		static int lastClicked = -1;
 
-		for (int i = 0; i < _objectsManager->objectsCount(); i++)
+		for (int i = 0; i < _objectsManager->ObjectsCount(); i++)
 		{
 			ImGui::PushID(btnId++);
 
@@ -469,7 +469,7 @@ void MyApp::DrawObjectsList(int& btnId)
 						//going from the most index to last
 						for (auto it = _selectedModels.rbegin(); it != _selectedModels.rend(); it++)
 						{
-							if (_objectsManager->deleteObject(*it))
+							if (_objectsManager->DeleteObject(*it))
 							{
 								ClearData();
 							}
@@ -477,7 +477,7 @@ void MyApp::DrawObjectsList(int& btnId)
 					}
 					else
 					{
-						if (_objectsManager->deleteObject(i))
+						if (_objectsManager->DeleteObject(i))
 						{
 							ClearData();
 						}
@@ -1125,9 +1125,27 @@ void MyApp::DrawLODs(int& btnId)
 			}
 			else
 			{
-				ImGui::BeginDisabled(); // disables the selectable but keeps highlight
+				ImVec4 bgColor = isSelected ? ImVec4(0.1f, 0.4f, 0.6f, 1.0f) : ImVec4(0, 0, 0, 0);
+				ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
+				ImGui::PushStyleColor(ImGuiCol_HeaderHovered, bgColor);
+				ImGui::PushStyleColor(ImGuiCol_HeaderActive, bgColor);
+				ImGui::PushStyleColor(ImGuiCol_Header, bgColor);
 				ImGui::Selectable(label.c_str(), isSelected);
-				ImGui::EndDisabled();
+				ImGui::PopStyleColor(4);
+			}
+
+			if (lods.size() > 1)
+			{
+				if (ImGui::BeginPopupContextItem())
+				{
+					ImGui::PushID(btnId++);
+					if (ImGui::Button("delete"))
+					{
+						_objectsManager->DeleteLOD(ri, i);
+					}
+					ImGui::PopID();
+					ImGui::EndPopup();
+				}
 			}
 		}
 		ImGui::EndListBox();
@@ -1181,13 +1199,23 @@ void MyApp::DrawToasts()
 	}
 }
 
+void MyApp::DrawHeader()
+{
+	ImGui::SetNextWindowPos({ mClientWidth / 2.f, 10.f }, 0, { 0.5f, 0.0f });
+	ImGui::SetNextWindowSize({ 300.f, 60.f });
+	ImGui::Begin("##header", nullptr, ImGuiWindowFlags_NoResize);
+	ImGui::Columns(2, "MyColumns", true); // true for borders
+	//fixed lod
+	ImGui::Checkbox("Fixed LOD", &_fixedLOD);
+	ImGui::NextColumn();
+	DrawCameraSpeed();
+	ImGui::End();
+}
+
 void MyApp::DrawCameraSpeed()
 {
-	ImGui::SetNextWindowPos({ mClientWidth / 2.f, 0.f }, ImGuiCond_Once, { 0.f, 0.f });
-
-	ImGui::Begin("Camera info");
-	ImGui::Text(("Speed: " + std::to_string(_cameraSpeed)).c_str());
-	ImGui::End();
+	std::string cameraSpeedStr = std::to_string(_cameraSpeed);
+	ImGui::Text(("Camera speed: " + cameraSpeedStr.substr(0, cameraSpeedStr.find_last_of('.') + 3)).c_str());
 }
 
 void MyApp::DrawImportModal()
@@ -1223,7 +1251,7 @@ void MyApp::DrawImportModal()
 			//merge meshes into one file
 			ModelData data = std::move(GeometryManager::BuildModelGeometry(_modelManager->ParseAsOneObject().get()));
 			_selectedModels.clear();
-			_selectedModels.insert(_objectsManager->addRenderItem(md3dDevice.Get(), std::move(data)));
+			_selectedModels.insert(_objectsManager->AddRenderItem(md3dDevice.Get(), std::move(data)));
 			ImGui::CloseCurrentPopup();
 		}
 
@@ -1236,7 +1264,7 @@ void MyApp::DrawImportModal()
 				ModelData data = std::move(GeometryManager::BuildModelGeometry(model.get()));
 				if (data.lodsData.empty())
 					continue;
-				_selectedModels.insert(_objectsManager->addRenderItem(md3dDevice.Get(), std::move(data)));
+				_selectedModels.insert(_objectsManager->AddRenderItem(md3dDevice.Get(), std::move(data)));
 			}
 			ImGui::CloseCurrentPopup();
 		}
@@ -1288,7 +1316,7 @@ void MyApp::AddModel()
 			//generating it as one mesh
 			ModelData data = GeometryManager::BuildModelGeometry(model.get());
 			_selectedModels.clear();
-			_selectedModels.insert(_objectsManager->addRenderItem(md3dDevice.Get(), std::move(data)));
+			_selectedModels.insert(_objectsManager->AddRenderItem(md3dDevice.Get(), std::move(data)));
 		}
 		CoTaskMemFree(pszFilePath);
 	}
@@ -1306,7 +1334,7 @@ void MyApp::AddLOD()
 			auto lod = _modelManager->ParseAsLODObject();
 			LODData data = { (int)lod.indices.size() / 3, lod.meshes };
 			//generating it as one mesh
-			int LODIdx = _objectsManager->addLOD(md3dDevice.Get(), data, ri);
+			int LODIdx = _objectsManager->AddLOD(md3dDevice.Get(), data, ri);
 			GeometryManager::AddLODGeometry(ri->Name, LODIdx, lod);
 			AddToast("Your LOD was added as LOD" + std::to_string(LODIdx) + "!");
 		}
@@ -1360,7 +1388,7 @@ void MyApp::GBufferPass()
 	_gBuffer->ClearInfo(Colors::Transparent);
 	mCommandList->OMSetRenderTargets(_gBuffer->InfoCount(), _gBuffer->RTVs().data(),
 		false, &_gBuffer->DepthStencilView());
-	_objectsManager->Draw(mCommandList.Get(), mCurrFrameResource, mClientHeight, _isWireframe);
+	_objectsManager->Draw(mCommandList.Get(), mCurrFrameResource, mClientHeight, _isWireframe, _fixedLOD);
 }
 
 void MyApp::LightingPass()

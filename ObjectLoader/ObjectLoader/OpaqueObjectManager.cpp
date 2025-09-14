@@ -270,18 +270,21 @@ void EditableObjectManager::BuildShaders()
 	_wireframePSShader = d3dUtil::CompileShader(L"Shaders\\GBuffer.hlsl", nullptr, "WireframePS", "ps_5_1");
 }
 
-void EditableObjectManager::CountLODOffsets(LODData* lod, int i)
+void EditableObjectManager::CountLODOffsets(LODData* lod)
 {
 	for (int j = 0; j < lod->meshes.size(); j++)
 	{
 		auto& meshData = lod->meshes[j];
-		meshData.cbOffset = i * _cbMeshElementSize;
+		meshData.cbOffset = j * _cbMeshElementSize;
 		meshData.matOffset = meshData.materialIndex * _cbMaterialElementSize;
 	}
 }
 
 void EditableObjectManager::CountLODIndex(EditableRenderItem* ri, float screenHeight)
 {
+	if (ri->lodsData.size() == 1)
+		return;
+
 	auto cameraPos = _camera->GetPosition();
 	BoundingSphere riSphere;
 	riSphere.Center = ri->Bounds.Center;
@@ -330,7 +333,7 @@ void EditableObjectManager::AddObjectToResource(Microsoft::WRL::ComPtr<ID3D12Dev
 		currFrameResource->addOpaqueObjectBuffer(device.Get(), obj->uid, (int)obj->lodsData.size(), (int)obj->materials.size());
 }
 
-int EditableObjectManager::addRenderItem(ID3D12Device* device, ModelData&& modelData)
+int EditableObjectManager::AddRenderItem(ID3D12Device* device, ModelData&& modelData)
 {
 	const std::string& itemName = modelData.croppedName;
 	std::string name(itemName.begin(), itemName.end());
@@ -364,7 +367,7 @@ int EditableObjectManager::addRenderItem(ID3D12Device* device, ModelData&& model
 	for (int i = 0; i < modelRitem->lodsData.size(); i++)
 	{
 		auto& lodData = modelRitem->lodsData[i];
-		CountLODOffsets(&lodData, i);
+		CountLODOffsets(&lodData);
 	}
 
 	for (int i = 0; i < FrameResource::frameResources().size(); ++i)
@@ -388,7 +391,7 @@ int EditableObjectManager::addRenderItem(ID3D12Device* device, ModelData&& model
 	return (int)_objects.size() - 1;
 }
 
-int EditableObjectManager::addLOD(ID3D12Device* device, LODData lod, EditableRenderItem* ri)
+int EditableObjectManager::AddLOD(ID3D12Device* device, LODData lod, EditableRenderItem* ri)
 {
 	int i = 0;
 	for (; i < ri->lodsData.size(); i++)
@@ -396,13 +399,20 @@ int EditableObjectManager::addLOD(ID3D12Device* device, LODData lod, EditableRen
 		if (lod.triangleCount > ri->lodsData[i].triangleCount)
 			break;
 	}
-	CountLODOffsets(&lod, i);
+	CountLODOffsets(&lod);
 
 	ri->lodsData.emplace(ri->lodsData.begin() + i, lod);
 	return i;
 }
 
-bool EditableObjectManager::deleteObject(int selectedObject)
+void EditableObjectManager::DeleteLOD(EditableRenderItem* ri, int index)
+{
+	ri->lodsData.erase(ri->lodsData.begin() + index);
+	ri->currentLODIdx = std::min(ri->currentLODIdx, (int)ri->lodsData.size() - 1);
+	GeometryManager::DeleteLODGeometry(ri->Name, index);
+}
+
+bool EditableObjectManager::DeleteObject(int selectedObject)
 {
 	EditableRenderItem* objectToDelete = _objects[selectedObject].get();
 
@@ -471,7 +481,7 @@ bool EditableObjectManager::deleteObject(int selectedObject)
 	return false;
 }
 
-int EditableObjectManager::objectsCount()
+int EditableObjectManager::ObjectsCount()
 {
 	return (int)_objects.size();
 }
@@ -487,7 +497,7 @@ EditableRenderItem* EditableObjectManager::object(int i)
 	return _objects[i].get();
 }
 
-void EditableObjectManager::Draw(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, float screenHeight, bool isWireframe)
+void EditableObjectManager::Draw(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, float screenHeight, bool isWireframe, bool fixedLOD)
 {
 	if (_objects.size() == 0)
 	{
@@ -506,14 +516,14 @@ void EditableObjectManager::Draw(ID3D12GraphicsCommandList* cmdList, FrameResour
 	cmdList->SetGraphicsRootConstantBufferView(10, passCB->GetGPUVirtualAddress());
 	cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-	DrawObjects(cmdList, currFrameResource, _visibleUntesselatedObjects, _untesselatedObjects, screenHeight);
-	
+	DrawObjects(cmdList, currFrameResource, _visibleUntesselatedObjects, _untesselatedObjects, screenHeight, fixedLOD);
+
 	//draw with tesselation
 	cmdList->SetPipelineState(isWireframe ? _wireframeTesselatedPSO.Get() : _tesselatedPSO.Get());
 
 	cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_3_CONTROL_POINT_PATCHLIST);
 
-	DrawObjects(cmdList, currFrameResource, _visibleTesselatedObjects, _tesselatedObjects, screenHeight);
+	DrawObjects(cmdList, currFrameResource, _visibleTesselatedObjects, _tesselatedObjects, screenHeight, fixedLOD);
 
 	if (_drawDebug)
 	{
@@ -523,13 +533,15 @@ void EditableObjectManager::Draw(ID3D12GraphicsCommandList* cmdList, FrameResour
 	}
 }
 
-void EditableObjectManager::DrawObjects(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, std::vector<uint32_t> indices, std::unordered_map<uint32_t, EditableRenderItem*> objects, float screenHeight)
+void EditableObjectManager::DrawObjects(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, std::vector<uint32_t> indices, std::unordered_map<uint32_t, EditableRenderItem*> objects, 
+	float screenHeight, bool fixedLOD)
 {
 	for (auto& idx : indices)
 	{
 		auto& ri = objects[idx];
 		auto objectCB = currFrameResource->OpaqueObjCB[ri->uid]->Resource();
-		CountLODIndex(ri, screenHeight);
+		if (!fixedLOD)
+			CountLODIndex(ri, screenHeight);
 
 		int curLODIdx = ri->currentLODIdx;
 		MeshGeometry* curLODGeo = ri->Geo->at(curLODIdx).get();
@@ -574,7 +586,7 @@ void EditableObjectManager::DrawAABBs(ID3D12GraphicsCommandList* cmdList, FrameR
 	for (auto& ri : _objects)
 	{
 		auto objectCB = currFrameResource->OpaqueObjCB[ri->uid]->Resource();
-		D3D12_GPU_VIRTUAL_ADDRESS AABBCBAddress = objectCB->GetGPUVirtualAddress() + ri->lodsData.size() * _cbMeshElementSize;
+		D3D12_GPU_VIRTUAL_ADDRESS AABBCBAddress = objectCB->GetGPUVirtualAddress() + ri->lodsData.begin()->meshes.size() * _cbMeshElementSize;
 
 		//draw local lights
 		MeshGeometry* geo = (GeometryManager::geometries()["shapeGeo"].begin())->get();

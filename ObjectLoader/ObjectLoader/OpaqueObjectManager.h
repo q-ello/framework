@@ -10,17 +10,19 @@ public:
 	void UpdateObjectCBs(FrameResource* currFrameResource) override;
 	void SetCamera(Camera* camera);
 	void AddObjectToResource(Microsoft::WRL::ComPtr<ID3D12Device> device, FrameResource* currFrameResource) override;
-	int addRenderItem(ID3D12Device* device, ModelData&& modelData) override;
-	int addLOD(ID3D12Device* device, LODData lod, EditableRenderItem* ri);
-	bool deleteObject(int selectedObject) override;
+	int AddRenderItem(ID3D12Device* device, ModelData&& modelData) override;
+	bool DeleteObject(int selectedObject) override;
+	int AddLOD(ID3D12Device* device, LODData lod, EditableRenderItem* ri);
+	void DeleteLOD(EditableRenderItem* ri, int index);
 
-	int visibleObjectsCount() override { return int(_visibleTesselatedObjects.size() + _visibleUntesselatedObjects.size()); };
-	int objectsCount() override;
+	int VisibleObjectsCount() override { return int(_visibleTesselatedObjects.size() + _visibleUntesselatedObjects.size()); };
+	int ObjectsCount() override;
 
 	std::string objectName(int i) override;
 	EditableRenderItem* object(int i);
-	void Draw(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, float screenHeight, bool isWireframe = false) override;
-	void DrawObjects(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, std::vector<uint32_t> indices, std::unordered_map<uint32_t, EditableRenderItem*> objects, float screenHeight);
+	void Draw(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, float screenHeight, bool isWireframe = false, bool fixedLOD = false);
+	void DrawObjects(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, std::vector<uint32_t> indices, std::unordered_map<uint32_t, EditableRenderItem*> objects, float screenHeight,
+		bool fixedLOD);
 	void DrawAABBs(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource);
 
 private:
@@ -31,7 +33,7 @@ private:
 	void BuildPSO() override;
 	void BuildShaders() override;
 
-	void CountLODOffsets(LODData* lod, int i);
+	void CountLODOffsets(LODData* lod);
 	void CountLODIndex(EditableRenderItem* ri, float screenHeight);
 	float ComputeScreenSize(XMVECTOR& center, float radius, float screenHeight);
 

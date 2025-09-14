@@ -99,6 +99,7 @@ private:
 	void AddToast(const std::string& msg, float lifetime = 3.0f);
 	void DrawToasts();
 
+	void DrawHeader();
 	void DrawCameraSpeed();
 
 	//modals

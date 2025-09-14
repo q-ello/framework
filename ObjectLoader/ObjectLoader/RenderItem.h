@@ -46,7 +46,7 @@ struct LOD
 
 struct LODData
 {
-	int triangleCount;
+	int triangleCount = 0;
 	std::vector<Mesh> meshes;
 };
 

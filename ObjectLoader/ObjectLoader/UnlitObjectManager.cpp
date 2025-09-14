@@ -104,7 +104,7 @@ void UnlitObjectManager::AddObjectToResource(Microsoft::WRL::ComPtr<ID3D12Device
 		currFrameResource->addUnlitObjectBuffer(device.Get(), obj->uid);
 }
 
-int UnlitObjectManager::addRenderItem(ID3D12Device* device, ModelData&& modelData)
+int UnlitObjectManager::AddRenderItem(ID3D12Device* device, ModelData&& modelData)
 {
 	auto renderItem = std::make_unique<UnlitRenderItem>();
 	renderItem->uid = uidCount++;
@@ -129,7 +129,7 @@ int UnlitObjectManager::addRenderItem(ID3D12Device* device, ModelData&& modelDat
 	return (int)_objects.size() - 1;
 }
 
-bool UnlitObjectManager::deleteObject(int selectedObject)
+bool UnlitObjectManager::DeleteObject(int selectedObject)
 {
 	std::string name = _objects[selectedObject]->Name;
 	_objectLoaded[name]--;
@@ -156,7 +156,7 @@ bool UnlitObjectManager::deleteObject(int selectedObject)
 	return false;
 }
 
-int UnlitObjectManager::objectsCount()
+int UnlitObjectManager::ObjectsCount()
 {
 	return (int)_objects.size();
 }

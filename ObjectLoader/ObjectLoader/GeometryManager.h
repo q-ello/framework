@@ -26,6 +26,7 @@ public:
 
 	static void BuildNecessaryGeometry();
 	static ModelData BuildModelGeometry(Model* model);
-	static void AddLODGeometry(std::string name, int lodIdx, LOD lod);
 	static void UnloadModel(const std::string& modelName);
+	static void AddLODGeometry(std::string name, int lodIdx, LOD lod);
+	static void DeleteLODGeometry(std::string name, int lodIdx);
 };

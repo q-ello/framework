@@ -53,13 +53,13 @@ bool ModelManager::ImportObject(WCHAR* filename)
 		return false;
 	}
 
-	_sceneName = _scene->GetShortFilename(s.c_str());
+	_sceneName = std::string(_scene->GetShortFilename(s.c_str())).substr(0, _sceneName.find_last_of('.'));
 	if (_scene->mRootNode->mNumMeshes > 0 || _scene->mRootNode->mNumChildren == 1)
 	{
 		return false;
 	}
 
-	for (int i = 0; i < _scene->mRootNode->mNumChildren; i++)
+	for (unsigned int i = 0; i < _scene->mRootNode->mNumChildren; i++)
 	{
 		aiNode* node = _scene->mRootNode->mChildren[i];
 		if (node->mNumMeshes == 0 && node->mNumChildren == 0)
@@ -229,7 +229,7 @@ std::vector<std::string> ModelManager::NodeMeshNames(aiNode* node)
 int ModelManager::NodeMeshCount(aiNode* node)
 {
 	int meshCount = 0;
-	for (int i = 0; i < node->mNumChildren; i++)
+	for (unsigned int i = 0; i < node->mNumChildren; i++)
 	{
 		meshCount += NodeMeshCount(node->mChildren[i]);
 	}

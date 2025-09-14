@@ -198,6 +198,23 @@ void GeometryManager::AddLODGeometry(std::string name, int lodIdx, LOD lod)
 	auto& geos = geometries()[name];
 
 	geos.emplace(geos.begin() + lodIdx, std::move(geo));
+
+	UploadManager::ExecuteUploadCommandList();
+}
+
+void GeometryManager::DeleteLODGeometry(std::string name, int lodIdx)
+{
+	if (geometries().find(name) == geometries().end())
+	{
+		return;
+	}
+	auto& geos = geometries()[name];
+	if (lodIdx < 0 || lodIdx >= geos.size())
+	{
+		return;
+	}
+	geos.erase(geos.begin() + lodIdx);
+	UploadManager::ExecuteUploadCommandList();
 }
 
 void GeometryManager::UnloadModel(const std::string& modelName)
