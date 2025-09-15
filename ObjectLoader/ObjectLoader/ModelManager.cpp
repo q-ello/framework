@@ -4,7 +4,7 @@
 
 struct LODNameInfo {
 	std::string baseName;
-	int lodIndex;
+	int lodIndex = 0;
 };
 
 LODNameInfo parseLODName(const std::string& nodeName)

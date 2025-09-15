@@ -347,10 +347,10 @@ void MyApp::DrawInterface()
 {
 	int buttonId = 0;
 
-	ImGui::SetNextWindowPos({ 0.f, 0.f }, ImGuiCond_Once, { 0.f, 0.f });
-	ImGui::SetNextWindowSize({ 250.f, 500.f }, ImGuiCond_Once);
+	ImGui::SetNextWindowPos({ 0.f, 0.f }, 0, { 0.f, 0.f });
+	ImGui::SetNextWindowSize({ 250.f, (float)mClientHeight});
 
-	ImGui::Begin("Data");
+	ImGui::Begin("Data", 0, ImGuiWindowFlags_NoResize);
 	ImGui::BeginTabBar("#data");
 	
 	if (ImGui::BeginTabItem("Objects"))
@@ -643,14 +643,14 @@ void MyApp::DrawLocalLightData(int& btnId, int lightIndex)
 
 void MyApp::DrawObjectInfo(int& btnId)
 {
-	ImGui::SetNextWindowPos({ static_cast<float>(mClientWidth) - 300.f, 50.f }, ImGuiCond_Once, { 0.f, 0.f });
-	ImGui::SetNextWindowSize({ 250.f, 350.f }, ImGuiCond_Once);
+	ImGui::SetNextWindowPos({ static_cast<float>(mClientWidth), 0.f }, 0, { 1.f, 0.f });
+	ImGui::SetNextWindowSize({ 250.f, (float)mClientHeight }, 0);
 
 	std::string title = _selectedModels.size() == 1
 		? _objectsManager->object(*_selectedModels.begin())->Name + " Info"
 		: std::to_string(_selectedModels.size()) + " objects selected";
 
-	ImGui::Begin(title.c_str());
+	ImGui::Begin(title.c_str(), 0, ImGuiWindowFlags_NoResize);
 
 	if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen))
 	{
@@ -1141,6 +1141,10 @@ void MyApp::DrawLODs(int& btnId)
 					ImGui::PushID(btnId++);
 					if (ImGui::Button("delete"))
 					{
+						if (i < lods.size() - 1)
+						{
+							AddToast("LODs from " + std::to_string(i + 1) + " to " + std::to_string(lods.size() - 1) + " were shifted up.", 5.0f);
+						}
 						_objectsManager->DeleteLOD(ri, i);
 					}
 					ImGui::PopID();
@@ -1201,7 +1205,7 @@ void MyApp::DrawToasts()
 
 void MyApp::DrawHeader()
 {
-	ImGui::SetNextWindowPos({ mClientWidth / 2.f, 10.f }, 0, { 0.5f, 0.0f });
+	ImGui::SetNextWindowPos({ mClientWidth / 2.f, 0.f }, 0, { 0.5f, 0.0f });
 	ImGui::SetNextWindowSize({ 300.f, 60.f });
 	ImGui::Begin("##header", nullptr, ImGuiWindowFlags_NoResize);
 	ImGui::Columns(2, "MyColumns", true); // true for borders

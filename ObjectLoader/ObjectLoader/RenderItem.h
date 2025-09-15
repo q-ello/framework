@@ -47,7 +47,7 @@ struct LOD
 struct LODData
 {
 	int triangleCount = 0;
-	std::vector<Mesh> meshes;
+	std::vector<Mesh> meshes{};
 };
 
 struct EditableRenderItem : public RenderItem
