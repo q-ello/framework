@@ -1143,7 +1143,12 @@ void MyApp::DrawLODs(int& btnId)
 					{
 						if (i < lods.size() - 1)
 						{
-							AddToast("LODs from " + std::to_string(i + 1) + " to " + std::to_string(lods.size() - 1) + " were shifted up.", 5.0f);
+							std::string toastMessage;
+							if (i == lods.size() - 2)
+								toastMessage = "LOD " + std::to_string(i + 1) + " was shifted up.";
+							else
+								toastMessage = "LODs from " + std::to_string(i + 1) + " to " + std::to_string(lods.size() - 1) + " were shifted up.";
+							AddToast(toastMessage, 5.0f);
 						}
 						_objectsManager->DeleteLOD(ri, i);
 					}
@@ -1174,7 +1179,7 @@ void MyApp::DrawToasts()
 	const float pad = 10.0f;
 	ImVec2 screen = ImGui::GetIO().DisplaySize;
 
-	float y = pad;
+	float y = mClientHeight - pad - 40;
 	for (size_t i = 0; i < _notifications.size(); )
 	{
 		float age = (float)ImGui::GetTime() - _notifications[i].creationTime;
@@ -1186,7 +1191,7 @@ void MyApp::DrawToasts()
 		}
 
 		ImGui::SetNextWindowBgAlpha(alpha); // fade background
-		ImGui::SetNextWindowPos(ImVec2(screen.x - 250 - pad, y), ImGuiCond_Always);
+		ImGui::SetNextWindowPos(ImVec2(screen.x - 500 - pad, y), ImGuiCond_Always);
 
 		ImGui::Begin(("##toast" + std::to_string(i)).c_str(), nullptr,
 			ImGuiWindowFlags_NoDecoration |
@@ -1198,7 +1203,7 @@ void MyApp::DrawToasts()
 		ImGui::TextUnformatted(_notifications[i].message.c_str());
 		ImGui::End();
 
-		y += 40.0f; // stack spacing
+		y -= 40.0f; // stack spacing
 		++i;
 	}
 }
