@@ -76,7 +76,7 @@ bool ModelManager::ImportObject(WCHAR* filename)
 
 		lods = &_modelNodes[lodInfo.baseName];
 
-		if (lods->size() < lodInfo.lodIndex)
+		if (lods->size() < lodInfo.lodIndex + 1)
 			lods->resize(lodInfo.lodIndex + 1);
 
 		lods->at(lodInfo.lodIndex) = node;
@@ -143,7 +143,7 @@ std::unique_ptr<Model> ModelManager::ParseAsOneObject()
 	}
 
 	//or else if there is a lot models then who cares
-    return std::make_unique<Model>(std::vector<aiNode*>{_scene->mRootNode->mChildren[0]}, _sceneName, _scene->mMaterials, _scene->mNumMaterials,
+    return std::make_unique<Model>(std::vector<aiNode*>{_scene->mRootNode}, _sceneName, _scene->mMaterials, _scene->mNumMaterials,
 		_scene->mMeshes, _scene->mTextures, _fileLocation);
 }
 
