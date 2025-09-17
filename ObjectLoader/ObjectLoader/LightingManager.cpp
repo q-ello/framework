@@ -234,7 +234,31 @@ DirectX::XMMATRIX LightingManager::CalculateMainLightView()
 	XMVECTOR up = XMVectorSet(0.f, 1.f, 0.f, 0.f);
 	if (fabsf(XMVectorGetX(XMVector3Dot(XMLoadFloat3(&_mainLightDirection), up))) > 0.9f)
 		up = XMVectorSet(1.f, 0.f, 0.f, 0.f);
-	return DirectX::XMMatrixLookAtLH(XMLoadFloat3(&eye), XMLoadFloat3(&target), up);
+	XMMATRIX lightView = DirectX::XMMatrixLookAtLH(XMLoadFloat3(&eye), XMLoadFloat3(&target), up);
+
+	XMVECTOR frustumCorners[8];
+	for (int i = 0; i < 8; i++)
+		frustumCorners[i] = XMVector3TransformCoord(XMLoadFloat3(&corners[i]), lightView);
+
+	// Step 3: Compute bounds
+	XMVECTOR minV = frustumCorners[0];
+	XMVECTOR maxV = frustumCorners[0];
+	for (int i = 1; i < 8; i++) {
+		minV = XMVectorMin(minV, frustumCorners[i]);
+		maxV = XMVectorMax(maxV, frustumCorners[i]);
+	}
+	XMFLOAT3 minPt, maxPt;
+	XMStoreFloat3(&minPt, minV);
+	XMStoreFloat3(&maxPt, maxV);
+
+	// Step 4: Orthographic projection that fits the frustum
+	XMMATRIX lightProj = XMMatrixOrthographicOffCenterLH(
+		minPt.x, maxPt.x,
+		minPt.y, maxPt.y,
+		minPt.z, maxPt.z
+	);
+
+	return lightView * lightProj;
 }
 
 void LightingManager::DrawDirLight(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, D3D12_GPU_DESCRIPTOR_HANDLE descTable)
