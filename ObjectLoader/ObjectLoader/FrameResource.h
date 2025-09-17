@@ -86,7 +86,7 @@ struct DirectionalLightConstants
     DirectX::XMFLOAT3 gLightColor = { 1.0f, 1.0f, 1.0f };
     int lightsContainingFrustum = 0;
     Light mainSpotlight = Light();
-    DirectX::XMMATRIX mainLightInvView = DirectX::XMMatrixIdentity();
+    DirectX::XMMATRIX mainLightViewProj = DirectX::XMMatrixIdentity();
 };
 
 struct ShadowLightConstants

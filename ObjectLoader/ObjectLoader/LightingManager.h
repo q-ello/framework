@@ -37,7 +37,8 @@ public:
 
 	int LightsCount();
 	LightRenderItem* GetLight(int i);
-	DirectX::XMMATRIX CalculateMainLightView();
+	DirectX::XMMATRIX CalculateMainLightViewProj();
+
 
 	//different draw calls
 	void DrawDirLight(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, D3D12_GPU_DESCRIPTOR_HANDLE descTable);
@@ -83,6 +84,12 @@ public:
 		_camera = camera;
 		_shadowInputLayout = inputLayout;
 	}
+
+	ID3D12DescriptorHeap* ShadowSRVHeap()
+	{
+		return _shadowSRVHeap.Get();
+	}
+
 
 private:
 	ID3D12Device* _device = nullptr;

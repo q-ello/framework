@@ -23,6 +23,9 @@ Texture2D gNormal : register(t1);
 Texture2D gEmissive : register(t2);
 Texture2D gORM : register(t3);
 Texture2D gDepth : register(t4);
+Texture2D gShadowMap : register(t5);
+
+SamplerState gsamPointWrap : register(s0);
 
 static const float PI = 3.14159265f;
 
@@ -46,7 +49,7 @@ cbuffer cbDirLight : register(b1)
     float3 mainLightColor;
     int lightsContainingFrustum;
     Light mainSpotlight;
-    float4x4 mainLightInvView;
+    float4x4 mainLightViewProj;
 };
 
 struct VertexIn
@@ -106,10 +109,9 @@ float3 ComputeWorldPos(float3 texcoord)
     return viewPos.xyz / viewPos.w;
 }
 
-float3 PBRShading(float3 coords, float3 lightDir, float3 lightColor)
+float3 PBRShading(float3 coords, float3 lightDir, float3 lightColor, float3 worldPos)
 {
-    float3 N = normalize(gNormal.Load(coords));
-    float3 worldPos = ComputeWorldPos(coords);
+    float3 N = normalize(gNormal.Load(coords).xyz);
     float3 V = normalize(gEyePosW - worldPos);
     float3 L = normalize(lightDir);
     float3 H = normalize(V + L);
@@ -201,9 +203,19 @@ float4 ComputeLocalLighting(int lightIndex, float3 coords)
     
     float finalIntensity = attenuation * spotFactor * light.intensity;
     
-    float3 finalColor = PBRShading(coords, -normalizedLightDir, light.color) * finalIntensity;
+    float3 finalColor = PBRShading(coords, -normalizedLightDir, light.color, posW) * finalIntensity;
 
     return float4(finalColor, albedo.a);
+}
+
+//compute shadow
+float ShadowFactor(float3 worldPos, float4x4 transformMatrix)
+{
+    float4 clipSpace = mul(float4(worldPos, 1), transformMatrix);
+    float3 ndc = clipSpace.xyz / clipSpace.w;
+    float2 uv = ndc.xy * 0.5f + 0.5f;
+    float shadowMapDepth = gShadowMap.Sample(gsamPointWrap, uv).r;
+    return shadowMapDepth > ndc.z ? 1 : 0.1;
 }
 
 //actually just a full quad pass, not only for directional light
@@ -219,10 +231,12 @@ float4 DirLightingPS(VertexOut pin) : SV_Target
     
     //directional light
     float4 finalColor = float4(0, 0, 0, albedo.a);
+    float3 posW = ComputeWorldPos(coords);
+    
     if (mainLightIsOn)
     {
         //main light intensity is 3
-        finalColor.xyz = PBRShading(coords, -mainLightDirection, mainLightColor) * 3.f;
+        finalColor.xyz = PBRShading(coords, -mainLightDirection, mainLightColor, posW) * 3.f * ShadowFactor(posW, mainLightViewProj);
     }
     
     //spotlight in hand
@@ -231,7 +245,6 @@ float4 DirLightingPS(VertexOut pin) : SV_Target
         float3 mousePosW = ComputeWorldPos(float3(mousePos, 0));
         float3 spotlightDir = mousePosW - gEyePosW;
 
-        float3 posW = ComputeWorldPos(coords);
         float3 currDir = posW - gEyePosW;
         float3 normalizedCurrDir = normalize(currDir);
     
@@ -248,7 +261,7 @@ float4 DirLightingPS(VertexOut pin) : SV_Target
     
                 float finalIntensity = mainSpotlight.intensity * attenuation * spotFactor;
     
-                finalColor.xyz += PBRShading(coords, -normalizedCurrDir, mainSpotlight.color) * finalIntensity;
+                finalColor.xyz += PBRShading(coords, -normalizedCurrDir, mainSpotlight.color, posW) * finalIntensity;
             }
         }
     }

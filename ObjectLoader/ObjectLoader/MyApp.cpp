@@ -1422,7 +1422,7 @@ void MyApp::LightingPass()
 
 	mCommandList->OMSetRenderTargets(1, &CurrentBackBufferView(), true, &_gBuffer->DepthStencilView());
 
-	ID3D12DescriptorHeap* descriptorHeaps[] = { _gBuffer->SRVHeap() };
+	ID3D12DescriptorHeap* descriptorHeaps[] = { _gBuffer->SRVHeap(), _lightingManager->ShadowSRVHeap()};
 	mCommandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
 
 	_lightingManager->DrawDirLight(mCommandList.Get(), mCurrFrameResource, _gBuffer->SRVHeap()->GetGPUDescriptorHandleForHeapStart());

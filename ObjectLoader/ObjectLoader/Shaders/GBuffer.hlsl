@@ -280,12 +280,12 @@ GBufferInfo GBufferPS(VertexOut pin)
     }
     else
     {
-        res.ORM.r = useAOMap ? saturate(gAOMap.Sample(gsamPointClamp, pin.TexC)) : 0.3f;
-        res.ORM.g = useRoughnessMap ? saturate(gRoughnessMap.Sample(gsamPointClamp, pin.TexC)) : roughness;
-        res.ORM.b = useMetallicMap ? saturate(gMetallicMap.Sample(gsamPointClamp, pin.TexC)) : metallic;
+        res.ORM.r = useAOMap ? saturate(gAOMap.Sample(gsamPointClamp, pin.TexC).r) : 0.3f;
+        res.ORM.g = useRoughnessMap ? saturate(gRoughnessMap.Sample(gsamPointClamp, pin.TexC).g) : roughness;
+        res.ORM.b = useMetallicMap ? saturate(gMetallicMap.Sample(gsamPointClamp, pin.TexC).b) : metallic;
         res.ORM.a = 1.f;
     }
-    res.Emissive.xyz = useEmissiveMap ? gEmissiveMap.Sample(gsamPointClamp, pin.TexC) : emissive;
+    res.Emissive.xyz = useEmissiveMap ? gEmissiveMap.Sample(gsamPointClamp, pin.TexC).xyz : emissive;
     res.Emissive.a = emissiveIntensity;
     
     return res;

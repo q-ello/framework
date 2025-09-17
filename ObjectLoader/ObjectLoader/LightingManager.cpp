@@ -78,15 +78,15 @@ void LightingManager::UpdateDirectionalLightCB(FrameResource* currFrameResource)
 	DirectX::XMStoreFloat3(&dirLightCB.mainLightDirection, direction);
 	dirLightCB.mainSpotlight = _handSpotlight;
 	dirLightCB.lightsContainingFrustum = _lightsContainingFrustum.size();
-	auto& mainLightView = CalculateMainLightView();
-	dirLightCB.mainLightInvView = XMMatrixTranspose(XMMatrixInverse(&XMMatrixDeterminant(mainLightView), mainLightView));
+	auto& mainLightViewProj = CalculateMainLightViewProj();
+	dirLightCB.mainLightViewProj = XMMatrixTranspose(mainLightViewProj);
 
 	auto currDirLightCB = currFrameResource->DirLightCB.get();
 	currDirLightCB->CopyData(0, dirLightCB);
 
 	//for shadow pass
 	ShadowLightConstants shadowCB;
-	shadowCB.lightMatrix = XMMatrixTranspose(mainLightView);
+	shadowCB.lightMatrix = XMMatrixTranspose(mainLightViewProj);
 
 	auto currShadowDirLightCB = currFrameResource->ShadowDirLightCB.get();
 	currShadowDirLightCB->CopyData(0, shadowCB);
@@ -212,7 +212,7 @@ LightRenderItem* LightingManager::GetLight(int i)
 	return _localLights[i].get();
 }
 
-DirectX::XMMATRIX LightingManager::CalculateMainLightView()
+DirectX::XMMATRIX LightingManager::CalculateMainLightViewProj()
 {
 	//get the center of a camera frustum
 	DirectX::XMFLOAT3 corners[8];
@@ -273,6 +273,8 @@ void LightingManager::DrawDirLight(ID3D12GraphicsCommandList* cmdList, FrameReso
 
 	cmdList->SetPipelineState(_dirLightPSO.Get());
 	cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	CD3DX12_GPU_DESCRIPTOR_HANDLE tex(_shadowDSVAllocator->GetGpuHandle(_dirLightShadowMap.SRV));
+	cmdList->SetGraphicsRootDescriptorTable(5, tex);
 
 	auto lightingPassCB = currFrameResource->LightingPassCB->Resource();
 	cmdList->SetGraphicsRootConstantBufferView(2, lightingPassCB->GetGPUVirtualAddress());
@@ -398,7 +400,6 @@ void LightingManager::Init(int srvAmount, D3D12_CPU_DESCRIPTOR_HANDLE srvHandle)
 	BuildInputLayout();
 	BuildPSO();
 
-
 	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
 	srvDesc.Format = DXGI_FORMAT_UNKNOWN;
@@ -425,8 +426,11 @@ void LightingManager::BuildRootSignature(int srvAmount)
 	//lighting root signature
 	CD3DX12_DESCRIPTOR_RANGE lightingRange;
 	lightingRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, srvAmount, 0);
+	//shadow map
+	CD3DX12_DESCRIPTOR_RANGE shadowTexTable;
+	shadowTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, srvAmount);
 
-	const int rootParameterCount = 5;
+	const int rootParameterCount = 6;
 
 	CD3DX12_ROOT_PARAMETER lightingSlotRootParameter[rootParameterCount];
 
@@ -435,8 +439,9 @@ void LightingManager::BuildRootSignature(int srvAmount)
 	lightingSlotRootParameter[2].InitAsConstantBufferView(0);
 	lightingSlotRootParameter[3].InitAsConstantBufferView(1);
 	lightingSlotRootParameter[4].InitAsShaderResourceView(1, 1);
+	lightingSlotRootParameter[5].InitAsDescriptorTable(1, &shadowTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
 
-	CD3DX12_ROOT_SIGNATURE_DESC lightingRootSigDesc(rootParameterCount, lightingSlotRootParameter, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+	CD3DX12_ROOT_SIGNATURE_DESC lightingRootSigDesc(rootParameterCount, lightingSlotRootParameter, 1, &TextureManager::GetStaticSamplers().data()[0], D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 
 	ComPtr<ID3DBlob> serializedRootSig = nullptr;
 	ComPtr<ID3DBlob> errorBlob = nullptr;
