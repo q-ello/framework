@@ -107,6 +107,7 @@ private:
 
 	//loading
 	void AddModel();
+	void AddMultipleModels();
 	void AddLOD();
 
 	void InitManagers();

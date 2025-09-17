@@ -34,7 +34,7 @@ LODNameInfo parseLODName(const std::string& nodeName)
 }
 
 
-bool ModelManager::ImportObject(WCHAR* filename)
+int ModelManager::ImportObject(WCHAR* filename)
 {
 	std::wstring ws(filename);
 	_fileLocation = ws.substr(0, ws.find_last_of('\\') + 1);
@@ -50,13 +50,13 @@ bool ModelManager::ImportObject(WCHAR* filename)
 	);
 	if (nullptr == _scene) {
 		MessageBox(0, L"Failed to open file", L"", MB_OK);
-		return false;
+		return 0;
 	}
 
 	_sceneName = std::string(_scene->GetShortFilename(s.c_str())).substr(0, _sceneName.find_last_of('.'));
 	if (_scene->mRootNode->mNumMeshes > 0 || _scene->mRootNode->mNumChildren == 1)
 	{
-		return false;
+		return 1;
 	}
 
 	for (unsigned int i = 0; i < _scene->mRootNode->mNumChildren; i++)
@@ -83,7 +83,7 @@ bool ModelManager::ImportObject(WCHAR* filename)
 	}
 	
 	//check if there are many models, or just one with many lods
-    return _modelNodes.size() > 1;
+    return _modelNodes.size();
 }
 
 bool ModelManager::ImportLODObject(WCHAR* filename, int meshesCount)

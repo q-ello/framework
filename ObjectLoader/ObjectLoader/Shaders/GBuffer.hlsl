@@ -16,7 +16,6 @@ SamplerState gsamAnisotropicWrap : register(s5);
 SamplerState gsamAnisotropicClamp : register(s6);
 SamplerState gsamLinearMirror : register(s7);
 
-
 // Constant data that varies per frame.
 cbuffer cbPerObject : register(b0)
 {

@@ -174,6 +174,8 @@ void GeometryManager::AddLODGeometry(std::string name, int lodIdx, LOD lod)
 	//making a buffer for given lod
 	const UINT vbByteSize = (UINT)lod.vertices.size() * sizeof(Vertex);
 
+	
+	
 	const UINT ibByteSize = (UINT)lod.indices.size() * sizeof(std::int32_t);
 
 	auto geo = std::make_shared<MeshGeometry>();

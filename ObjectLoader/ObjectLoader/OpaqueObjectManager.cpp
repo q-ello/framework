@@ -330,7 +330,7 @@ float EditableObjectManager::ComputeScreenSize(XMVECTOR& center, float radius, f
 void EditableObjectManager::AddObjectToResource(Microsoft::WRL::ComPtr<ID3D12Device> device, FrameResource* currFrameResource)
 {
 	for (auto& obj : _objects)
-		currFrameResource->addOpaqueObjectBuffer(device.Get(), obj->uid, (int)obj->lodsData.size(), (int)obj->materials.size());
+		currFrameResource->addOpaqueObjectBuffer(device.Get(), obj->uid, (int)obj->lodsData.begin()->meshes.size(), (int)obj->materials.size());
 }
 
 int EditableObjectManager::AddRenderItem(ID3D12Device* device, ModelData&& modelData)
@@ -339,7 +339,7 @@ int EditableObjectManager::AddRenderItem(ID3D12Device* device, ModelData&& model
 	std::string name(itemName.begin(), itemName.end());
 	bool isTesselated = modelData.isTesselated;
 
-	auto modelRitem = std::make_unique<EditableRenderItem>();
+	auto modelRitem = std::make_shared<EditableRenderItem>();
 	_objectLoaded[itemName]++;
 	modelRitem->uid = uidCount++;
 	modelRitem->Name = name;
@@ -372,7 +372,7 @@ int EditableObjectManager::AddRenderItem(ID3D12Device* device, ModelData&& model
 
 	for (int i = 0; i < FrameResource::frameResources().size(); ++i)
 	{
-		FrameResource::frameResources()[i]->addOpaqueObjectBuffer(device, modelRitem->uid, modelRitem->lodsData.size() + 1, modelRitem->materials.size());
+		FrameResource::frameResources()[i]->addOpaqueObjectBuffer(device, modelRitem->uid, modelRitem->lodsData.begin()->meshes.size() + 1, modelRitem->materials.size());
 	}
 
 	if (isTesselated)

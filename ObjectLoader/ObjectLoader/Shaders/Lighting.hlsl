@@ -46,6 +46,7 @@ cbuffer cbDirLight : register(b1)
     float3 mainLightColor;
     int lightsContainingFrustum;
     Light mainSpotlight;
+    float4x4 mainLightInvView;
 };
 
 struct VertexIn

@@ -25,8 +25,18 @@ public:
 		bool fixedLOD);
 	void DrawAABBs(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource);
 
+	std::vector< D3D12_INPUT_ELEMENT_DESC > InputLayout() const
+	{
+		return _inputLayout;
+	}
+
+	std::vector<std::shared_ptr<EditableRenderItem>> Objects()
+	{
+		return _objects;
+	}
+
 private:
-	std::vector<std::unique_ptr<EditableRenderItem>> _objects;
+	std::vector<std::shared_ptr<EditableRenderItem>> _objects;
 
 	void BuildInputLayout() override;
 	void BuildRootSignature() override;

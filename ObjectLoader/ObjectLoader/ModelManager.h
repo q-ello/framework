@@ -25,7 +25,7 @@ public:
 	ModelManager& operator=(ModelManager&&) = default;
 
 	//import object and say is there a single model (false) or is there more (true)
-	bool ImportObject(WCHAR* filename);
+	int ImportObject(WCHAR* filename);
 	//import object as lod, true if file is acceptable
 	bool ImportLODObject(WCHAR* filename, int meshesCount);
 	//parse everything as a single mesh even if it is a scene

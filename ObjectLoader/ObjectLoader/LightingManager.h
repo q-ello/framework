@@ -1,9 +1,17 @@
 #pragma once
+#define NOMINMAX
 #include "../../Common/d3dUtil.h"
 #include "FrameResource.h"
 #include "UploadManager.h"
 #include "GeometryManager.h"
 #include "Camera.h"
+
+struct ShadowTexture
+{
+	Microsoft::WRL::ComPtr<ID3D12Resource> Resource;
+	int DSV;
+	int SRV;
+};
 
 struct LightRenderItem
 {
@@ -11,67 +19,83 @@ struct LightRenderItem
 	BoundingSphere Bounds;
 	int NumFramesDirty = gNumFrameResources;
 	int LightIndex = -1;
+	ShadowTexture ShadowMap;
 };
-
 
 class LightingManager
 {
 public:
-	LightingManager();
+	LightingManager(ID3D12Device* device);
 	~LightingManager();
 
-	void addLight(ID3D12Device* device);
-	void deleteLight(int deletedLight);
+	void AddLight(ID3D12Device* device);
+	void DeleteLight(int deletedLight);
 
 	void UpdateDirectionalLightCB(FrameResource* currFrameResource);
-	void UpdateLightCBs(FrameResource* currFrameResource, Camera* camera);
+	void UpdateLightCBs(FrameResource* currFrameResource);
 	void UpdateWorld(int lightIndex);
 
-	int lightsCount();
-	LightRenderItem* light(int i);
+	int LightsCount();
+	LightRenderItem* GetLight(int i);
+	DirectX::XMMATRIX CalculateMainLightView();
 
+	//different draw calls
 	void DrawDirLight(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, D3D12_GPU_DESCRIPTOR_HANDLE descTable);
 	void DrawLocalLights(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource);
 	void DrawDebug(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource);
 	void DrawEmissive(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource);
-	void Init(int srvAmount, ID3D12Device* device, D3D12_CPU_DESCRIPTOR_HANDLE srvHandle);
+	void DrawShadows(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, std::vector<std::shared_ptr<EditableRenderItem>>& objects);
 
-	bool* isMainLightOn()
+	void Init(int srvAmount, D3D12_CPU_DESCRIPTOR_HANDLE srvHandle);
+
+	bool* IsMainLightOn()
 	{
 		return &_isMainLightOn;
 	}
 
-	float* mainLightDirection()
+	float* MainLightDirection()
 	{
 		return &_mainLightDirection.x;
 	}
 
-	float* mainLightColor()
+	float* MainLightColor()
 	{
 		return &_dirLightColor.x;
 	}
 
-	bool* debugEnabled()
+	bool* DebugEnabled()
 	{
 		return &_debugEnabled;
 	}
 
-	Light* mainSpotlight()
+	Light* MainSpotlight()
 	{
 		return &_handSpotlight;
 	}
 
-	int lightsInsideFrustum() const
+	int LightsInsideFrustum() const
 	{
-		return _lightisInsideFrustum;
+		return (int)_lightsInsideFrustum.size();
+	}
+
+	void SetData(Camera* camera, std::vector<D3D12_INPUT_ELEMENT_DESC> inputLayout)
+	{
+		_camera = camera;
+		_shadowInputLayout = inputLayout;
 	}
 
 private:
+	ID3D12Device* _device = nullptr;
+
+	//dirlight data
 	DirectX::XMFLOAT3 _mainLightDirection = { 1.f, -1.f, 0.f };
 	bool _isMainLightOn = true;
 	DirectX::XMFLOAT3 _dirLightColor = { 1.f, 1.f, 1.f };
+	ShadowTexture _dirLightShadowMap;
+
 	bool _debugEnabled = false;
 
+	//locallights data
 	std::vector<std::unique_ptr<LightRenderItem>> _localLights;
 	std::vector<int> FreeLightIndices;
 	int NextAvailableIndex = 0;
@@ -80,29 +104,56 @@ private:
 	//hand spotlight
 	Light _handSpotlight = Light(false);
 
+	Camera* _camera;
+
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> _rootSignature;
 
+	//dirlight pso
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> _dirLightPSO;
 	Microsoft::WRL::ComPtr<ID3DBlob> _dirLightVSShader;
 	Microsoft::WRL::ComPtr<ID3DBlob> _dirLightPSShader;
 
+	//local lights pso
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> _localLightsPSO;
 	std::vector<D3D12_INPUT_ELEMENT_DESC> _localLightsInputLayout;
 	Microsoft::WRL::ComPtr<ID3DBlob> _localLightsVSShader;
 	Microsoft::WRL::ComPtr<ID3DBlob> _localLightsPSShader;
 	Microsoft::WRL::ComPtr<ID3D12Resource> _lightBufferGPU;
 
+	//local lights wireframe pso
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> _localLightsWireframePSO;
 	Microsoft::WRL::ComPtr<ID3DBlob> _localLightsWireframePSShader;
 
+	//emissive pso
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> _emissivePSO;
 	Microsoft::WRL::ComPtr<ID3DBlob> _emissivePSShader;
 
-	int _lightisInsideFrustum = 0;
-	int _lightsContainingFrustum = 0;
+	//shadow pso
+	Microsoft::WRL::ComPtr<ID3D12PipelineState> _shadowPSO;
+	std::vector<D3D12_INPUT_ELEMENT_DESC> _shadowInputLayout;
+	Microsoft::WRL::ComPtr<ID3D12RootSignature> _shadowRootSignature;
+	Microsoft::WRL::ComPtr<ID3DBlob> _shadowVSShader;
 
+	//texture managers
+	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> _shadowSRVHeap;
+	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> _shadowDSVHeap;
+	std::unique_ptr<DescriptorHeapAllocator> _shadowSRVAllocator;
+	std::unique_ptr<DescriptorHeapAllocator> _shadowDSVAllocator;
+
+	std::vector<int> _lightsInsideFrustum{};
+	std::vector<int> _lightsContainingFrustum{};
+
+	//default functions
 	void BuildInputLayout();
 	void BuildRootSignature(int srvAmount);
 	void BuildShaders();
 	void BuildPSO();
+
+	//helpers
+	ShadowTexture CreateShadowTexture();
+	void DeleteShadowTexture(ShadowTexture tex);
+	std::vector<int> FrustumCulling(std::vector<std::shared_ptr<EditableRenderItem>>& objects, DirectX::BoundingBox lightAABB);
+	std::vector<int> FrustumCulling(std::vector<std::shared_ptr<EditableRenderItem>>& objects, DirectX::BoundingSphere lightAABB);
+	BoundingBox CalculateDirLightAABB();
+	void ShadowPass(FrameResource* currFrameResource, ID3D12GraphicsCommandList* cmdList, std::vector<int> visibleObjects, std::vector<std::shared_ptr<EditableRenderItem>>& objects);
 };

@@ -68,6 +68,7 @@ struct Light
     {}
     DirectX::XMMATRIX world = DirectX::XMMatrixIdentity();
     DirectX::XMFLOAT3 position = { 0.0f, 0.0f, 0.0f };
+    //0 - point, 1 - spotlight
     int type = 0;
     DirectX::XMFLOAT3 direction = { 0.0f, -1.0f, 0.0f };
     float radius = 5.f;
@@ -85,6 +86,12 @@ struct DirectionalLightConstants
     DirectX::XMFLOAT3 gLightColor = { 1.0f, 1.0f, 1.0f };
     int lightsContainingFrustum = 0;
     Light mainSpotlight = Light();
+    DirectX::XMMATRIX mainLightInvView = DirectX::XMMatrixIdentity();
+};
+
+struct ShadowLightConstants
+{
+    DirectX::XMMATRIX lightMatrix = DirectX::XMMatrixIdentity();
 };
 
 struct LightIndex
@@ -123,6 +130,8 @@ public:
     std::unique_ptr<UploadBuffer<GBufferPassConstants>> GBufferPassCB = nullptr;
     std::unique_ptr<UploadBuffer<LightingPassConstants>> LightingPassCB = nullptr;
     std::unique_ptr<UploadBuffer<DirectionalLightConstants>> DirLightCB = nullptr;
+    std::unique_ptr<UploadBuffer<ShadowLightConstants>> ShadowDirLightCB = nullptr;
+    std::unique_ptr<UploadBuffer<ShadowLightConstants>> ShadowLocalLightCB = nullptr;
     std::unique_ptr<UploadBuffer<Light>> LocalLightCB = nullptr;
     std::unique_ptr<UploadBuffer<LightIndex>> LightsInsideFrustum = nullptr;
     std::unique_ptr<UploadBuffer<LightIndex>> LightsContainingFrustum = nullptr;

@@ -112,7 +112,7 @@ void MyApp::Update(const GameTimer& gt)
 
 	UpdateObjectCBs(gt);
 	UpdateMainPassCBs(gt);
-	_lightingManager->UpdateLightCBs(mCurrFrameResource, &_camera);
+	_lightingManager->UpdateLightCBs(mCurrFrameResource);
 }
 
 void MyApp::Draw(const GameTimer& gt)
@@ -147,6 +147,7 @@ void MyApp::Draw(const GameTimer& gt)
 	}
 	else
 	{
+		//_lightingManager->DrawShadows(mCommandList.Get(), mCurrFrameResource, _objectsManager->Objects());
 		GBufferPass();
 		LightingPass();
 	}
@@ -246,7 +247,7 @@ void MyApp::OnKeyboardInput(const GameTimer& gt)
 	if (GetAsyncKeyState('E') & 0x8000)
 	{
 		//since view matrix is transponed I'm taking z-column
-		XMFLOAT3 lightDir = (XMFLOAT3)(_lightingManager->mainLightDirection());
+		XMFLOAT3 lightDir = (XMFLOAT3)(_lightingManager->MainLightDirection());
 		XMStoreFloat3(&lightDir, _camera.GetLook());
 	}
 
@@ -389,8 +390,8 @@ void MyApp::DrawInterface()
 	auto visObjectsCnt = _objectsManager->VisibleObjectsCount();
 	auto objectsCnt = _objectsManager->ObjectsCount();
 	ImGui::Text(("Objects drawn: " + std::to_string(visObjectsCnt) + "/" + std::to_string(objectsCnt)).c_str());
-	auto visLights = _lightingManager->lightsInsideFrustum();
-	auto lightsCnt = _lightingManager->lightsCount();
+	auto visLights = _lightingManager->LightsInsideFrustum();
+	auto lightsCnt = _lightingManager->LightsCount();
 	ImGui::Text(("Lights drawn: " + std::to_string(visLights) + "/" + std::to_string(lightsCnt)).c_str());
 	ImGui::End();
 
@@ -494,7 +495,7 @@ void MyApp::DrawObjectsList(int& btnId)
 
 void MyApp::DrawHandSpotlight(int& btnId)
 {
-	auto light = _lightingManager->mainSpotlight();
+	auto light = _lightingManager->MainSpotlight();
 
 	bool lightEnabled = light->active == 1;
 	ImGui::PushID(btnId++);
@@ -525,12 +526,12 @@ void MyApp::DrawLightData(int& btnId)
 {
 	if (ImGui::CollapsingHeader("Directional Light", ImGuiTreeNodeFlags_DefaultOpen))
 	{
-		ImGui::Checkbox("Turn on", _lightingManager->isMainLightOn());
+		ImGui::Checkbox("Turn on", _lightingManager->IsMainLightOn());
 
 		ImGui::Text("Direction");
 		ImGui::SameLine();
 		ImGui::PushID(btnId++);
-		ImGui::DragFloat3("", _lightingManager->mainLightDirection(), 0.1f);
+		ImGui::DragFloat3("", _lightingManager->MainLightDirection(), 0.1f);
 		ImGui::PopID();
 
 		ImVec4 color;
@@ -538,7 +539,7 @@ void MyApp::DrawLightData(int& btnId)
 		ImGui::Text("Color");
 		ImGui::SameLine();
 		ImGui::PushID(btnId++);
-		ImGui::ColorEdit3("", _lightingManager->mainLightColor());
+		ImGui::ColorEdit3("", _lightingManager->MainLightColor());
 		ImGui::PopID();
 	}
 	if (ImGui::CollapsingHeader("Spotlight in hand", ImGuiTreeNodeFlags_DefaultOpen))
@@ -547,13 +548,13 @@ void MyApp::DrawLightData(int& btnId)
 	}
 	if (ImGui::CollapsingHeader("Local lights"))
 	{
-		ImGui::Checkbox("Debug", _lightingManager->debugEnabled());
+		ImGui::Checkbox("Debug", _lightingManager->DebugEnabled());
 		if (ImGui::Button("Add light"))
 		{
-			_lightingManager->addLight(md3dDevice.Get());
+			_lightingManager->AddLight(md3dDevice.Get());
 		}
 		
-		for (int i = 0; i < _lightingManager->lightsCount(); i++)
+		for (int i = 0; i < _lightingManager->LightsCount(); i++)
 		{
 			DrawLocalLightData(btnId, i);
 		}
@@ -569,13 +570,13 @@ void MyApp::DrawLocalLightData(int& btnId, int lightIndex)
 			ImGui::PushID(btnId++);
 			if (ImGui::Button("delete"))
 			{
-				_lightingManager->deleteLight(lightIndex);
+				_lightingManager->DeleteLight(lightIndex);
 			}
 			ImGui::PopID();
 			ImGui::EndPopup();
 			return;
 		}
-		auto light = _lightingManager->light(lightIndex);
+		auto light = _lightingManager->GetLight(lightIndex);
 
 		ImGui::PushID(btnId++);
 		if (ImGui::RadioButton("Point Light", light->LightData.type == 0) && light->LightData.type != 0)
@@ -1266,15 +1267,7 @@ void MyApp::DrawImportModal()
 
 		if (ImGui::Button("Import as separate objects"))
 		{
-			_selectedModels.clear();
-
-			for (auto& model : _modelManager->ParseScene())
-			{
-				ModelData data = std::move(GeometryManager::BuildModelGeometry(model.get()));
-				if (data.lodsData.empty())
-					continue;
-				_selectedModels.insert(_objectsManager->AddRenderItem(md3dDevice.Get(), std::move(data)));
-			}
+			AddMultipleModels();
 			ImGui::CloseCurrentPopup();
 		}
 		if (ImGui::Button("Cancel"))
@@ -1315,11 +1308,12 @@ void MyApp::AddModel()
 	PWSTR pszFilePath;
 	if (BasicUtil::TryToOpenFile(L"3D Object", L"*.obj;*.fbx;*.glb", pszFilePath))
 	{
-		if (_modelManager->ImportObject(pszFilePath))
+		int modelCount = _modelManager->ImportObject(pszFilePath);
+		if (modelCount > 1 && modelCount < 20)
 		{
 			ImGui::OpenPopup("Multiple meshes");
 		}
-		else
+		else if (modelCount == 1)
 		{
 			auto model = _modelManager->ParseAsOneObject();
 			//generating it as one mesh
@@ -1327,7 +1321,24 @@ void MyApp::AddModel()
 			_selectedModels.clear();
 			_selectedModels.insert(_objectsManager->AddRenderItem(md3dDevice.Get(), std::move(data)));
 		}
+		else if (modelCount >= 20)
+		{
+			AddMultipleModels();
+		}
 		CoTaskMemFree(pszFilePath);
+	}
+}
+
+void MyApp::AddMultipleModels()
+{
+	_selectedModels.clear();
+
+	for (auto& model : _modelManager->ParseScene())
+	{
+		ModelData data = std::move(GeometryManager::BuildModelGeometry(model.get()));
+		if (data.lodsData.empty())
+			continue;
+		_selectedModels.insert(_objectsManager->AddRenderItem(md3dDevice.Get(), std::move(data)));
 	}
 }
 
@@ -1384,8 +1395,9 @@ void MyApp::InitManagers()
 	_gridManager = std::make_unique<UnlitObjectManager>(md3dDevice.Get());
 	_gridManager->Init();
 	
-	_lightingManager = std::make_unique<LightingManager>();
-	_lightingManager->Init(_gBuffer->InfoCount(false), md3dDevice.Get(), _gBuffer->lightingHandle());
+	_lightingManager = std::make_unique<LightingManager>(md3dDevice.Get());
+	_lightingManager->SetData(&_camera, _objectsManager->InputLayout());
+	_lightingManager->Init(_gBuffer->InfoCount(false), _gBuffer->lightingHandle());
 }
 
 void MyApp::GBufferPass()
@@ -1415,12 +1427,12 @@ void MyApp::LightingPass()
 
 	_lightingManager->DrawDirLight(mCommandList.Get(), mCurrFrameResource, _gBuffer->SRVHeap()->GetGPUDescriptorHandleForHeapStart());
 
-	if (_lightingManager->lightsCount() > 0)
+	if (_lightingManager->LightsCount() > 0)
 	{
 		_gBuffer->ChangeDSVState(D3D12_RESOURCE_STATE_DEPTH_READ);
 		_lightingManager->DrawLocalLights(mCommandList.Get(), mCurrFrameResource);
 
-		if (*_lightingManager->debugEnabled())
+		if (*_lightingManager->DebugEnabled())
 		{
 			_lightingManager->DrawDebug(mCommandList.Get(), mCurrFrameResource);
 		}
