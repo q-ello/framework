@@ -236,7 +236,8 @@ float4 DirLightingPS(VertexOut pin) : SV_Target
     if (mainLightIsOn)
     {
         //main light intensity is 3
-        finalColor.xyz = PBRShading(coords, -mainLightDirection, mainLightColor, posW) * 3.f * ShadowFactor(posW, mainLightViewProj);
+        finalColor.xyz = PBRShading(coords, -mainLightDirection, mainLightColor, posW) * 3.f;
+        //finalColor.xyz = PBRShading(coords, -mainLightDirection, mainLightColor, posW) * 3.f * ShadowFactor(posW, mainLightViewProj);
     }
     
     //spotlight in hand

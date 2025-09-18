@@ -452,7 +452,9 @@ bool D3DApp::InitDirect3D()
 	CreateCommandObjects();
     CreateSwapChain();
     CreateRtvAndDsvDescriptorHeaps();
-
+	
+	UploadManager::InitUploadCmdList(md3dDevice.Get(), mCommandQueue);
+	TextureManager::Init(md3dDevice.Get());
 	_gBuffer = std::make_unique<GBuffer>(md3dDevice.Get(), mCommandList.Get(), mClientWidth, mClientHeight);
 
 	return true;

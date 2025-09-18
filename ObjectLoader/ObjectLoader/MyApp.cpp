@@ -26,8 +26,6 @@ bool MyApp::Initialize()
 	if (!D3DApp::Initialize())
 		return false;
 
-	UploadManager::InitUploadCmdList(md3dDevice.Get(), mCommandQueue);
-
 	// Reset the command list to prep for initialization commands.
 	ThrowIfFailed(mCommandList->Reset(mDirectCmdListAlloc.Get(), nullptr));
 
@@ -1388,7 +1386,6 @@ void MyApp::ClearData()
 
 void MyApp::InitManagers()
 {
-	TextureManager::Init(md3dDevice.Get());
 	_objectsManager = std::make_unique<EditableObjectManager>(md3dDevice.Get());
 	_objectsManager->Init();
 	_objectsManager->SetCamera(&_camera);
@@ -1397,7 +1394,7 @@ void MyApp::InitManagers()
 	
 	_lightingManager = std::make_unique<LightingManager>(md3dDevice.Get());
 	_lightingManager->SetData(&_camera, _objectsManager->InputLayout());
-	_lightingManager->Init(_gBuffer->InfoCount(false), _gBuffer->lightingHandle());
+	_lightingManager->Init(_gBuffer->InfoCount(false));
 }
 
 void MyApp::GBufferPass()
@@ -1422,10 +1419,10 @@ void MyApp::LightingPass()
 
 	mCommandList->OMSetRenderTargets(1, &CurrentBackBufferView(), true, &_gBuffer->DepthStencilView());
 
-	ID3D12DescriptorHeap* descriptorHeaps[] = { _gBuffer->SRVHeap(), _lightingManager->ShadowSRVHeap()};
+	ID3D12DescriptorHeap* descriptorHeaps[] = { TextureManager::srvDescriptorHeap.Get()};
 	mCommandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
 
-	_lightingManager->DrawDirLight(mCommandList.Get(), mCurrFrameResource, _gBuffer->SRVHeap()->GetGPUDescriptorHandleForHeapStart());
+	_lightingManager->DrawDirLight(mCommandList.Get(), mCurrFrameResource, _gBuffer->SRVGPUHandle());
 
 	if (_lightingManager->LightsCount() > 0)
 	{

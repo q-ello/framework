@@ -1,5 +1,6 @@
 #pragma once
 #include "d3dUtil.h"
+#include "../ObjectLoader/ObjectLoader/TextureManager.h"
 
 enum class GBufferInfo
 {
@@ -15,14 +16,13 @@ struct GBufferTexture
 {
 	Microsoft::WRL::ComPtr<ID3D12Resource> Resource = nullptr;
 	D3D12_CPU_DESCRIPTOR_HANDLE RtvHandle = {};
-	D3D12_CPU_DESCRIPTOR_HANDLE SrvHandle = {};
+	int SrvIndex = -1;
 	D3D12_RESOURCE_STATES prevState = D3D12_RESOURCE_STATE_COMMON;
 
 	void Reset()
 	{
 		Resource.Reset();
 		RtvHandle.ptr = 0;
-		SrvHandle.ptr = 0;
 	}
 };
 
@@ -34,7 +34,7 @@ public:
 	//onresize
 	void OnResize(int width, int height);
 
-	void CreateGBufferTexture(int i, CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHeapHandle, CD3DX12_CPU_DESCRIPTOR_HANDLE srvHeapHandle,
+	void CreateGBufferTexture(int i, CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHeapHandle, D3D12_CPU_DESCRIPTOR_HANDLE srvHeapHandle,
 		CD3DX12_CPU_DESCRIPTOR_HANDLE dsvHeapHandle);
 
 	D3D12_CPU_DESCRIPTOR_HANDLE DepthStencilView();
@@ -51,11 +51,6 @@ public:
 
 	std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> RTVs() const;
 
-	ID3D12DescriptorHeap* SRVHeap()
-	{
-		return _infoSRVHeap.Get();
-	}
-
 	static constexpr DXGI_FORMAT infoFormats[(int)GBufferInfo::Count] = {
 	DXGI_FORMAT_R8G8B8A8_UNORM,			// Diffuse
 	DXGI_FORMAT_R16G16B16A16_FLOAT,		// Normals
@@ -64,9 +59,9 @@ public:
 	DXGI_FORMAT_R24G8_TYPELESS,         // Depth
 	};
 
-	D3D12_CPU_DESCRIPTOR_HANDLE lightingHandle() const
+	D3D12_GPU_DESCRIPTOR_HANDLE SRVGPUHandle() const
 	{
-		return _srvHandleForLighting;
+		return TextureManager::srvHeapAllocator->GetGpuHandle(_info[0].SrvIndex);
 	}
 
 private:
@@ -79,9 +74,7 @@ private:
 	GBufferTexture _info[(int)GBufferInfo::Count];
 
 	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> _infoRTVHeap;
-	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> _infoSRVHeap;
 	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> _infoDSVHeap;
-	D3D12_CPU_DESCRIPTOR_HANDLE _srvHandleForLighting;
 
 	Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> _cmdList;
 

@@ -6,15 +6,6 @@ using namespace DirectX;
 LightingManager::LightingManager(ID3D12Device* device)
 {
 	_device = device;
-	//Create the SRV heap.
-	D3D12_DESCRIPTOR_HEAP_DESC srvHeapDesc = {};
-	srvHeapDesc.NumDescriptors = 513;
-
-	srvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-	srvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-	ThrowIfFailed(_device->CreateDescriptorHeap(&srvHeapDesc, IID_PPV_ARGS(&_shadowSRVHeap)));
-
-	_shadowSRVAllocator = std::make_unique<DescriptorHeapAllocator>(_shadowSRVHeap.Get(), _device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV), srvHeapDesc.NumDescriptors);
 
 	//create dsv
 	D3D12_DESCRIPTOR_HEAP_DESC dsvHeapDesc = {};
@@ -381,35 +372,16 @@ void LightingManager::DrawShadows(ID3D12GraphicsCommandList* cmdList, FrameResou
 	}
 }
 
-void LightingManager::Init(int srvAmount, D3D12_CPU_DESCRIPTOR_HANDLE srvHandle)
+void LightingManager::Init(int srvAmount)
 {
 	// Create buffer on GPU
 	CD3DX12_HEAP_PROPERTIES defaultHeap(D3D12_HEAP_TYPE_DEFAULT);
 	CD3DX12_RESOURCE_DESC bufferDesc = CD3DX12_RESOURCE_DESC::Buffer(sizeof(Light) * MaxLights);
 
-	_device->CreateCommittedResource(
-		&defaultHeap,
-		D3D12_HEAP_FLAG_NONE,
-		&bufferDesc,
-		D3D12_RESOURCE_STATE_COPY_DEST,
-		nullptr,
-		IID_PPV_ARGS(&_lightBufferGPU));
-
 	BuildRootSignature(srvAmount);
 	BuildShaders();
 	BuildInputLayout();
 	BuildPSO();
-
-	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
-	srvDesc.Format = DXGI_FORMAT_UNKNOWN;
-	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-	srvDesc.Buffer.FirstElement = 0;
-	srvDesc.Buffer.NumElements = MaxLights;
-	srvDesc.Buffer.StructureByteStride = sizeof(Light);
-	srvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
-
-	_device->CreateShaderResourceView(_lightBufferGPU.Get(), &srvDesc, srvHandle);
 }
 
 void LightingManager::BuildInputLayout()
@@ -644,8 +616,9 @@ ShadowTexture LightingManager::CreateShadowTexture()
 	shadowMap.DSV = dsvIndex;
 
 	//create SRV
-	UINT srvIndex = _shadowSRVAllocator.get()->Allocate();
-	D3D12_CPU_DESCRIPTOR_HANDLE srvHandle = _shadowSRVAllocator.get()->GetCpuHandle(srvIndex);
+	auto& allocator = TextureManager::srvHeapAllocator;
+	UINT srvIndex = allocator->Allocate();
+	D3D12_CPU_DESCRIPTOR_HANDLE srvHandle = allocator->GetCpuHandle(srvIndex);
 
 	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
@@ -666,7 +639,7 @@ void LightingManager::DeleteShadowTexture(ShadowTexture tex)
 	UploadManager::Flush();
 	tex.Resource.ReleaseAndGetAddressOf();
 	_shadowDSVAllocator->Free(tex.DSV);
-	_shadowSRVAllocator->Free(tex.SRV);
+	TextureManager::srvHeapAllocator->Free(tex.SRV);
 }
 
 std::vector<int> LightingManager::FrustumCulling(std::vector<std::shared_ptr<EditableRenderItem>>& objects, DirectX::BoundingBox lightAABB)

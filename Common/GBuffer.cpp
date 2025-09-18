@@ -19,13 +19,6 @@ GBuffer::GBuffer(ID3D12Device* device, ID3D12GraphicsCommandList* cmdList, int w
 	ThrowIfFailed(_device->CreateDescriptorHeap(
 		&rtvHeapDesc, IID_PPV_ARGS(_infoRTVHeap.GetAddressOf())));
 
-	D3D12_DESCRIPTOR_HEAP_DESC srvHeapDesc = rtvHeapDesc;
-	srvHeapDesc.NumDescriptors = (int)GBufferInfo::Count + 1;
-	srvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-	srvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-	ThrowIfFailed(_device->CreateDescriptorHeap(
-		&srvHeapDesc, IID_PPV_ARGS(_infoSRVHeap.GetAddressOf())));
-
 	D3D12_DESCRIPTOR_HEAP_DESC dsvHeapDesc{};
 	dsvHeapDesc.NumDescriptors = 1;  // Only one depth-stencil view
 	dsvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
@@ -33,6 +26,13 @@ GBuffer::GBuffer(ID3D12Device* device, ID3D12GraphicsCommandList* cmdList, int w
 	dsvHeapDesc.NodeMask = 0;
 	ThrowIfFailed(_device->CreateDescriptorHeap(
 		&dsvHeapDesc, IID_PPV_ARGS(_infoDSVHeap.GetAddressOf())));
+
+	DescriptorHeapAllocator* srvHeapAllocator = TextureManager::srvHeapAllocator.get();
+
+	for (int i = 0; i < (int)GBufferInfo::Count; i++)
+	{
+		_info[i].SrvIndex = srvHeapAllocator->Allocate();
+	}
 }
 
 GBuffer::~GBuffer()
@@ -52,23 +52,21 @@ void GBuffer::OnResize(int width, int height)
 		tex.Reset();
 
 	CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(_infoRTVHeap->GetCPUDescriptorHandleForHeapStart());
-	CD3DX12_CPU_DESCRIPTOR_HANDLE srvHandle(_infoSRVHeap->GetCPUDescriptorHandleForHeapStart());
 	CD3DX12_CPU_DESCRIPTOR_HANDLE dsvHandle(_infoDSVHeap->GetCPUDescriptorHandleForHeapStart());
+
+	DescriptorHeapAllocator* srvHeapAllocator = TextureManager::srvHeapAllocator.get();
 
 	for (int i = 0; i < (int)GBufferInfo::Count; i++)
 	{
-		CreateGBufferTexture(i, rtvHandle, srvHandle, dsvHandle);
-		srvHandle.Offset(1, _srvDescriptorSize);
+		CreateGBufferTexture(i, rtvHandle, srvHeapAllocator->GetCpuHandle(_info[i].SrvIndex), dsvHandle);
 		if (i == (int)GBufferInfo::Depth)
 			dsvHandle.Offset(1, _dsvDescriptorSize);
 		else
 			rtvHandle.Offset(1, _rtvDescriptorSize);
 	}
-
-	_srvHandleForLighting = srvHandle;
 }
 
-void GBuffer::CreateGBufferTexture(int i, CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHeapHandle, CD3DX12_CPU_DESCRIPTOR_HANDLE srvHeapHandle,
+void GBuffer::CreateGBufferTexture(int i, CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHeapHandle, D3D12_CPU_DESCRIPTOR_HANDLE srvHeapHandle,
 	CD3DX12_CPU_DESCRIPTOR_HANDLE dsvHeapHandle)
 {
 	bool isDSV = i == (int)GBufferInfo::Depth;
@@ -139,7 +137,6 @@ void GBuffer::CreateGBufferTexture(int i, CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHeapH
 	_device->CreateShaderResourceView(_info[i].Resource.Get(), &srvDesc, srvHeapHandle);
 
 	_info[i].RtvHandle = isDSV ? dsvHeapHandle : rtvHeapHandle;
-	_info[i].SrvHandle = srvHeapHandle;
 }
 
 D3D12_CPU_DESCRIPTOR_HANDLE GBuffer::DepthStencilView()

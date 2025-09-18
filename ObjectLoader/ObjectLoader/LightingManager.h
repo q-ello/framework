@@ -47,7 +47,7 @@ public:
 	void DrawEmissive(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource);
 	void DrawShadows(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, std::vector<std::shared_ptr<EditableRenderItem>>& objects);
 
-	void Init(int srvAmount, D3D12_CPU_DESCRIPTOR_HANDLE srvHandle);
+	void Init(int srvAmount);
 
 	bool* IsMainLightOn()
 	{
@@ -85,12 +85,6 @@ public:
 		_shadowInputLayout = inputLayout;
 	}
 
-	ID3D12DescriptorHeap* ShadowSRVHeap()
-	{
-		return _shadowSRVHeap.Get();
-	}
-
-
 private:
 	ID3D12Device* _device = nullptr;
 
@@ -125,7 +119,6 @@ private:
 	std::vector<D3D12_INPUT_ELEMENT_DESC> _localLightsInputLayout;
 	Microsoft::WRL::ComPtr<ID3DBlob> _localLightsVSShader;
 	Microsoft::WRL::ComPtr<ID3DBlob> _localLightsPSShader;
-	Microsoft::WRL::ComPtr<ID3D12Resource> _lightBufferGPU;
 
 	//local lights wireframe pso
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> _localLightsWireframePSO;
@@ -142,9 +135,7 @@ private:
 	Microsoft::WRL::ComPtr<ID3DBlob> _shadowVSShader;
 
 	//texture managers
-	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> _shadowSRVHeap;
 	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> _shadowDSVHeap;
-	std::unique_ptr<DescriptorHeapAllocator> _shadowSRVAllocator;
 	std::unique_ptr<DescriptorHeapAllocator> _shadowDSVAllocator;
 
 	std::vector<int> _lightsInsideFrustum{};
