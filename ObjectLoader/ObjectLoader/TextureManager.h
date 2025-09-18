@@ -18,7 +18,7 @@ public:
 
 	static void Init(ID3D12Device* device);
 	static std::array<const CD3DX12_STATIC_SAMPLER_DESC, 8> GetStaticSamplers();
-	static const CD3DX12_STATIC_SAMPLER_DESC GetShadowSampler();
+	static std::array<const CD3DX12_STATIC_SAMPLER_DESC, 2> GetShadowSamplers();
 	static std::unique_ptr<DescriptorHeapAllocator> srvHeapAllocator;
 	static Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> srvDescriptorHeap;
 private:

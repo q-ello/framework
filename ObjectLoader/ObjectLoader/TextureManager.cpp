@@ -196,7 +196,7 @@ std::array<const CD3DX12_STATIC_SAMPLER_DESC, 8> TextureManager::GetStaticSample
 		anisotropicWrap, anisotropicClamp, linearMirror };
 }
 
-const CD3DX12_STATIC_SAMPLER_DESC TextureManager::GetShadowSampler()
+std::array<const CD3DX12_STATIC_SAMPLER_DESC, 2> TextureManager::GetShadowSamplers()
 {
 	const CD3DX12_STATIC_SAMPLER_DESC shadow(
 		0, // shaderRegister (e.g. s1)
@@ -212,7 +212,14 @@ const CD3DX12_STATIC_SAMPLER_DESC TextureManager::GetShadowSampler()
 		D3D12_FLOAT32_MAX,                 // maxLOD
 		D3D12_SHADER_VISIBILITY_PIXEL);    // visibility (or ALL);
 
-	return shadow;
+	const CD3DX12_STATIC_SAMPLER_DESC pointClamp(
+		1, // shaderRegister
+		D3D12_FILTER_MIN_MAG_MIP_POINT, // filter
+		D3D12_TEXTURE_ADDRESS_MODE_CLAMP,  // addressU
+		D3D12_TEXTURE_ADDRESS_MODE_CLAMP,  // addressV
+		D3D12_TEXTURE_ADDRESS_MODE_CLAMP); // addressW
+
+	return { shadow, pointClamp };
 }
 
 std::unordered_map<std::wstring, UINT>& TextureManager::_texIndices()

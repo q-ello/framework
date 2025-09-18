@@ -26,6 +26,7 @@ Texture2D gDepth : register(t4);
 Texture2D gShadowMap : register(t5);
 
 SamplerComparisonState gsamShadow : register(s0);
+SamplerState gsamLinear : register(s1);
 
 static const float PI = 3.14159265f;
 
@@ -98,11 +99,9 @@ float3 FresnelSchlick(float cosTheta, float3 F0)
 }
 
 
-float3 ComputeWorldPos(float3 texcoord)
+float3 ComputeWorldPos(float2 uv)
 {
-    float depth = gDepth.Load(texcoord).r;
-    
-    float2 uv = (texcoord.xy - 0.5f) / gRTSize;
+    float depth = gDepth.SampleLevel(gsamLinear, uv, 0).r;
     
     float4 ndc = float4(uv.x * 2.f - 1.f, 1.f - uv.y * 2.f, depth, 1.0f);
     float4 viewPos = mul(ndc, gInvViewProj);
@@ -175,7 +174,7 @@ float4 ComputeLocalLighting(int lightIndex, float3 coords)
     
     float3 normal = gNormal.Load(coords).xyz;
     
-    float3 posW = ComputeWorldPos(coords);
+    float3 posW = ComputeWorldPos(coords.xy / gRTSize);
     
     float3 lightDir = posW - light.position;
     float3 normalizedLightDir = normalize(lightDir);
@@ -235,7 +234,7 @@ float4 DirLightingPS(VertexOut pin) : SV_Target
     
     //directional light
     float4 finalColor = float4(0, 0, 0, albedo.a);
-    float3 posW = ComputeWorldPos(coords);
+    float3 posW = ComputeWorldPos(coords.xy / gRTSize);
     
     if (mainLightIsOn)
     {
@@ -246,7 +245,7 @@ float4 DirLightingPS(VertexOut pin) : SV_Target
     //spotlight in hand
     if (mainSpotlight.active == 1)
     {
-        float3 mousePosW = ComputeWorldPos(float3(mousePos, 0));
+        float3 mousePosW = ComputeWorldPos(float3(mousePos, 0).xy / gRTSize);
         float3 spotlightDir = mousePosW - gEyePosW;
 
         float3 currDir = posW - gEyePosW;
