@@ -9,8 +9,8 @@
 struct ShadowTexture
 {
 	Microsoft::WRL::ComPtr<ID3D12Resource> Resource;
-	int DSV;
-	int SRV;
+	int DSV = -1;
+	int SRV = -1;
 };
 
 struct LightRenderItem
@@ -93,6 +93,7 @@ private:
 	bool _isMainLightOn = true;
 	DirectX::XMFLOAT3 _dirLightColor = { 1.f, 1.f, 1.f };
 	ShadowTexture _dirLightShadowMap;
+	DirectX::XMMATRIX _mainLightView;
 
 	bool _debugEnabled = false;
 

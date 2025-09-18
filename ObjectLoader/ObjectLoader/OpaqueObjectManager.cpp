@@ -21,6 +21,7 @@ void EditableObjectManager::UpdateObjectCBs(FrameResource* currFrameResource)
 		XMMATRIX translation = XMMatrixTranslationFromVector(XMLoadFloat3(&ri->transform[BasicUtil::EnumIndex(Transform::Translation)]));
 
 		XMMATRIX world = scale * rotation * translation;
+		ri->world = world;
 		//updating object data
 		if (ri->NumFramesDirty > 0)
 		{
@@ -291,11 +292,7 @@ void EditableObjectManager::CountLODIndex(EditableRenderItem* ri, float screenHe
 	riSphere.Radius = XMVectorGetX(XMVector3Length(XMLoadFloat3(&ri->Bounds.Extents)));
 
 	BoundingSphere worldSphere;
-	XMMATRIX scale = XMMatrixScalingFromVector(XMLoadFloat3(&ri->transform[BasicUtil::EnumIndex(Transform::Scale)]));
-	XMMATRIX rotation = XMMatrixRotationRollPitchYawFromVector(XMLoadFloat3(&ri->transform[BasicUtil::EnumIndex(Transform::Rotation)]) * XM_PI / 180.f);
-	XMMATRIX translation = XMMatrixTranslationFromVector(XMLoadFloat3(&ri->transform[BasicUtil::EnumIndex(Transform::Translation)]));
-	XMMATRIX world = scale * rotation * translation;
-	riSphere.Transform(worldSphere, world);
+	riSphere.Transform(worldSphere, ri->world);
 	XMVECTOR worldPos = XMLoadFloat3(&worldSphere.Center);
 
 	float size = ComputeScreenSize(worldPos, worldSphere.Radius, screenHeight);

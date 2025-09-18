@@ -25,7 +25,7 @@ Texture2D gORM : register(t3);
 Texture2D gDepth : register(t4);
 Texture2D gShadowMap : register(t5);
 
-SamplerState gsamPointWrap : register(s0);
+SamplerComparisonState gsamShadow : register(s0);
 
 static const float PI = 3.14159265f;
 
@@ -102,7 +102,7 @@ float3 ComputeWorldPos(float3 texcoord)
 {
     float depth = gDepth.Load(texcoord).r;
     
-    float2 uv = texcoord.xy / gRTSize;
+    float2 uv = (texcoord.xy - 0.5f) / gRTSize;
     
     float4 ndc = float4(uv.x * 2.f - 1.f, 1.f - uv.y * 2.f, depth, 1.0f);
     float4 viewPos = mul(ndc, gInvViewProj);
@@ -214,8 +214,12 @@ float ShadowFactor(float3 worldPos, float4x4 transformMatrix)
     float4 clipSpace = mul(float4(worldPos, 1), transformMatrix);
     float3 ndc = clipSpace.xyz / clipSpace.w;
     float2 uv = ndc.xy * 0.5f + 0.5f;
-    float shadowMapDepth = gShadowMap.Sample(gsamPointWrap, uv).r;
-    return shadowMapDepth > ndc.z ? 1 : 0.1;
+    //damn you flipping
+    uv.y = 1 - uv.y;
+    
+    float depth = ndc.z - 0.005f;
+    float shadow = gShadowMap.SampleCmpLevelZero(gsamShadow, uv, depth);
+    return lerp(0.2f, 1.f, shadow);
 }
 
 //actually just a full quad pass, not only for directional light
@@ -236,8 +240,7 @@ float4 DirLightingPS(VertexOut pin) : SV_Target
     if (mainLightIsOn)
     {
         //main light intensity is 3
-        finalColor.xyz = PBRShading(coords, -mainLightDirection, mainLightColor, posW) * 3.f;
-        //finalColor.xyz = PBRShading(coords, -mainLightDirection, mainLightColor, posW) * 3.f * ShadowFactor(posW, mainLightViewProj);
+        finalColor.xyz = PBRShading(coords, -mainLightDirection, mainLightColor, posW) * 3.f * ShadowFactor(posW, mainLightViewProj);
     }
     
     //spotlight in hand

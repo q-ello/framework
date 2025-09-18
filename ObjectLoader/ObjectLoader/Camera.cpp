@@ -164,6 +164,11 @@ XMMATRIX Camera::GetProj()const
 	return XMLoadFloat4x4(&_proj);
 }
 
+DirectX::XMMATRIX Camera::GetInvView() const
+{
+	return _invView;
+}
+
 
 XMFLOAT4X4 Camera::GetView4x4f()const
 {
@@ -269,6 +274,8 @@ void Camera::UpdateViewMatrix()
 		_view(3, 3) = 1.0f;
 
 		mViewDirty = false;
+
+		_invView = XMMatrixInverse(&XMMatrixDeterminant(GetView()), GetView());
 	}
 }
 

@@ -60,6 +60,7 @@ struct EditableRenderItem : public RenderItem
 	std::vector<LODData> lodsData;
 	int currentLODIdx = 0;
 	bool isTesselated = false;
+	DirectX::XMMATRIX world = DirectX::XMMatrixIdentity();
 };
 
 struct UnlitRenderItem : public RenderItem

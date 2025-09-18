@@ -196,6 +196,25 @@ std::array<const CD3DX12_STATIC_SAMPLER_DESC, 8> TextureManager::GetStaticSample
 		anisotropicWrap, anisotropicClamp, linearMirror };
 }
 
+const CD3DX12_STATIC_SAMPLER_DESC TextureManager::GetShadowSampler()
+{
+	const CD3DX12_STATIC_SAMPLER_DESC shadow(
+		0, // shaderRegister (e.g. s1)
+		D3D12_FILTER_COMPARISON_MIN_MAG_LINEAR_MIP_POINT, // filter
+		D3D12_TEXTURE_ADDRESS_MODE_CLAMP,  // addressU
+		D3D12_TEXTURE_ADDRESS_MODE_CLAMP,  // addressV
+		D3D12_TEXTURE_ADDRESS_MODE_CLAMP,  // addressW
+		0.0f,                              // mipLODBias
+		16,                                // maxAnisotropy
+		D3D12_COMPARISON_FUNC_LESS_EQUAL,  // comparisonFunc
+		D3D12_STATIC_BORDER_COLOR_OPAQUE_WHITE,
+		0.0f,                              // minLOD
+		D3D12_FLOAT32_MAX,                 // maxLOD
+		D3D12_SHADER_VISIBILITY_PIXEL);    // visibility (or ALL);
+
+	return shadow;
+}
+
 std::unordered_map<std::wstring, UINT>& TextureManager::_texIndices()
 {
 	static std::unordered_map<std::wstring, UINT> _texIndices;

@@ -90,8 +90,7 @@ void LightingManager::UpdateLightCBs(FrameResource* currFrameResource)
 	auto currShadowLightsCB = currFrameResource->ShadowLocalLightCB.get();
 
 	//for frustum culling
-	XMMATRIX view = _camera->GetView();
-	XMMATRIX invView = XMMatrixInverse(&XMMatrixDeterminant(view), view);
+	XMMATRIX invView = _camera->GetInvView();
 
 	int lightsInsideFrustum = 0;
 	int lightsContainingFrustum = 0;
@@ -206,9 +205,18 @@ LightRenderItem* LightingManager::GetLight(int i)
 DirectX::XMMATRIX LightingManager::CalculateMainLightViewProj()
 {
 	//get the center of a camera frustum
-	DirectX::XMFLOAT3 corners[8];
+	XMFLOAT3 corners[8];
 	_camera->CameraFrustum().GetCorners(corners);
-	DirectX::XMFLOAT3 target = { 0, 0, 0 };
+
+	XMMATRIX camWorld = _camera->GetInvView(); // camera world matrix
+	for (int i = 0; i < 8; ++i)
+	{
+		XMVECTOR worldPos = XMVector3Transform(XMLoadFloat3(&corners[i]), camWorld);
+		XMStoreFloat3(&corners[i], worldPos);
+	}
+
+	// Now compute the center in world space
+	XMFLOAT3 target = { 0, 0, 0 };
 	for (int i = 0; i < 8; i++)
 	{
 		target.x += corners[i].x;
@@ -219,13 +227,21 @@ DirectX::XMMATRIX LightingManager::CalculateMainLightViewProj()
 	target.y /= 8;
 	target.z /= 8;
 
-	float lightDistance = 0.5 * _camera->GetFarZ();
+	XMVECTOR targetV = XMLoadFloat3(&target);
 
-	DirectX::XMFLOAT3 eye = { target.x - lightDistance * _mainLightDirection.x, target.y - lightDistance * _mainLightDirection.y, target.z - lightDistance * _mainLightDirection.z };
+	XMFLOAT3 camPos; 
+	XMStoreFloat3(&camPos, _camera->GetPosition());
+
+	float lightDistance = 0.5f * _camera->GetFarZ();
+
+	XMVECTOR lightDir = XMLoadFloat3(&_mainLightDirection);
+	lightDir = XMVector3Normalize(lightDir);
+
+	XMVECTOR eye = targetV - lightDir * lightDistance;
 	XMVECTOR up = XMVectorSet(0.f, 1.f, 0.f, 0.f);
 	if (fabsf(XMVectorGetX(XMVector3Dot(XMLoadFloat3(&_mainLightDirection), up))) > 0.9f)
 		up = XMVectorSet(1.f, 0.f, 0.f, 0.f);
-	XMMATRIX lightView = DirectX::XMMatrixLookAtLH(XMLoadFloat3(&eye), XMLoadFloat3(&target), up);
+	XMMATRIX lightView = DirectX::XMMatrixLookAtLH(eye, targetV, up);
 
 	XMVECTOR frustumCorners[8];
 	for (int i = 0; i < 8; i++)
@@ -249,6 +265,8 @@ DirectX::XMMATRIX LightingManager::CalculateMainLightViewProj()
 		minPt.z, maxPt.z
 	);
 
+	_mainLightView = lightView;
+
 	return lightView * lightProj;
 }
 
@@ -264,7 +282,7 @@ void LightingManager::DrawDirLight(ID3D12GraphicsCommandList* cmdList, FrameReso
 
 	cmdList->SetPipelineState(_dirLightPSO.Get());
 	cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-	CD3DX12_GPU_DESCRIPTOR_HANDLE tex(_shadowDSVAllocator->GetGpuHandle(_dirLightShadowMap.SRV));
+	CD3DX12_GPU_DESCRIPTOR_HANDLE tex(TextureManager::srvHeapAllocator->GetGpuHandle(_dirLightShadowMap.SRV));
 	cmdList->SetGraphicsRootDescriptorTable(5, tex);
 
 	auto lightingPassCB = currFrameResource->LightingPassCB->Resource();
@@ -311,11 +329,15 @@ void LightingManager::DrawEmissive(ID3D12GraphicsCommandList* cmdList, FrameReso
 
 void LightingManager::DrawShadows(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, std::vector<std::shared_ptr<EditableRenderItem>>& objects)
 {
+	if (objects.empty())
+		return;
+
 	std::vector<CD3DX12_RESOURCE_BARRIER> barriers;
 	for (int i = 0; i < _localLights.size(); i++)
 	{
-		barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(_localLights[i]->ShadowMap.Resource.Get(), D3D12_RESOURCE_STATE_DEPTH_READ, D3D12_RESOURCE_STATE_DEPTH_WRITE));
+		barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(_localLights[i]->ShadowMap.Resource.Get(), D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_DEPTH_WRITE));
 	}
+	barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(_dirLightShadowMap.Resource.Get(), D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_DEPTH_WRITE));
 	if (barriers.size() != 0)
 	{
 		cmdList->ResourceBarrier((UINT)barriers.size(), barriers.data());
@@ -364,8 +386,9 @@ void LightingManager::DrawShadows(ID3D12GraphicsCommandList* cmdList, FrameResou
 	barriers.clear();
 	for (int i = 0; i < _localLights.size(); i++)
 	{
-		barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(_localLights[i]->ShadowMap.Resource.Get(), D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_DEPTH_READ));
+		barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(_localLights[i]->ShadowMap.Resource.Get(), D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_GENERIC_READ));
 	}
+	barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(_dirLightShadowMap.Resource.Get(), D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_GENERIC_READ));
 	if (barriers.size() != 0)
 	{
 		cmdList->ResourceBarrier((UINT)barriers.size(), barriers.data());
@@ -413,7 +436,7 @@ void LightingManager::BuildRootSignature(int srvAmount)
 	lightingSlotRootParameter[4].InitAsShaderResourceView(1, 1);
 	lightingSlotRootParameter[5].InitAsDescriptorTable(1, &shadowTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
 
-	CD3DX12_ROOT_SIGNATURE_DESC lightingRootSigDesc(rootParameterCount, lightingSlotRootParameter, 1, &TextureManager::GetStaticSamplers().data()[0], D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+	CD3DX12_ROOT_SIGNATURE_DESC lightingRootSigDesc(rootParameterCount, lightingSlotRootParameter, 1, &TextureManager::GetShadowSampler(), D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 
 	ComPtr<ID3DBlob> serializedRootSig = nullptr;
 	ComPtr<ID3DBlob> errorBlob = nullptr;
@@ -451,7 +474,6 @@ void LightingManager::BuildRootSignature(int srvAmount)
 		shadowSerializedRootSig->GetBufferPointer(),
 		shadowSerializedRootSig->GetBufferSize(),
 		IID_PPV_ARGS(_shadowRootSignature.GetAddressOf())));
-
 }
 
 void LightingManager::BuildShaders()
@@ -648,15 +670,10 @@ std::vector<int> LightingManager::FrustumCulling(std::vector<std::shared_ptr<Edi
 
 	for (int i = 0; i < objects.size(); i++)
 	{
-		BoundingBox worldBounds;
+		BoundingBox objectLightBounds;
 
-		DirectX::XMMATRIX translation = XMMatrixTranslationFromVector(XMLoadFloat3(&objects[i]->transform[BasicUtil::EnumIndex(Transform::Translation)]));
-		DirectX::XMMATRIX rotation = XMMatrixRotationRollPitchYawFromVector(XMLoadFloat3(&objects[i]->transform[BasicUtil::EnumIndex(Transform::Rotation)]));
-		DirectX::XMMATRIX scale = XMMatrixScalingFromVector(XMLoadFloat3(&objects[i]->transform[BasicUtil::EnumIndex(Transform::Scale)]));
-		DirectX::XMMATRIX world = scale * rotation * translation;
-
-		objects[i]->Bounds.Transform(worldBounds, world);
-		if (lightAABB.Contains(objects[i]->Bounds) != DirectX::DISJOINT)
+		objects[i]->Bounds.Transform(objectLightBounds, objects[i]->world);
+		if (lightAABB.Contains(objectLightBounds) != DirectX::DISJOINT)
 		{
 			visibleObjects.push_back(i);
 		}
@@ -673,13 +690,8 @@ std::vector<int> LightingManager::FrustumCulling(std::vector<std::shared_ptr<Edi
 	{
 		BoundingBox worldBounds;
 
-		DirectX::XMMATRIX translation = XMMatrixTranslationFromVector(XMLoadFloat3(&objects[i]->transform[BasicUtil::EnumIndex(Transform::Translation)]));
-		DirectX::XMMATRIX rotation = XMMatrixRotationRollPitchYawFromVector(XMLoadFloat3(&objects[i]->transform[BasicUtil::EnumIndex(Transform::Rotation)]));
-		DirectX::XMMATRIX scale = XMMatrixScalingFromVector(XMLoadFloat3(&objects[i]->transform[BasicUtil::EnumIndex(Transform::Scale)]));
-		DirectX::XMMATRIX world = scale * rotation * translation;
-
-		objects[i]->Bounds.Transform(worldBounds, world);
-		if (lightAABB.Contains(objects[i]->Bounds) != DirectX::DISJOINT)
+		objects[i]->Bounds.Transform(worldBounds, objects[i]->world);
+		if (lightAABB.Contains(worldBounds) != DirectX::DISJOINT)
 		{
 			visibleObjects.push_back(i);
 		}
@@ -690,31 +702,45 @@ std::vector<int> LightingManager::FrustumCulling(std::vector<std::shared_ptr<Edi
 
 BoundingBox LightingManager::CalculateDirLightAABB()
 {
-	//get the center of a camera frustum
+	// 1. Get frustum corners in world space
 	DirectX::XMFLOAT3 corners[8];
-	DirectX::XMFLOAT3 minV{ FLT_MAX, FLT_MAX, FLT_MAX };
-	DirectX::XMFLOAT3 maxV{ -FLT_MAX, -FLT_MAX, -FLT_MAX };
 	_camera->CameraFrustum().GetCorners(corners);
+
+	//fucking corners were in the view space all that time
+	XMMATRIX camWorld = _camera->GetInvView(); // camera world transform
+	for (int i = 0; i < 8; ++i)
+	{
+		XMVECTOR worldPos = XMVector3Transform(XMLoadFloat3(&corners[i]), camWorld);
+		XMStoreFloat3(&corners[i], worldPos);
+	}
+
+	// 2. Transform frustum corners into light space
+	XMVECTOR minV{ FLT_MAX, FLT_MAX, FLT_MAX };
+	XMVECTOR maxV{ -FLT_MAX, -FLT_MAX, -FLT_MAX };
 	for (int i = 0; i < 8; i++)
 	{
-		minV.x = std::min(corners[i].x, minV.x);
-		minV.y = std::min(corners[i].y, minV.y);
-		minV.z = std::min(corners[i].z, minV.z);
-		maxV.x = std::max(corners[i].x, maxV.x);
-		maxV.y = std::max(corners[i].y, maxV.y);
-		maxV.z = std::max(corners[i].z, maxV.z);
-	}
-	float lightDistance = 0.5 * _camera->GetFarZ();
+		XMVECTOR c = XMLoadFloat3(&corners[i]);
+		XMVECTOR lc = XMVector3TransformCoord(c, _mainLightView);
 
-	minV.x = std::min(minV.x, minV.x - lightDistance * _mainLightDirection.x);
-	minV.y = std::min(minV.y, minV.y - lightDistance * _mainLightDirection.y);
-	minV.z = std::min(minV.z, minV.z - lightDistance * _mainLightDirection.z);
-	maxV.x = std::min(maxV.x, maxV.x - lightDistance * _mainLightDirection.x);
-	maxV.y = std::min(maxV.y, maxV.y - lightDistance * _mainLightDirection.y);
-	maxV.z = std::min(maxV.z, maxV.z - lightDistance * _mainLightDirection.z);
+		minV = XMVectorMin(minV, lc);
+		maxV = XMVectorMax(maxV, lc);
+	}
+
+	float shift = _camera->GetFarZ() * 0.5f;
+
+	XMVECTOR lightDir = XMVector3TransformCoord(XMLoadFloat3(&_mainLightDirection), _mainLightView);
+	lightDir = XMVector3Normalize(lightDir);
+	XMFLOAT3 lightDirF;
+
+	//shift to lightDirection
+	minV = XMVectorMin(minV, minV - shift * lightDir);
+	maxV = XMVectorMax(maxV, maxV - shift * lightDir);
 
 	BoundingBox aabb;
-	BoundingBox::CreateFromPoints(aabb, XMLoadFloat3(&minV), XMLoadFloat3(&maxV));
+
+	// Build light-space AABB
+	BoundingBox::CreateFromPoints(aabb, minV, maxV);
+
 	return aabb;
 }
 
@@ -736,7 +762,7 @@ void LightingManager::ShadowPass(FrameResource* currFrameResource, ID3D12Graphic
 			auto& meshData = currentLOD.meshes.at(i);
 			D3D12_GPU_VIRTUAL_ADDRESS meshCBAddress = objectCB->GetGPUVirtualAddress() + meshData.cbOffset;
 			cmdList->SetGraphicsRootConstantBufferView(0, meshCBAddress);
-			cmdList->DrawIndexedInstanced(meshData.indexCount, 1, meshData.indexStart, meshData.vertexStart, 0);
+			cmdList->DrawIndexedInstanced((UINT)meshData.indexCount, 1, (UINT)meshData.indexStart, (UINT)meshData.vertexStart, 0);
 		}
 	}
 }
