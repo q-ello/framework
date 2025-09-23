@@ -132,9 +132,6 @@ void MyApp::Draw(const GameTimer& gt)
 	// Reusing the command list reuses memory.
 	ThrowIfFailed(mCommandList->Reset(cmdListAlloc.Get(), nullptr));
 
-	mCommandList->RSSetViewports(1, &mScreenViewport);
-	mCommandList->RSSetScissorRects(1, &mScissorRect);
-
 	// Indicate a state transition on the resource usage.
 	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(CurrentBackBuffer(),
 		D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET));
@@ -245,8 +242,7 @@ void MyApp::OnKeyboardInput(const GameTimer& gt)
 	if (GetAsyncKeyState('E') & 0x8000)
 	{
 		//since view matrix is transponed I'm taking z-column
-		XMFLOAT3 lightDir = (XMFLOAT3)(_lightingManager->MainLightDirection());
-		XMStoreFloat3(&lightDir, _camera.GetLook());
+		_lightingManager->SetMainLightDirection(_camera.GetLook3f());
 	}
 
 	const float dt = gt.DeltaTime();
@@ -1399,6 +1395,9 @@ void MyApp::InitManagers()
 
 void MyApp::GBufferPass()
 {
+	mCommandList->RSSetViewports(1, &mScreenViewport);
+	mCommandList->RSSetScissorRects(1, &mScissorRect);
+
 	//deferred rendering: writing in gbuffer first
 	_gBuffer->ChangeRTVsState(D3D12_RESOURCE_STATE_RENDER_TARGET);
 	_gBuffer->ChangeDSVState(D3D12_RESOURCE_STATE_DEPTH_WRITE);

@@ -17,6 +17,12 @@ LightingManager::LightingManager(ID3D12Device* device)
 	_shadowDSVAllocator = std::make_unique<DescriptorHeapAllocator>(_shadowDSVHeap.Get(), _device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV), dsvHeapDesc.NumDescriptors);
 
 	_dirLightShadowMap = CreateShadowTexture();
+
+	//rects for shadows should be different
+	_shadowViewport.Height = _shadowMapSize;
+	_shadowViewport.Width = _shadowMapSize;
+	_shadowScissorRect.right = _shadowMapSize;
+	_shadowScissorRect.bottom = _shadowMapSize;
 }
 
 LightingManager::~LightingManager()
@@ -332,6 +338,9 @@ void LightingManager::DrawShadows(ID3D12GraphicsCommandList* cmdList, FrameResou
 	if (objects.empty())
 		return;
 
+	cmdList->RSSetViewports(1, &_shadowViewport);
+	cmdList->RSSetScissorRects(1, &_shadowScissorRect);
+
 	std::vector<CD3DX12_RESOURCE_BARRIER> barriers;
 	for (int i = 0; i < _localLights.size(); i++)
 	{
@@ -583,6 +592,13 @@ void LightingManager::BuildPSO()
 		reinterpret_cast<BYTE*>(_shadowVSShader->GetBufferPointer()),
 		_shadowVSShader->GetBufferSize()
 	};
+
+	//rasterizer state with biases
+	D3D12_RASTERIZER_DESC shadowRasterDesc = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+	shadowRasterDesc.DepthBias = 500;
+	shadowRasterDesc.DepthBiasClamp = 0.0f;
+	shadowRasterDesc.SlopeScaledDepthBias = 1.5f;
+
 	shadowPSODesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
 	shadowPSODesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
 	shadowPSODesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
@@ -603,8 +619,8 @@ ShadowTexture LightingManager::CreateShadowTexture()
 	D3D12_RESOURCE_DESC texDesc = {};
 	texDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
 	texDesc.Alignment = 0;
-	texDesc.Width = 1028;
-	texDesc.Height = 1028;
+	texDesc.Width = _shadowMapSize;
+	texDesc.Height = _shadowMapSize;
 	texDesc.DepthOrArraySize = 1;
 	texDesc.MipLevels = 1;
 	texDesc.Format = DXGI_FORMAT_R24G8_TYPELESS; 

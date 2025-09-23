@@ -162,9 +162,10 @@ VertexOut DirLightingVS(uint id : SV_VertexID)
 }
 
 //helper for local lights
-float4 ComputeLocalLighting(int lightIndex, float3 coords)
+float4 ComputeLocalLighting(int lightIndex, float3 posW, float3 coords)
 {
     Light light = lights[lightIndex];
+    
     if (light.active == 0)
     {
         return float4(0, 0, 0, 0);
@@ -173,8 +174,6 @@ float4 ComputeLocalLighting(int lightIndex, float3 coords)
     float4 albedo = gBaseColor.Load(coords);
     
     float3 normal = gNormal.Load(coords).xyz;
-    
-    float3 posW = ComputeWorldPos(coords.xy / gRTSize);
     
     float3 lightDir = posW - light.position;
     float3 normalizedLightDir = normalize(lightDir);
@@ -209,14 +208,14 @@ float4 ComputeLocalLighting(int lightIndex, float3 coords)
 
 //compute shadow
 float ShadowFactor(float3 worldPos, float4x4 transformMatrix)
-{
+{    
     float4 clipSpace = mul(float4(worldPos, 1), transformMatrix);
     float3 ndc = clipSpace.xyz / clipSpace.w;
     float2 uv = ndc.xy * 0.5f + 0.5f;
     //damn you flipping
     uv.y = 1 - uv.y;
     
-    float depth = ndc.z - 0.005f;
+    float depth = ndc.z;
     float shadow = gShadowMap.SampleCmpLevelZero(gsamShadow, uv, depth);
     return lerp(0.2f, 1.f, shadow);
 }
@@ -236,10 +235,14 @@ float4 DirLightingPS(VertexOut pin) : SV_Target
     float4 finalColor = float4(0, 0, 0, albedo.a);
     float3 posW = ComputeWorldPos(coords.xy / gRTSize);
     
+    //tiny normal offset to avoid acne
+    float3 normalW = normalize(gNormal.Load(coords).xyz);
+    float3 posOffseted = posW + normalW * 0.01f;
+    
     if (mainLightIsOn)
     {
         //main light intensity is 3
-        finalColor.xyz = PBRShading(coords, -mainLightDirection, mainLightColor, posW) * 3.f * ShadowFactor(posW, mainLightViewProj);
+        finalColor.xyz = PBRShading(coords, -mainLightDirection, mainLightColor, posW) * 3.f * ShadowFactor(posOffseted, mainLightViewProj);
     }
     
     //spotlight in hand
@@ -272,7 +275,7 @@ float4 DirLightingPS(VertexOut pin) : SV_Target
     //lighting for every light we are inside of
     for (int i = 0; i < lightsContainingFrustum; i++)
     {
-        finalColor.xyz += ComputeLocalLighting(lightIndices[i].index, coords).xyz;
+        finalColor.xyz += ComputeLocalLighting(lightIndices[i].index, posW, coords).xyz;
     }
     
     return finalColor;
@@ -293,7 +296,9 @@ float4 LocalLightingPS(VertexOut pin) : SV_Target
 {
     float3 coords = pin.PosH.xyz;
     
-    float4 finalColor = ComputeLocalLighting(pin.lightIndex, coords);
+    float3 posW = ComputeWorldPos(coords.xy / gRTSize);
+    
+    float4 finalColor = ComputeLocalLighting(pin.lightIndex, posW, coords);
     if (finalColor.a == 0)
         discard;
     

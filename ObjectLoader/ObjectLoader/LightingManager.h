@@ -59,6 +59,11 @@ public:
 		return &_mainLightDirection.x;
 	}
 
+	void SetMainLightDirection(DirectX::XMFLOAT3 newDir)
+	{
+		_mainLightDirection = newDir;
+	}
+
 	float* MainLightColor()
 	{
 		return &_dirLightColor.x;
@@ -135,10 +140,16 @@ private:
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> _shadowRootSignature;
 	Microsoft::WRL::ComPtr<ID3DBlob> _shadowVSShader;
 
+	//shadow rects
+	D3D12_VIEWPORT _shadowViewport{ 0, 0, 0, 0, 0, 1 };
+	D3D12_RECT _shadowScissorRect{ 0, 0, 0, 0 };
+	int _shadowMapSize{1028};
+
 	//texture managers
 	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> _shadowDSVHeap;
 	std::unique_ptr<DescriptorHeapAllocator> _shadowDSVAllocator;
 
+	//lights culling
 	std::vector<int> _lightsInsideFrustum{};
 	std::vector<int> _lightsContainingFrustum{};
 
