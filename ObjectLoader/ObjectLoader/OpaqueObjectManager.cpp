@@ -1,6 +1,8 @@
 #pragma once
 #include "OpaqueObjectManager.h"
 
+
+
 void EditableObjectManager::UpdateObjectCBs(FrameResource* currFrameResource)
 {
 	auto& currObjectsCB = currFrameResource->OpaqueObjCB;
@@ -407,6 +409,17 @@ void EditableObjectManager::DeleteLOD(EditableRenderItem* ri, int index)
 	ri->lodsData.erase(ri->lodsData.begin() + index);
 	ri->currentLODIdx = std::min(ri->currentLODIdx, (int)ri->lodsData.size() - 1);
 	GeometryManager::DeleteLODGeometry(ri->Name, index);
+}
+
+void EditableObjectManager::GenerateInstanceTransformsArray(int amount)
+{
+	BoundingBox objectAABB = _objects.begin()->get()->Bounds;
+	float range = 100;
+	for (int i = 0; i < amount; i++)
+	{
+		BoundingBox instanceAABB = objectAABB;
+		instanceAABB.Center = XMFLOAT3(-range * instanceAABB.Extents.x + );
+	}
 }
 
 bool EditableObjectManager::DeleteObject(int selectedObject)

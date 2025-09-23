@@ -3,6 +3,18 @@
 #include "ObjectManager.h"
 #include "Camera.h"
 
+struct OctreeNode {
+	BoundingBox aabb;
+	std::vector<int> objects;
+	OctreeNode* children[8] = { nullptr }; 
+};
+
+struct InstanceData
+{
+	DirectX::XMFLOAT4X4 World;
+	BoundingBox AABB;
+};
+
 class EditableObjectManager : public ObjectManager
 {
 	using ObjectManager::ObjectManager;
@@ -10,10 +22,14 @@ public:
 	void UpdateObjectCBs(FrameResource* currFrameResource) override;
 	void SetCamera(Camera* camera);
 	void AddObjectToResource(Microsoft::WRL::ComPtr<ID3D12Device> device, FrameResource* currFrameResource) override;
+	
 	int AddRenderItem(ID3D12Device* device, ModelData&& modelData) override;
 	bool DeleteObject(int selectedObject) override;
+	
 	int AddLOD(ID3D12Device* device, LODData lod, EditableRenderItem* ri);
 	void DeleteLOD(EditableRenderItem* ri, int index);
+
+	void GenerateInstanceTransformsArray(int amount);
 
 	int VisibleObjectsCount() override { return int(_visibleTesselatedObjects.size() + _visibleUntesselatedObjects.size()); };
 	int ObjectsCount() override;
@@ -66,4 +82,7 @@ private:
 	UINT _cbMaterialElementSize = d3dUtil::CalcConstantBufferByteSize(sizeof(MaterialConstants));
 
 	Camera* _camera;
+
+	OctreeNode* _rootOctTree;
+	std::vector<InstanceData> _instances;
 };

@@ -35,6 +35,14 @@ bool MyApp::Initialize()
 	BuildShadersAndInputLayout();
 	GeometryManager::BuildNecessaryGeometry();
 	_gridManager->AddRenderItem(md3dDevice.Get(), { "grid" });
+
+	//octree task
+	_modelManager->ImportObject(L"D:\Graphics Projects\Framework\objects data\85 - handpainted_pirate\Handpainted_pirate\Pirate.obj");
+	auto model = _modelManager->ParseAsOneObject();
+	ModelData data = GeometryManager::BuildModelGeometry(model.get());
+	_selectedModels.clear();
+	_selectedModels.insert(_objectsManager->AddRenderItem(md3dDevice.Get(), std::move(data)));
+
 	BuildFrameResources();
 	BuildPSOs();
 
