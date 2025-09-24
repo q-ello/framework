@@ -72,7 +72,7 @@ LightingManager::LightingManager(ID3D12Device* device)
 
 	//make dsvs for cascades
 	for (int i = 0; i < gCascadesCount; i++)
-		_cascadesShadowMapDSVs[i] = CreateShadowTextureDSV(true, i);
+		_cascades[i].shadowMapDSV = CreateShadowTextureDSV(true, i);
 
 	//rects for shadows should be different
 	_shadowViewport.Height = _shadowMapResolution;
@@ -138,8 +138,8 @@ void LightingManager::UpdateDirectionalLightCB(FrameResource* currFrameResource)
 
 	for (int i = 0; i < gCascadesCount; i++)
 	{
-		Cascade cascadeForCB = _cascades[i];
-		cascadeForCB.viewProj = XMMatrixTranspose(_cascades[i].viewProj);
+		Cascade cascadeForCB = _cascades[i].cascade;
+		cascadeForCB.viewProj = XMMatrixTranspose(cascadeForCB.viewProj);
 
 		dirLightCB.cascades[i] = cascadeForCB;
 
@@ -285,51 +285,32 @@ void LightingManager::CalculateCascadesViewProjs()
 		XMStoreFloat3(&corners[i], worldPos);
 	}
 
-	// Now compute the center in world space
-	XMFLOAT3 target = { 0, 0, 0 };
-	for (int i = 0; i < 8; i++)
-	{
-		target.x += corners[i].x;
-		target.y += corners[i].y;
-		target.z += corners[i].z;
-	}
-	target.x /= 8;
-	target.y /= 8;
-	target.z /= 8;
-
-	XMVECTOR targetV = XMLoadFloat3(&target);
-
-	XMFLOAT3 camPos; 
-	XMStoreFloat3(&camPos, _camera->GetPosition());
-
 	float lightDistance = 100.0f;
 
 	XMVECTOR lightDir = XMLoadFloat3(&_mainLightDirection);
 	lightDir = XMVector3Normalize(lightDir);
 
-	XMVECTOR eye = targetV - lightDir * lightDistance;
 	XMVECTOR up = XMVectorSet(0.f, 1.f, 0.f, 0.f);
 	if (fabsf(XMVectorGetX(XMVector3Dot(XMLoadFloat3(&_mainLightDirection), up))) > 0.9f)
 		up = XMVectorSet(1.f, 0.f, 0.f, 0.f);
-	XMMATRIX lightView = DirectX::XMMatrixLookAtLH(eye, targetV, up);
 
 	XMVECTOR frustumCorners[8];
 	for (int i = 0; i < 8; i++)
 		frustumCorners[i] = XMLoadFloat3(&corners[i]);
 
-	_mainLightView = lightView;
-
 	//calculating cascades
 	float nearZ = _camera->GetNearZ();
 	float farZ = _camera->GetFarZ();
+
+	float zPad = 10.0f; //to avoid clipping
 
 	for (int i = 0; i < gCascadesCount; i++)
 	{
 		float splitNearRatio = i / (float)gCascadesCount;
 		float splitFarRatio = (i + 1) / (float)gCascadesCount;
 
-		_cascades[i].splitNear = nearZ + (farZ - nearZ) * splitNearRatio;
-		_cascades[i].splitFar = nearZ + (farZ - nearZ) * splitFarRatio;
+		_cascades[i].cascade.splitNear = nearZ + (farZ - nearZ) * splitNearRatio;
+		_cascades[i].cascade.splitFar = nearZ + (farZ - nearZ) * splitFarRatio + zPad;
 
 		//interpolate corners in world space
 		XMVECTOR cascadeCorners[8];
@@ -340,10 +321,19 @@ void LightingManager::CalculateCascadesViewProjs()
 			cascadeCorners[j + 4] = XMVectorLerp(frustumCorners[j], frustumCorners[j + 4], splitFarRatio);
 		}
 
+		// also make a different view matrix
+		XMVECTOR cascadeCenter = XMVectorZero();
+		for (int j = 0; j < 8; ++j)
+			cascadeCenter += cascadeCorners[j];
+		cascadeCenter /= 8.0f;
+
+		XMVECTOR cascadeEye = cascadeCenter - lightDir * lightDistance;
+		_cascades[i].lightView = XMMatrixLookAtLH(cascadeEye, cascadeCenter, up);
+
 		//get them into light space
 		XMVECTOR lsCorners[8];
 		for (int j = 0; j < 8; j++)
-			lsCorners[j] = XMVector3TransformCoord(cascadeCorners[j], lightView);
+			lsCorners[j] = XMVector3TransformCoord(cascadeCorners[j], _cascades[i].lightView);
 
 		//min max
 		XMVECTOR cascadeMinV = lsCorners[0];
@@ -359,13 +349,11 @@ void LightingManager::CalculateCascadesViewProjs()
 		XMStoreFloat3(&cascadeMaxPt, cascadeMaxV);
 
 		//some padding
-		float zPad = 10.0f;
 		cascadeMinPt.z -= zPad;
 		cascadeMaxPt.z += zPad;
 
 		// snap to texel to remove shimmering
 		SnapToTexel(cascadeMinPt, cascadeMaxPt);
-
 
 		XMMATRIX cascadeProj = XMMatrixOrthographicOffCenterLH(
 			cascadeMinPt.x, cascadeMaxPt.x,
@@ -373,8 +361,11 @@ void LightingManager::CalculateCascadesViewProjs()
 			cascadeMinPt.z, cascadeMaxPt.z
 		);
 
-		_cascades[i].viewProj = lightView * cascadeProj;
-		BoundingBox::CreateFromPoints(_cascadesAABBs[i], cascadeMinV, cascadeMaxV);
+		cascadeMinV = XMLoadFloat3(&cascadeMinPt);
+		cascadeMaxV = XMLoadFloat3(&cascadeMaxPt);
+
+		_cascades[i].cascade.viewProj = _cascades[i].lightView * cascadeProj;
+		BoundingBox::CreateFromPoints(_cascades[i].AABB, cascadeMinV, cascadeMaxV);
 	}
 }
 
@@ -455,14 +446,15 @@ void LightingManager::DrawShadows(ID3D12GraphicsCommandList* cmdList, FrameResou
 		//render each cascade shadow map
 		for (UINT i = 0; i < gCascadesCount; i++)
 		{
+			CD3DX12_CPU_DESCRIPTOR_HANDLE tex(_shadowDSVAllocator->GetCpuHandle(_cascades[i].shadowMapDSV));
+			cmdList->ClearDepthStencilView(tex, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
+
 			//check frustum culling so we do not need to load gpu with unnecessary commands
 			std::vector<int> visibleObjects = FrustumCulling(objects, i);
 			if (visibleObjects.empty())
 				continue;
 
-			CD3DX12_CPU_DESCRIPTOR_HANDLE tex(_shadowDSVAllocator->GetCpuHandle(_cascadesShadowMapDSVs[i]));
 			cmdList->OMSetRenderTargets(0, nullptr, false, &tex);
-			cmdList->ClearDepthStencilView(tex, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 			cmdList->SetGraphicsRootConstantBufferView(1, currFrameResource->ShadowDirLightCB->Resource()->GetGPUVirtualAddress() + i * _shadowCBSize);
 
 			ShadowPass(currFrameResource, cmdList, visibleObjects, objects);
@@ -702,8 +694,12 @@ void LightingManager::BuildPSO()
 
 	//rasterizer state with biases
 	D3D12_RASTERIZER_DESC shadowRasterDesc = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
-	shadowRasterDesc.DepthBias = 500;
-	shadowRasterDesc.DepthBiasClamp = 0.0f;
+
+	//useless thing
+	/*shadowRasterDesc.DepthBias = 100;
+	shadowRasterDesc.DepthBiasClamp = 10.0f;
+	*/
+
 	shadowRasterDesc.SlopeScaledDepthBias = 1.5f;
 
 	shadowPSODesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
@@ -727,7 +723,7 @@ int LightingManager::CreateShadowTextureDSV(bool forCascade, int index)
 	D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = _shadowDSVAllocator.get()->GetCpuHandle(dsvIndex);
 
 	D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc = {};
-	dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+	dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2DARRAY;
 	dsvDesc.Format = DXGI_FORMAT_D32_FLOAT;
 	dsvDesc.Texture2DArray.ArraySize = 1;
 	dsvDesc.Texture2DArray.FirstArraySlice = index;
@@ -747,14 +743,18 @@ void LightingManager::DeleteShadowTexture(int texIdx)
 
 std::vector<int> LightingManager::FrustumCulling(std::vector<std::shared_ptr<EditableRenderItem>>& objects, int cascadeIdx) const
 {
-	BoundingBox lightAABB = _cascadesAABBs[cascadeIdx];
+	BoundingBox lightAABB = _cascades[cascadeIdx].AABB;
 	std::vector<int> visibleObjects;
 
 	for (int i = 0; i < objects.size(); i++)
 	{
 		BoundingBox objectLSBounds;
+		BoundingBox objectWorldBounds;
 
-		objects[i]->Bounds.Transform(objectLSBounds, objects[i]->world * _cascades[i].viewProj);
+		objects[i]->Bounds.Transform(objectLSBounds, objects[i]->world * _cascades[cascadeIdx].lightView);
+		objects[i]->Bounds.Transform(objectWorldBounds, objects[i]->world);
+		float distance;
+		XMStoreFloat(&distance, XMVector3Length(XMLoadFloat3(&objectWorldBounds.Center) - _camera->GetPosition()));
 		if (lightAABB.Contains(objectLSBounds) != DirectX::DISJOINT)
 		{
 			visibleObjects.push_back(i);

@@ -205,7 +205,7 @@ std::array<const CD3DX12_STATIC_SAMPLER_DESC, 2> TextureManager::GetShadowSample
 		D3D12_TEXTURE_ADDRESS_MODE_CLAMP,  // addressV
 		D3D12_TEXTURE_ADDRESS_MODE_CLAMP,  // addressW
 		0.0f,                              // mipLODBias
-		16,                                // maxAnisotropy
+		1,                                // maxAnisotropy
 		D3D12_COMPARISON_FUNC_LESS_EQUAL,  // comparisonFunc
 		D3D12_STATIC_BORDER_COLOR_OPAQUE_WHITE,
 		0.0f,                              // minLOD

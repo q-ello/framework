@@ -92,10 +92,7 @@ private:
 	ID3D12Device* _device = nullptr;
 
 	//shadow cascades for directional light
-	DirectX::XMMATRIX _mainLightView;
-	int _cascadesShadowMapDSVs[gCascadesCount];
-	BoundingBox _cascadesAABBs[gCascadesCount];
-	Cascade _cascades[gCascadesCount];
+	CascadeOnCPU _cascades[gCascadesCount];
 	ShadowTextureArray _cascadeShadowTextureArray;
 	ShadowTextureArray _localLightsShadowTextureArray;
 

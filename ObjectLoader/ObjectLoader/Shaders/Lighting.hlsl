@@ -19,6 +19,7 @@ struct LightIndex
 };
 
 static const int gCascadesCount = 3;
+static const float gShadowMapResolution = 1024.0f;
 
 Texture2D gBaseColor : register(t0);
 Texture2D gNormal : register(t1);
@@ -216,32 +217,39 @@ float4 ComputeLocalLighting(int lightIndex, float3 posW, float3 coords)
     return float4(finalColor, albedo.a);
 }
 
-//compute shadow
-float ShadowFactor(float3 worldPos, float4x4 transformMatrix, Texture2D shadowMap)
-{    
-    float4 clipSpace = mul(float4(worldPos, 1), transformMatrix);
-    float3 ndc = clipSpace.xyz / clipSpace.w;
-    float2 uv = ndc.xy * 0.5f + 0.5f;
-    //damn you flipping
-    uv.y = 1 - uv.y;
-    
-    float depth = ndc.z;
-    float shadow = shadowMap.SampleCmpLevelZero(gsamShadow, uv, depth);
-    return lerp(0.2f, 1.f, shadow);
-}
-
-//for cascades
-float ShadowFactor(float3 worldPos, int cascadeIdx)
+//compute shadows
+float ShadowFactor(float3 worldPos, float4x4 transformMatrix, int index, bool isCascade)
 {
-    float4 clipSpace = mul(float4(worldPos, 1), cascades[cascadeIdx].viewProj);
-    float3 ndc = clipSpace.xyz / clipSpace.w;
+    Texture2DArray array = isCascade ? gCascadesShadowMap : gShadowMap;
+    float4 posLS = mul(float4(worldPos, 1), transformMatrix);
+    float3 ndc = posLS.xyz / posLS.w;
     float2 uv = ndc.xy * 0.5f + 0.5f;
     //damn you flipping
     uv.y = 1 - uv.y;
     
-    float depth = ndc.z;
-    float shadow = gCascadesShadowMap.SampleCmpLevelZero(gsamShadow, float3(uv, cascadeIdx), depth);
-    return lerp(0.2f, 1.f, shadow);
+    //bias here because bias on cpu doesn't fucking work
+    float depth = ndc.z - 0.005;
+    
+    // PCF
+    float2 texelSize = 1.0f / gShadowMapResolution;
+    float shadow = 0.0f;
+    int count = 0;
+    int radius = isCascade ? index + 1 : 1;
+    
+    for (int y = -radius; y <= radius; y++)
+    {
+        for (int x = -radius; x <= radius; x++)
+        {
+            float2 offset = float2(x, y) * texelSize;
+            shadow += array.SampleCmpLevelZero(
+                          gsamShadow,
+                          float3(uv + offset, index),
+                          depth);
+            count++;
+        }
+    }
+
+    return lerp(0.2f, 1.f, shadow / count);
 }
 
 int CalculateCascadeIndex(float3 worldPos)
@@ -278,9 +286,9 @@ float4 DirLightingPS(VertexOut pin) : SV_Target
     
     if (mainLightIsOn)
     {
-        int cascadeIdx = CalculateCascadeIndex(coords);
+        int cascadeIdx = CalculateCascadeIndex(posW);
         //main light intensity is 3
-        finalColor.xyz = PBRShading(coords, -mainLightDirection, mainLightColor, posW) * 3.f * ShadowFactor(posOffseted, cascadeIdx);
+        finalColor.xyz = PBRShading(coords, -mainLightDirection, mainLightColor, posW) * 3.f * ShadowFactor(posOffseted, cascades[cascadeIdx].viewProj, cascadeIdx, true);
     }
     
     //spotlight in hand

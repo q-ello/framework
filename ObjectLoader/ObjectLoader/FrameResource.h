@@ -88,6 +88,14 @@ struct Cascade
     DirectX::XMMATRIX viewProj = DirectX::XMMatrixIdentity();
 };
 
+struct CascadeOnCPU
+{
+    Cascade cascade;
+    DirectX::BoundingBox AABB;
+    DirectX::XMMATRIX lightView = DirectX::XMMatrixIdentity();
+    int shadowMapDSV = 0;
+};
+
 struct DirectionalLightConstants
 {
     DirectX::XMFLOAT3 mainLightDirection = { 0.0f, 0.0f, 0.0f };
