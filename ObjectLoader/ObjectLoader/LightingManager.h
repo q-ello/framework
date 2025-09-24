@@ -37,8 +37,7 @@ public:
 
 	int LightsCount();
 	LightRenderItem* GetLight(int i);
-	DirectX::XMMATRIX CalculateMainLightViewProj();
-
+	void CalculateCascadesViewProjs();
 
 	//different draw calls
 	void DrawDirLight(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, D3D12_GPU_DESCRIPTOR_HANDLE descTable);
@@ -93,19 +92,23 @@ public:
 private:
 	ID3D12Device* _device = nullptr;
 
+	//shadow cascades for directional light
+	DirectX::XMMATRIX _mainLightView;
+	ShadowTexture _cascadesShadowMaps[gCascadesCount];
+	BoundingFrustum _cascadesFrustums[gCascadesCount];
+	Cascade _cascades[gCascadesCount];
+
 	//dirlight data
 	DirectX::XMFLOAT3 _mainLightDirection = { 1.f, -1.f, 0.f };
 	bool _isMainLightOn = true;
 	DirectX::XMFLOAT3 _dirLightColor = { 1.f, 1.f, 1.f };
-	ShadowTexture _dirLightShadowMap;
-	DirectX::XMMATRIX _mainLightView;
 
 	bool _debugEnabled = false;
 
 	//locallights data
 	std::vector<std::unique_ptr<LightRenderItem>> _localLights;
 	std::vector<int> FreeLightIndices;
-	int NextAvailableIndex = 0;
+	int NextAvailableLightIndex = 0;
 	const int MaxLights = 512;
 
 	//hand spotlight
@@ -143,7 +146,8 @@ private:
 	//shadow rects
 	D3D12_VIEWPORT _shadowViewport{ 0, 0, 0, 0, 0, 1 };
 	D3D12_RECT _shadowScissorRect{ 0, 0, 0, 0 };
-	int _shadowMapSize{1028};
+	int _shadowMapResolution{1028};
+	UINT _shadowCBSize = d3dUtil::CalcConstantBufferByteSize(sizeof(ShadowLightConstants));
 
 	//texture managers
 	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> _shadowDSVHeap;
@@ -162,8 +166,8 @@ private:
 	//helpers
 	ShadowTexture CreateShadowTexture();
 	void DeleteShadowTexture(ShadowTexture tex);
-	std::vector<int> FrustumCulling(std::vector<std::shared_ptr<EditableRenderItem>>& objects, DirectX::BoundingBox lightAABB);
+	std::vector<int> FrustumCulling(std::vector<std::shared_ptr<EditableRenderItem>>& objects, int cascadeIdx);
 	std::vector<int> FrustumCulling(std::vector<std::shared_ptr<EditableRenderItem>>& objects, DirectX::BoundingSphere lightAABB);
-	BoundingBox CalculateDirLightAABB();
 	void ShadowPass(FrameResource* currFrameResource, ID3D12GraphicsCommandList* cmdList, std::vector<int> visibleObjects, std::vector<std::shared_ptr<EditableRenderItem>>& objects);
+	void SnapToTexel(DirectX::XMFLOAT3& minPt, DirectX::XMFLOAT3& maxPt) const;
 };

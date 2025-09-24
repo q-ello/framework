@@ -18,12 +18,15 @@ struct LightIndex
     int pad[3]; // keep aligned
 };
 
+static const int gCascadesCount = 3;
+
 Texture2D gBaseColor : register(t0);
 Texture2D gNormal : register(t1);
 Texture2D gEmissive : register(t2);
 Texture2D gORM : register(t3);
 Texture2D gDepth : register(t4);
-Texture2D gShadowMap : register(t5);
+Texture2DArray gCascadesShadowMap : register(t5);
+Texture2DArray gShadowMap : register(t6);
 
 SamplerComparisonState gsamShadow : register(s0);
 SamplerState gsamLinear : register(s1);
@@ -43,6 +46,14 @@ cbuffer cbLightingPass : register(b0)
     float2 mousePos;
 };
 
+
+struct Cascade
+{
+    float splitNear;
+    float splitFar;
+    float4x4 viewProj;
+};
+
 cbuffer cbDirLight : register(b1)
 {
     float3 mainLightDirection;
@@ -50,7 +61,7 @@ cbuffer cbDirLight : register(b1)
     float3 mainLightColor;
     int lightsContainingFrustum;
     Light mainSpotlight;
-    float4x4 mainLightViewProj;
+    Cascade cascades[3];
 };
 
 struct VertexIn
@@ -97,7 +108,6 @@ float3 FresnelSchlick(float cosTheta, float3 F0)
 {
     return F0 + (1.0 - F0) * pow(1.0 - cosTheta, 5.0);
 }
-
 
 float3 ComputeWorldPos(float2 uv)
 {
@@ -207,7 +217,7 @@ float4 ComputeLocalLighting(int lightIndex, float3 posW, float3 coords)
 }
 
 //compute shadow
-float ShadowFactor(float3 worldPos, float4x4 transformMatrix)
+float ShadowFactor(float3 worldPos, float4x4 transformMatrix, Texture2D shadowMap)
 {    
     float4 clipSpace = mul(float4(worldPos, 1), transformMatrix);
     float3 ndc = clipSpace.xyz / clipSpace.w;
@@ -216,8 +226,35 @@ float ShadowFactor(float3 worldPos, float4x4 transformMatrix)
     uv.y = 1 - uv.y;
     
     float depth = ndc.z;
-    float shadow = gShadowMap.SampleCmpLevelZero(gsamShadow, uv, depth);
+    float shadow = shadowMap.SampleCmpLevelZero(gsamShadow, uv, depth);
     return lerp(0.2f, 1.f, shadow);
+}
+
+//for cascades
+float ShadowFactor(float3 worldPos, int cascadeIdx)
+{
+    float4 clipSpace = mul(float4(worldPos, 1), cascades[cascadeIdx].viewProj);
+    float3 ndc = clipSpace.xyz / clipSpace.w;
+    float2 uv = ndc.xy * 0.5f + 0.5f;
+    //damn you flipping
+    uv.y = 1 - uv.y;
+    
+    float depth = ndc.z;
+    float shadow = gCascadesShadowMap.SampleCmpLevelZero(gsamShadow, float3(uv, cascadeIdx), depth);
+    return lerp(0.2f, 1.f, shadow);
+}
+
+int CalculateCascadeIndex(float3 worldPos)
+{
+    float depth = length(worldPos - gEyePosW);
+    for (int i = 0; i < gCascadesCount; i++)
+    {
+        if (depth < cascades[i].splitFar)
+        {
+            return i;
+        }
+    }
+    return gCascadesCount - 1;
 }
 
 //actually just a full quad pass, not only for directional light
@@ -241,8 +278,9 @@ float4 DirLightingPS(VertexOut pin) : SV_Target
     
     if (mainLightIsOn)
     {
+        int cascadeIdx = CalculateCascadeIndex(coords);
         //main light intensity is 3
-        finalColor.xyz = PBRShading(coords, -mainLightDirection, mainLightColor, posW) * 3.f * ShadowFactor(posOffseted, mainLightViewProj);
+        finalColor.xyz = PBRShading(coords, -mainLightDirection, mainLightColor, posW) * 3.f * ShadowFactor(posOffseted, cascadeIdx);
     }
     
     //spotlight in hand

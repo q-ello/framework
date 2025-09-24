@@ -16,13 +16,14 @@ LightingManager::LightingManager(ID3D12Device* device)
 
 	_shadowDSVAllocator = std::make_unique<DescriptorHeapAllocator>(_shadowDSVHeap.Get(), _device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV), dsvHeapDesc.NumDescriptors);
 
-	_dirLightShadowMap = CreateShadowTexture();
+	for (int i = 0; i < gCascadesCount; i++)
+		_cascadesShadowMaps[i] = CreateShadowTexture();
 
 	//rects for shadows should be different
-	_shadowViewport.Height = _shadowMapSize;
-	_shadowViewport.Width = _shadowMapSize;
-	_shadowScissorRect.right = _shadowMapSize;
-	_shadowScissorRect.bottom = _shadowMapSize;
+	_shadowViewport.Height = _shadowMapResolution;
+	_shadowViewport.Width = _shadowMapResolution;
+	_shadowScissorRect.right = _shadowMapResolution;
+	_shadowScissorRect.bottom = _shadowMapResolution;
 }
 
 LightingManager::~LightingManager()
@@ -37,10 +38,10 @@ void LightingManager::AddLight(ID3D12Device* device)
 		FreeLightIndices.pop_back();
 	}
 	else {
-		if (NextAvailableIndex >= MaxLights) {
+		if (NextAvailableLightIndex >= MaxLights) {
 			throw std::runtime_error("Maximum number of lights exceeded!");
 		}
-		lightIndex = NextAvailableIndex++;
+		lightIndex = NextAvailableLightIndex++;
 	}
 
 	auto lightItem = std::make_unique<LightRenderItem>();
@@ -65,7 +66,7 @@ void LightingManager::DeleteLight(int deletedLight)
 
 void LightingManager::UpdateDirectionalLightCB(FrameResource* currFrameResource)
 {
-	//for lighting pass
+	//for lighting pass and shadow pass
 	DirectionalLightConstants dirLightCB;
 	dirLightCB.mainLightIsOn = _isMainLightOn;
 	dirLightCB.gLightColor = _dirLightColor;
@@ -75,18 +76,26 @@ void LightingManager::UpdateDirectionalLightCB(FrameResource* currFrameResource)
 	DirectX::XMStoreFloat3(&dirLightCB.mainLightDirection, direction);
 	dirLightCB.mainSpotlight = _handSpotlight;
 	dirLightCB.lightsContainingFrustum = _lightsContainingFrustum.size();
-	auto& mainLightViewProj = CalculateMainLightViewProj();
-	dirLightCB.mainLightViewProj = XMMatrixTranspose(mainLightViewProj);
+
+	auto currShadowDirLightCB = currFrameResource->ShadowDirLightCB.get();
+
+	CalculateCascadesViewProjs();
+
+	for (int i = 0; i < gCascadesCount; i++)
+	{
+		Cascade cascadeForCB = _cascades[i];
+		cascadeForCB.viewProj = XMMatrixTranspose(_cascades[i].viewProj);
+
+		dirLightCB.cascades[i] = cascadeForCB;
+
+		//storing in shadow right away for a better locality
+		ShadowLightConstants shadowCB;
+		shadowCB.lightMatrix = cascadeForCB.viewProj;
+		currShadowDirLightCB->CopyData(i, shadowCB);
+	}
 
 	auto currDirLightCB = currFrameResource->DirLightCB.get();
 	currDirLightCB->CopyData(0, dirLightCB);
-
-	//for shadow pass
-	ShadowLightConstants shadowCB;
-	shadowCB.lightMatrix = XMMatrixTranspose(mainLightViewProj);
-
-	auto currShadowDirLightCB = currFrameResource->ShadowDirLightCB.get();
-	currShadowDirLightCB->CopyData(0, shadowCB);
 }
 
 void LightingManager::UpdateLightCBs(FrameResource* currFrameResource)
@@ -208,7 +217,7 @@ LightRenderItem* LightingManager::GetLight(int i)
 	return _localLights[i].get();
 }
 
-DirectX::XMMATRIX LightingManager::CalculateMainLightViewProj()
+void LightingManager::CalculateCascadesViewProjs()
 {
 	//get the center of a camera frustum
 	XMFLOAT3 corners[8];
@@ -238,7 +247,7 @@ DirectX::XMMATRIX LightingManager::CalculateMainLightViewProj()
 	XMFLOAT3 camPos; 
 	XMStoreFloat3(&camPos, _camera->GetPosition());
 
-	float lightDistance = 0.5f * _camera->GetFarZ();
+	float lightDistance = 100.0f;
 
 	XMVECTOR lightDir = XMLoadFloat3(&_mainLightDirection);
 	lightDir = XMVector3Normalize(lightDir);
@@ -251,29 +260,67 @@ DirectX::XMMATRIX LightingManager::CalculateMainLightViewProj()
 
 	XMVECTOR frustumCorners[8];
 	for (int i = 0; i < 8; i++)
-		frustumCorners[i] = XMVector3TransformCoord(XMLoadFloat3(&corners[i]), lightView);
-
-	// Step 3: Compute bounds
-	XMVECTOR minV = frustumCorners[0];
-	XMVECTOR maxV = frustumCorners[0];
-	for (int i = 1; i < 8; i++) {
-		minV = XMVectorMin(minV, frustumCorners[i]);
-		maxV = XMVectorMax(maxV, frustumCorners[i]);
-	}
-	XMFLOAT3 minPt, maxPt;
-	XMStoreFloat3(&minPt, minV);
-	XMStoreFloat3(&maxPt, maxV);
-
-	// Step 4: Orthographic projection that fits the frustum
-	XMMATRIX lightProj = XMMatrixOrthographicOffCenterLH(
-		minPt.x, maxPt.x,
-		minPt.y, maxPt.y,
-		minPt.z, maxPt.z
-	);
+		frustumCorners[i] = XMLoadFloat3(&corners[i]);
 
 	_mainLightView = lightView;
 
-	return lightView * lightProj;
+	//calculating cascades
+	float nearZ = _camera->GetNearZ();
+	float farZ = _camera->GetFarZ();
+
+	for (int i = 0; i < gCascadesCount; i++)
+	{
+		float splitNearRatio = i / (float)gCascadesCount;
+		float splitFarRatio = (i + 1) / (float)gCascadesCount;
+
+		_cascades[i].splitNear = nearZ + (farZ - nearZ) * splitNearRatio;
+		_cascades[i].splitFar = nearZ + (farZ - nearZ) * splitFarRatio;
+
+		//interpolate corners in world space
+		XMVECTOR cascadeCorners[8];
+
+		for (int j = 0; j < 4; j++) {
+
+			cascadeCorners[j] = XMVectorLerp(frustumCorners[j], frustumCorners[j + 4], splitNearRatio);
+			cascadeCorners[j + 4] = XMVectorLerp(frustumCorners[j], frustumCorners[j + 4], splitFarRatio);
+		}
+
+		//get them into light space
+		XMVECTOR lsCorners[8];
+		for (int j = 0; j < 8; j++)
+			lsCorners[j] = XMVector3TransformCoord(cascadeCorners[j], lightView);
+
+		//min max
+		XMVECTOR cascadeMinV = lsCorners[0];
+		XMVECTOR cascadeMaxV = lsCorners[0];
+		for (int j = 1; j < 8; j++)
+		{
+			cascadeMinV = XMVectorMin(cascadeMinV, lsCorners[j]);
+			cascadeMaxV = XMVectorMax(cascadeMaxV, lsCorners[j]);
+		}
+
+		XMFLOAT3 cascadeMinPt, cascadeMaxPt;
+		XMStoreFloat3(&cascadeMinPt, cascadeMinV);
+		XMStoreFloat3(&cascadeMaxPt, cascadeMaxV);
+
+		//some padding
+		float zPad = 10.0f;
+		cascadeMinPt.z -= zPad;
+		cascadeMaxPt.z += zPad;
+
+		// snap to texel to remove shimmering
+		SnapToTexel(cascadeMinPt, cascadeMaxPt);
+
+
+		XMMATRIX cascadeProj = XMMatrixOrthographicOffCenterLH(
+			cascadeMinPt.x, cascadeMaxPt.x,
+			cascadeMinPt.y, cascadeMaxPt.y,
+			cascadeMinPt.z, cascadeMaxPt.z
+		);
+
+		_cascades[i].viewProj = lightView * cascadeProj;
+		_cascadesFrustums[i] = BoundingFrustum(_cascades[i].viewProj);
+	}
 }
 
 void LightingManager::DrawDirLight(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, D3D12_GPU_DESCRIPTOR_HANDLE descTable)
@@ -285,10 +332,12 @@ void LightingManager::DrawDirLight(ID3D12GraphicsCommandList* cmdList, FrameReso
 	cmdList->SetGraphicsRootDescriptorTable(0, descTable);
 	cmdList->SetGraphicsRootShaderResourceView(1, currFrameResource->LocalLightCB.get()->Resource()->GetGPUVirtualAddress());
 	cmdList->SetGraphicsRootShaderResourceView(4, currFrameResource->LightsContainingFrustum.get()->Resource()->GetGPUVirtualAddress());
+	cmdList->SetGraphicsRootDescriptorTable(5, TextureManager::srvHeapAllocator->GetGpuHandle(_cascadesShadowMaps[0].SRV));
+	cmdList->SetGraphicsRootDescriptorTable(6, TextureManager::srvHeapAllocator->GetGpuHandle(_cascadesShadowMaps[0].SRV));
 
 	cmdList->SetPipelineState(_dirLightPSO.Get());
 	cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-	CD3DX12_GPU_DESCRIPTOR_HANDLE tex(TextureManager::srvHeapAllocator->GetGpuHandle(_dirLightShadowMap.SRV));
+	CD3DX12_GPU_DESCRIPTOR_HANDLE tex(TextureManager::srvHeapAllocator->GetGpuHandle(_cascadesShadowMaps[0].SRV));
 	cmdList->SetGraphicsRootDescriptorTable(5, tex);
 
 	auto lightingPassCB = currFrameResource->LightingPassCB->Resource();
@@ -341,34 +390,41 @@ void LightingManager::DrawShadows(ID3D12GraphicsCommandList* cmdList, FrameResou
 	cmdList->RSSetViewports(1, &_shadowViewport);
 	cmdList->RSSetScissorRects(1, &_shadowScissorRect);
 
-	std::vector<CD3DX12_RESOURCE_BARRIER> barriers;
-	for (int i = 0; i < _localLights.size(); i++)
-	{
-		barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(_localLights[i]->ShadowMap.Resource.Get(), D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_DEPTH_WRITE));
-	}
-	barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(_dirLightShadowMap.Resource.Get(), D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_DEPTH_WRITE));
-	if (barriers.size() != 0)
-	{
-		cmdList->ResourceBarrier((UINT)barriers.size(), barriers.data());
-	}
-
 	cmdList->SetGraphicsRootSignature(_shadowRootSignature.Get());
 	cmdList->SetPipelineState(_shadowPSO.Get());
 	cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
 	if (_isMainLightOn)
 	{
-		CD3DX12_CPU_DESCRIPTOR_HANDLE tex(_shadowDSVAllocator->GetCpuHandle(_dirLightShadowMap.DSV));
-		cmdList->OMSetRenderTargets(0, nullptr, false, &tex);
-		cmdList->ClearDepthStencilView(tex, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
-		cmdList->SetGraphicsRootConstantBufferView(1, currFrameResource->ShadowDirLightCB->Resource()->GetGPUVirtualAddress());
+		//render each cascade shadow map
+		for (UINT i = 0; i < gCascadesCount; i++)
+		{
+			//check frustum culling so we do not need to load gpu with unnecessary commands
+			std::vector<int> visibleObjects = FrustumCulling(objects, i);
+			if (visibleObjects.empty())
+				continue;
 
-		std::vector<int> visibleObjects = FrustumCulling(objects, CalculateDirLightAABB());
-		ShadowPass(currFrameResource, cmdList, visibleObjects, objects);
+			//changing state of shadow map to dsv
+			cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(_cascadesShadowMaps[i].Resource.Get(), D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_DEPTH_WRITE));
+
+			CD3DX12_CPU_DESCRIPTOR_HANDLE tex(_shadowDSVAllocator->GetCpuHandle(_cascadesShadowMaps[i].DSV));
+			cmdList->OMSetRenderTargets(0, nullptr, false, &tex);
+			cmdList->ClearDepthStencilView(tex, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
+			cmdList->SetGraphicsRootConstantBufferView(1, currFrameResource->ShadowDirLightCB->Resource()->GetGPUVirtualAddress() + i * _shadowCBSize);
+
+			ShadowPass(currFrameResource, cmdList, visibleObjects, objects);
+
+			//changing state back to srv
+			cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(_cascadesShadowMaps[i].Resource.Get(), D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_GENERIC_READ));
+		}
 	}
 
+	//the same for local lights
 	std::vector<int> visibleLights = _lightsContainingFrustum;
 	visibleLights.insert(visibleLights.end(), _lightsInsideFrustum.begin(), _lightsInsideFrustum.end());
+
+	if (visibleLights.empty())
+		return;
 
 	for (auto& light : _localLights)
 	{
@@ -380,6 +436,12 @@ void LightingManager::DrawShadows(ID3D12GraphicsCommandList* cmdList, FrameResou
 
 		BoundingSphere lightWorldAABB;
 		light->Bounds.Transform(lightWorldAABB, light->LightData.world);
+		std::vector<int> visibleObjects = FrustumCulling(objects, lightWorldAABB);
+		if (visibleObjects.empty())
+			continue;
+
+		cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(light->ShadowMap.Resource.Get(), D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_DEPTH_WRITE));
+
 		CD3DX12_CPU_DESCRIPTOR_HANDLE tex(_shadowDSVAllocator->GetCpuHandle(light->ShadowMap.DSV));
 		cmdList->OMSetRenderTargets(0, nullptr, false, &tex);
 		cmdList->ClearDepthStencilView(tex, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
@@ -388,19 +450,9 @@ void LightingManager::DrawShadows(ID3D12GraphicsCommandList* cmdList, FrameResou
 		D3D12_GPU_VIRTUAL_ADDRESS localLightCBAddress = currShadowLightsCB->GetGPUVirtualAddress() + light->LightIndex * sizeof(ShadowLightConstants);
 		cmdList->SetGraphicsRootConstantBufferView(1, localLightCBAddress);
 
-		std::vector<int> visibleObjects = FrustumCulling(objects, lightWorldAABB);
 		ShadowPass(currFrameResource, cmdList, visibleObjects, objects);
-	}
 
-	barriers.clear();
-	for (int i = 0; i < _localLights.size(); i++)
-	{
-		barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(_localLights[i]->ShadowMap.Resource.Get(), D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_GENERIC_READ));
-	}
-	barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(_dirLightShadowMap.Resource.Get(), D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_GENERIC_READ));
-	if (barriers.size() != 0)
-	{
-		cmdList->ResourceBarrier((UINT)barriers.size(), barriers.data());
+		cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(light->ShadowMap.Resource.Get(), D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_GENERIC_READ));
 	}
 }
 
@@ -430,11 +482,14 @@ void LightingManager::BuildRootSignature(int srvAmount)
 	//lighting root signature
 	CD3DX12_DESCRIPTOR_RANGE lightingRange;
 	lightingRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, srvAmount, 0);
+	//cascades shadow map
+	CD3DX12_DESCRIPTOR_RANGE cascadesShadowTexTable;
+	cascadesShadowTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, srvAmount++);
 	//shadow map
 	CD3DX12_DESCRIPTOR_RANGE shadowTexTable;
-	shadowTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, srvAmount);
+	shadowTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, srvAmount++);
 
-	const int rootParameterCount = 6;
+	const int rootParameterCount = 7;
 
 	CD3DX12_ROOT_PARAMETER lightingSlotRootParameter[rootParameterCount];
 
@@ -443,7 +498,8 @@ void LightingManager::BuildRootSignature(int srvAmount)
 	lightingSlotRootParameter[2].InitAsConstantBufferView(0);
 	lightingSlotRootParameter[3].InitAsConstantBufferView(1);
 	lightingSlotRootParameter[4].InitAsShaderResourceView(1, 1);
-	lightingSlotRootParameter[5].InitAsDescriptorTable(1, &shadowTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
+	lightingSlotRootParameter[5].InitAsDescriptorTable(1, &cascadesShadowTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
+	lightingSlotRootParameter[6].InitAsDescriptorTable(1, &shadowTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
 
 	CD3DX12_ROOT_SIGNATURE_DESC lightingRootSigDesc(rootParameterCount, lightingSlotRootParameter, TextureManager::GetShadowSamplers().size(), TextureManager::GetShadowSamplers().data(), D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 
@@ -619,8 +675,8 @@ ShadowTexture LightingManager::CreateShadowTexture()
 	D3D12_RESOURCE_DESC texDesc = {};
 	texDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
 	texDesc.Alignment = 0;
-	texDesc.Width = _shadowMapSize;
-	texDesc.Height = _shadowMapSize;
+	texDesc.Width = _shadowMapResolution;
+	texDesc.Height = _shadowMapResolution;
 	texDesc.DepthOrArraySize = 1;
 	texDesc.MipLevels = 1;
 	texDesc.Format = DXGI_FORMAT_R24G8_TYPELESS; 
@@ -680,16 +736,17 @@ void LightingManager::DeleteShadowTexture(ShadowTexture tex)
 	TextureManager::srvHeapAllocator->Free(tex.SRV);
 }
 
-std::vector<int> LightingManager::FrustumCulling(std::vector<std::shared_ptr<EditableRenderItem>>& objects, DirectX::BoundingBox lightAABB)
+std::vector<int> LightingManager::FrustumCulling(std::vector<std::shared_ptr<EditableRenderItem>>& objects, int cascadeIdx)
 {
+	BoundingFrustum lightFrustum = _cascadesFrustums[cascadeIdx];
 	std::vector<int> visibleObjects;
 
 	for (int i = 0; i < objects.size(); i++)
 	{
-		BoundingBox objectLightBounds;
+		BoundingBox objectLSBounds;
 
-		objects[i]->Bounds.Transform(objectLightBounds, objects[i]->world);
-		if (lightAABB.Contains(objectLightBounds) != DirectX::DISJOINT)
+		objects[i]->Bounds.Transform(objectLSBounds, objects[i]->world * _cascades[i].viewProj);
+		if (lightFrustum.Contains(objectLSBounds) != DirectX::DISJOINT)
 		{
 			visibleObjects.push_back(i);
 		}
@@ -716,50 +773,6 @@ std::vector<int> LightingManager::FrustumCulling(std::vector<std::shared_ptr<Edi
 	return visibleObjects;
 }
 
-BoundingBox LightingManager::CalculateDirLightAABB()
-{
-	// 1. Get frustum corners in world space
-	DirectX::XMFLOAT3 corners[8];
-	_camera->CameraFrustum().GetCorners(corners);
-
-	//fucking corners were in the view space all that time
-	XMMATRIX camWorld = _camera->GetInvView(); // camera world transform
-	for (int i = 0; i < 8; ++i)
-	{
-		XMVECTOR worldPos = XMVector3Transform(XMLoadFloat3(&corners[i]), camWorld);
-		XMStoreFloat3(&corners[i], worldPos);
-	}
-
-	// 2. Transform frustum corners into light space
-	XMVECTOR minV{ FLT_MAX, FLT_MAX, FLT_MAX };
-	XMVECTOR maxV{ -FLT_MAX, -FLT_MAX, -FLT_MAX };
-	for (int i = 0; i < 8; i++)
-	{
-		XMVECTOR c = XMLoadFloat3(&corners[i]);
-		XMVECTOR lc = XMVector3TransformCoord(c, _mainLightView);
-
-		minV = XMVectorMin(minV, lc);
-		maxV = XMVectorMax(maxV, lc);
-	}
-
-	float shift = _camera->GetFarZ() * 0.5f;
-
-	XMVECTOR lightDir = XMVector3TransformCoord(XMLoadFloat3(&_mainLightDirection), _mainLightView);
-	lightDir = XMVector3Normalize(lightDir);
-	XMFLOAT3 lightDirF;
-
-	//shift to lightDirection
-	minV = XMVectorMin(minV, minV - shift * lightDir);
-	maxV = XMVectorMax(maxV, maxV - shift * lightDir);
-
-	BoundingBox aabb;
-
-	// Build light-space AABB
-	BoundingBox::CreateFromPoints(aabb, minV, maxV);
-
-	return aabb;
-}
-
 void LightingManager::ShadowPass(FrameResource* currFrameResource, ID3D12GraphicsCommandList* cmdList, std::vector<int> visibleObjects, std::vector<std::shared_ptr<EditableRenderItem>>& objects)
 {
 	for (auto& idx : visibleObjects)
@@ -781,4 +794,24 @@ void LightingManager::ShadowPass(FrameResource* currFrameResource, ID3D12Graphic
 			cmdList->DrawIndexedInstanced((UINT)meshData.indexCount, 1, (UINT)meshData.indexStart, (UINT)meshData.vertexStart, 0);
 		}
 	}
+}
+
+void LightingManager::SnapToTexel(DirectX::XMFLOAT3& cascadeMinPt, DirectX::XMFLOAT3& cascadeMaxPt) const
+{
+	float worldUnitsPerTexelX = (cascadeMaxPt.x - cascadeMinPt.x) / (float)_shadowMapResolution;
+	float worldUnitsPerTexelY = (cascadeMaxPt.y - cascadeMinPt.y) / (float)_shadowMapResolution;
+
+	// compute center in light space
+	float cx = (cascadeMinPt.x + cascadeMaxPt.x) * 0.5f;
+	float cy = (cascadeMinPt.y + cascadeMaxPt.y) * 0.5f;
+
+	// snap center to texel grid:
+	cx = floorf(cx / worldUnitsPerTexelX) * worldUnitsPerTexelX;
+	cy = floorf(cy / worldUnitsPerTexelY) * worldUnitsPerTexelY;
+
+	// recompute min/max from snapped center
+	cascadeMinPt.x = cx - (cascadeMaxPt.x - cascadeMinPt.x) * 0.5f;
+	cascadeMaxPt.x = cx + (cascadeMaxPt.x - cascadeMinPt.x) * 0.5f;
+	cascadeMinPt.y = cy - (cascadeMaxPt.y - cascadeMinPt.y) * 0.5f;
+	cascadeMaxPt.y = cy + (cascadeMaxPt.y - cascadeMinPt.y) * 0.5f;
 }

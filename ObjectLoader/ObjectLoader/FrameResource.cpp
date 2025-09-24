@@ -9,7 +9,7 @@ FrameResource::FrameResource(ID3D12Device* device, UINT passCount)
     GBufferPassCB = std::make_unique<UploadBuffer<GBufferPassConstants>>(device, passCount, true);
     LightingPassCB = std::make_unique < UploadBuffer <LightingPassConstants>> (device, passCount, true);
     DirLightCB = std::make_unique<UploadBuffer<DirectionalLightConstants>>(device, passCount, true);
-    ShadowDirLightCB = std::make_unique<UploadBuffer<ShadowLightConstants>>(device, 1, true);
+    ShadowDirLightCB = std::make_unique<UploadBuffer<ShadowLightConstants>>(device, gCascadesCount, true);
     ShadowLocalLightCB = std::make_unique<UploadBuffer<ShadowLightConstants>>(device, 512, false);
     LocalLightCB = std::make_unique<UploadBuffer<Light>>(device, 512, false);
     LightsContainingFrustum = std::make_unique<UploadBuffer<LightIndex>>(device, 512, false);

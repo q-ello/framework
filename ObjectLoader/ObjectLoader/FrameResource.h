@@ -79,6 +79,15 @@ struct Light
     float padding[2]{ 0.f, 0.f };
 };
 
+static const int gCascadesCount = 3;
+
+struct Cascade
+{
+    float splitNear = 0.0f;
+    float splitFar = 100.0f;
+    DirectX::XMMATRIX viewProj = DirectX::XMMatrixIdentity();
+};
+
 struct DirectionalLightConstants
 {
     DirectX::XMFLOAT3 mainLightDirection = { 0.0f, 0.0f, 0.0f };
@@ -86,7 +95,7 @@ struct DirectionalLightConstants
     DirectX::XMFLOAT3 gLightColor = { 1.0f, 1.0f, 1.0f };
     int lightsContainingFrustum = 0;
     Light mainSpotlight = Light();
-    DirectX::XMMATRIX mainLightViewProj = DirectX::XMMatrixIdentity();
+    Cascade cascades[gCascadesCount];
 };
 
 struct ShadowLightConstants
