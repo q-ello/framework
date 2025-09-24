@@ -234,11 +234,13 @@ float ShadowFactor(float3 worldPos, float4x4 transformMatrix, int index, bool is
     float2 texelSize = 1.0f / gShadowMapResolution;
     float shadow = 0.0f;
     int count = 0;
-    int radius = isCascade ? index + 1 : 1;
+    //int radius = isCascade ? index + 1 : 1;
     
-    for (int y = -radius; y <= radius; y++)
+    [unroll]
+    for (int y = -1; y <= 1; y++)
     {
-        for (int x = -radius; x <= radius; x++)
+        [unroll]
+        for (int x = -1; x <= 1; x++)
         {
             float2 offset = float2(x, y) * texelSize;
             shadow += array.SampleCmpLevelZero(
