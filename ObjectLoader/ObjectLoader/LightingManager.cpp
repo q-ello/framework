@@ -374,7 +374,7 @@ void LightingManager::CalculateCascadesViewProjs()
 		);
 
 		_cascades[i].viewProj = lightView * cascadeProj;
-		_cascadesFrustums[i] = BoundingFrustum(_cascades[i].viewProj);
+		BoundingBox::CreateFromPoints(_cascadesAABBs[i], cascadeMinV, cascadeMaxV);
 	}
 }
 
@@ -745,9 +745,9 @@ void LightingManager::DeleteShadowTexture(int texIdx)
 	_shadowDSVAllocator->Free(texIdx);
 }
 
-std::vector<int> LightingManager::FrustumCulling(std::vector<std::shared_ptr<EditableRenderItem>>& objects, int cascadeIdx)
+std::vector<int> LightingManager::FrustumCulling(std::vector<std::shared_ptr<EditableRenderItem>>& objects, int cascadeIdx) const
 {
-	BoundingFrustum lightFrustum = _cascadesFrustums[cascadeIdx];
+	BoundingBox lightAABB = _cascadesAABBs[cascadeIdx];
 	std::vector<int> visibleObjects;
 
 	for (int i = 0; i < objects.size(); i++)
@@ -755,7 +755,7 @@ std::vector<int> LightingManager::FrustumCulling(std::vector<std::shared_ptr<Edi
 		BoundingBox objectLSBounds;
 
 		objects[i]->Bounds.Transform(objectLSBounds, objects[i]->world * _cascades[i].viewProj);
-		if (lightFrustum.Contains(objectLSBounds) != DirectX::DISJOINT)
+		if (lightAABB.Contains(objectLSBounds) != DirectX::DISJOINT)
 		{
 			visibleObjects.push_back(i);
 		}

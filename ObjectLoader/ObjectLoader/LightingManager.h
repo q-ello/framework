@@ -94,7 +94,7 @@ private:
 	//shadow cascades for directional light
 	DirectX::XMMATRIX _mainLightView;
 	int _cascadesShadowMapDSVs[gCascadesCount];
-	BoundingFrustum _cascadesFrustums[gCascadesCount];
+	BoundingBox _cascadesAABBs[gCascadesCount];
 	Cascade _cascades[gCascadesCount];
 	ShadowTextureArray _cascadeShadowTextureArray;
 	ShadowTextureArray _localLightsShadowTextureArray;
@@ -167,7 +167,7 @@ private:
 	//helpers
 	int CreateShadowTextureDSV(bool forCascade, int index);
 	void DeleteShadowTexture(int texDSV);
-	std::vector<int> FrustumCulling(std::vector<std::shared_ptr<EditableRenderItem>>& objects, int cascadeIdx);
+	std::vector<int> FrustumCulling(std::vector<std::shared_ptr<EditableRenderItem>>& objects, int cascadeIdx) const;
 	std::vector<int> FrustumCulling(std::vector<std::shared_ptr<EditableRenderItem>>& objects, DirectX::BoundingSphere lightAABB);
 	void ShadowPass(FrameResource* currFrameResource, ID3D12GraphicsCommandList* cmdList, std::vector<int> visibleObjects, std::vector<std::shared_ptr<EditableRenderItem>>& objects);
 	void SnapToTexel(DirectX::XMFLOAT3& minPt, DirectX::XMFLOAT3& maxPt) const;
