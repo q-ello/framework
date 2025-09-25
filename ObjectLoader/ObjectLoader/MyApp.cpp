@@ -1,5 +1,4 @@
 #include "MyApp.h"
-#include "PostProcessManager.h"
 
 
 #pragma comment(lib, "ComCtl32.lib")
@@ -83,6 +82,7 @@ void MyApp::OnResize()
 {
 	//resizing the render window
 	D3DApp::OnResize();
+	_postProcessManager->OnResize(mClientWidth, mClientHeight);
 
 	_camera.SetLens(0.25f * MathHelper::Pi, AspectRatio(), 10.f, 2000.f);
 	_camera.UpdateFrustum();
@@ -146,6 +146,9 @@ void MyApp::Draw(const GameTimer& gt)
 		_lightingManager->DrawShadows(mCommandList.Get(), mCurrFrameResource, _objectsManager->Objects());
 		GBufferPass();
 		LightingPass();
+
+		if (_godRays)
+			_postProcessManager->GodRaysPass(mCommandList.Get());
 	}
 
 	//drawing grid
@@ -323,10 +326,6 @@ void MyApp::BuildShadersAndInputLayout()
 {
 }
 
-void PostProcessManager::GodRaysPass(ID3D12GraphicsCommandList* cmdList)
-{
-}
-
 void MyApp::BuildPSOs()
 {
 	
@@ -368,6 +367,8 @@ void MyApp::DrawInterface()
 	if (ImGui::BeginTabItem("Other"))
 	{
 		ImGui::Checkbox("Wireframe", &_isWireframe);
+		ImGui::Checkbox("God Rays", &_godRays);
+
 		ImGui::EndTabItem();
 	}
 
@@ -1396,6 +1397,10 @@ void MyApp::InitManagers()
 	_lightingManager = std::make_unique<LightingManager>(md3dDevice.Get());
 	_lightingManager->SetData(&_camera, _objectsManager->InputLayout());
 	_lightingManager->Init(_gBuffer->InfoCount(false));
+
+	_postProcessManager = std::make_unique<PostProcessManager>(md3dDevice.Get());
+	_postProcessManager->Init(mClientWidth, mClientHeight);
+	_postProcessManager->BindToManagers(_gBuffer.get(), _lightingManager.get());
 }
 
 void MyApp::GBufferPass()
@@ -1415,7 +1420,6 @@ void MyApp::GBufferPass()
 
 void MyApp::LightingPass()
 {
-
 	_gBuffer->ChangeRTVsState(D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 	_gBuffer->ChangeDSVState(D3D12_RESOURCE_STATE_DEPTH_READ);
 

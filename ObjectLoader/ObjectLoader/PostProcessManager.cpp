@@ -2,8 +2,15 @@
 
 using namespace Microsoft::WRL;
 
-void PostProcessManager::Init()
+void PostProcessManager::Init(int width, int height)
 {
+	_width = width;
+	_height = height;
+
+	//get srv and rtv indices
+	_lightOcclusionMask.otherIndex = TextureManager::rtvHeapAllocator->Allocate();
+	_lightOcclusionMask.SrvIndex = TextureManager::srvHeapAllocator->Allocate();
+
 	BuildRootSignature();
 	BuildShaders();
 	BuildPSOs();
@@ -20,14 +27,24 @@ void PostProcessManager::BindToManagers(GBuffer* gbuffer, LightingManager* light
 
 void PostProcessManager::GodRaysPass(ID3D12GraphicsCommandList* cmdList)
 {
+	//occlusion mask to rtv
+	cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(_lightOcclusionMask.Resource.Get(), 
+		_lightOcclusionMask.prevState, D3D12_RESOURCE_STATE_RENDER_TARGET));
+
+	auto lomRtv = TextureManager::rtvHeapAllocator->GetCpuHandle(_lightOcclusionMask.otherIndex);
+
 	//light occlusion mask pass
 	cmdList->SetPipelineState(_lightOcclusionMaskPSO.Get());
 	cmdList->SetGraphicsRootSignature(_lightOcclusionMaskRootSignature.Get());
 	cmdList->SetGraphicsRootDescriptorTable(0, _gBuffer->GetDepthSRV());
 	cmdList->SetGraphicsRootDescriptorTable(5, _lightingManager->GetCascadeShadowSRV()); //cascades shadow map
-	cmdList->OMSetRenderTargets(1, &_lightOcclusionMask.RtvHandle, true, nullptr);
+	cmdList->ClearRenderTargetView(lomRtv, Colors::Black, 0, nullptr);
+	cmdList->OMSetRenderTargets(1, &lomRtv, true, nullptr);
 	cmdList->DrawInstanced(3, 1, 0, 0);
 
+	//occlusion mask to srv
+	cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(_lightOcclusionMask.Resource.Get(), 
+		_lightOcclusionMask.prevState, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE));
 }
 
 void PostProcessManager::OnResize(int newWidth, int newHeight)
@@ -148,7 +165,7 @@ void PostProcessManager::BuildTextures()
 	rtvDesc.Texture2D.PlaneSlice = 0;
 	rtvDesc.Format = _format;
 
-	_device->CreateRenderTargetView(_lightOcclusionMask.Resource.Get(), &rtvDesc, rtvHeapHandle);
+	_device->CreateRenderTargetView(_lightOcclusionMask.Resource.Get(), &rtvDesc, TextureManager::rtvHeapAllocator->GetCpuHandle(_lightOcclusionMask.otherIndex));
 
 	//create SRV
 	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};

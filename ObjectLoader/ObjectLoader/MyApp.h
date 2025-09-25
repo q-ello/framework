@@ -6,13 +6,7 @@
 #include "../../Common/MathHelper.h"
 #include "../../Common/UploadBuffer.h"
 #include "../../Common/GeometryGenerator.h"
-#include "FrameResource.h"
-#include "DescriptorHeapAllocator.h"
 #include "BasicUtil.h"
-#include "RenderItem.h"
-#include "UploadManager.h"
-#include "ObjectManager.h"
-#include "TextureManager.h"
 #include "GeometryManager.h"
 #include "LightingManager.h"
 #include "ModelManager.h"
@@ -25,6 +19,7 @@
 #include "imgui/backends/imgui_impl_win32.h"
 #include "OpaqueObjectManager.h"
 #include "UnlitObjectManager.h"
+#include "PostProcessManager.h"
 
 struct Toast {
 	std::string message;
@@ -126,8 +121,9 @@ private:
 	std::unordered_map<std::string, ComPtr<ID3DBlob>> mShaders;
 
 	std::unique_ptr<UnlitObjectManager> _gridManager;
-	std::unique_ptr < EditableObjectManager> _objectsManager;
+	std::unique_ptr<EditableObjectManager> _objectsManager;
 	std::unique_ptr<LightingManager> _lightingManager = nullptr;
+	std::unique_ptr<PostProcessManager> _postProcessManager = nullptr;
 
 	GBufferPassConstants _GBufferCB;
 	LightingPassConstants _lightingCB;
@@ -146,5 +142,8 @@ private:
 	Camera _camera;
 
 	std::vector<Toast> _notifications;
+
+	//post process effects
+	bool _godRays;
 };
 

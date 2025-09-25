@@ -11,8 +11,8 @@ public:
 	PostProcessManager(ID3D12Device* device) 
 		: _device{ device }
 	{};
-	~PostProcessManager() = default;
-	void Init();
+	~PostProcessManager() {};
+	void Init(int width, int height);
 	void BindToManagers(GBuffer* gbuffer, LightingManager* lightingManager);
 
 	void GodRaysPass(ID3D12GraphicsCommandList* cmdList);

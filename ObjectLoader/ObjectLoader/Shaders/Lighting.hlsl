@@ -138,7 +138,7 @@ float4 DirLightingPS(VertexOut pin) : SV_Target
     {
         int cascadeIdx = CalculateCascadeIndex(posW);
         //main light intensity is 3
-        finalColor.xyz = PBRShading(coords, -mainLightDirection, mainLightColor, posW) * 3.f * ShadowFactor(posOffseted, cascades[cascadeIdx].viewProj, cascadeIdx, true);
+        finalColor.xyz = PBRShading(coords, -mainLightDirection, mainLightColor, posW) * 3.f * ShadowFactor(posOffseted, cascades[cascadeIdx].viewProj, cascadeIdx, gCascadesShadowMap);
     }
     
     //spotlight in hand

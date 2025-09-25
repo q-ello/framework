@@ -5,6 +5,7 @@
 #include "UploadManager.h"
 #include "GeometryManager.h"
 #include "Camera.h"
+#include "TextureManager.h"
 
 struct ShadowTextureArray
 {

@@ -97,9 +97,8 @@ bool IsPixelLit(Light light, float3 posW)
 }
 
 //compute shadows
-float ShadowFactor(float3 worldPos, float4x4 transformMatrix, int index, bool isCascade)
+float ShadowFactor(float3 worldPos, float4x4 transformMatrix, int index, Texture2DArray array)
 {
-    Texture2DArray array = isCascade ? gCascadesShadowMap : gShadowMap;
     float4 posLS = mul(float4(worldPos, 1), transformMatrix);
     float3 ndc = posLS.xyz / posLS.w;
     float2 uv = ndc.xy * 0.5f + 0.5f;
