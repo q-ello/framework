@@ -7,15 +7,6 @@ LightingManager::LightingManager(ID3D12Device* device)
 {
 	_device = device;
 
-	//create dsv
-	D3D12_DESCRIPTOR_HEAP_DESC dsvHeapDesc = {};
-	dsvHeapDesc.NumDescriptors = 513;
-
-	dsvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
-	ThrowIfFailed(_device->CreateDescriptorHeap(&dsvHeapDesc, IID_PPV_ARGS(&_shadowDSVHeap)));
-
-	_shadowDSVAllocator = std::make_unique<DescriptorHeapAllocator>(_shadowDSVHeap.Get(), _device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV), dsvHeapDesc.NumDescriptors);
-
 	//creating shadow textures arrays
 	D3D12_RESOURCE_DESC texDesc = {};
 	texDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
@@ -443,10 +434,12 @@ void LightingManager::DrawShadows(ID3D12GraphicsCommandList* cmdList, FrameResou
 		//changing state of shadow map to dsv
 		cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(_cascadeShadowTextureArray.textureArray.Get(), D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_DEPTH_WRITE));
 
+		auto dsvAllocator = TextureManager::dsvHeapAllocator.get();
+
 		//render each cascade shadow map
 		for (UINT i = 0; i < gCascadesCount; i++)
 		{
-			CD3DX12_CPU_DESCRIPTOR_HANDLE tex(_shadowDSVAllocator->GetCpuHandle(_cascades[i].shadowMapDSV));
+			CD3DX12_CPU_DESCRIPTOR_HANDLE tex(dsvAllocator->GetCpuHandle(_cascades[i].shadowMapDSV));
 			cmdList->ClearDepthStencilView(tex, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
 			//check frustum culling so we do not need to load gpu with unnecessary commands
@@ -471,6 +464,8 @@ void LightingManager::DrawShadows(ID3D12GraphicsCommandList* cmdList, FrameResou
 		return;
 
 	cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(_localLightsShadowTextureArray.textureArray.Get(), D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_DEPTH_WRITE));
+	
+	auto dsvAllocator = TextureManager::dsvHeapAllocator.get();
 	for (auto& light : _localLights)
 	{
 		if (!light->LightData.active || light->LightData.type == 0)
@@ -485,7 +480,7 @@ void LightingManager::DrawShadows(ID3D12GraphicsCommandList* cmdList, FrameResou
 		if (visibleObjects.empty())
 			continue;
 
-		CD3DX12_CPU_DESCRIPTOR_HANDLE tex(_shadowDSVAllocator->GetCpuHandle(light->ShadowMapDSV));
+		CD3DX12_CPU_DESCRIPTOR_HANDLE tex(dsvAllocator->GetCpuHandle(light->ShadowMapDSV));
 		cmdList->OMSetRenderTargets(0, nullptr, false, &tex);
 		cmdList->ClearDepthStencilView(tex, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 		auto currShadowLightsCB = currFrameResource->ShadowLocalLightCB.get()->Resource();
@@ -501,10 +496,6 @@ void LightingManager::DrawShadows(ID3D12GraphicsCommandList* cmdList, FrameResou
 
 void LightingManager::Init(int srvAmount)
 {
-	// Create buffer on GPU
-	CD3DX12_HEAP_PROPERTIES defaultHeap(D3D12_HEAP_TYPE_DEFAULT);
-	CD3DX12_RESOURCE_DESC bufferDesc = CD3DX12_RESOURCE_DESC::Buffer(sizeof(Light) * MaxLights);
-
 	BuildRootSignature(srvAmount);
 	BuildShaders();
 	BuildInputLayout();
@@ -719,8 +710,8 @@ int LightingManager::CreateShadowTextureDSV(bool forCascade, int index)
 	ID3D12Resource* textureArray = forCascade ? _cascadeShadowTextureArray.textureArray.Get() : _localLightsShadowTextureArray.textureArray.Get();
 
 	//dsv
-	UINT dsvIndex = _shadowDSVAllocator.get()->Allocate();
-	D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = _shadowDSVAllocator.get()->GetCpuHandle(dsvIndex);
+	UINT dsvIndex = TextureManager::dsvHeapAllocator->Allocate();
+	D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = TextureManager::dsvHeapAllocator->GetCpuHandle(dsvIndex);
 
 	D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc = {};
 	dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2DARRAY;
@@ -738,7 +729,7 @@ int LightingManager::CreateShadowTextureDSV(bool forCascade, int index)
 void LightingManager::DeleteShadowTexture(int texIdx)
 {
 	UploadManager::Flush();
-	_shadowDSVAllocator->Free(texIdx);
+	TextureManager::dsvHeapAllocator->Free(texIdx);
 }
 
 std::vector<int> LightingManager::FrustumCulling(std::vector<std::shared_ptr<EditableRenderItem>>& objects, int cascadeIdx) const

@@ -12,20 +12,6 @@ enum class GBufferInfo
 	Count
 };
 
-struct GBufferTexture
-{
-	Microsoft::WRL::ComPtr<ID3D12Resource> Resource = nullptr;
-	D3D12_CPU_DESCRIPTOR_HANDLE RtvHandle = {};
-	int SrvIndex = -1;
-	D3D12_RESOURCE_STATES prevState = D3D12_RESOURCE_STATE_COMMON;
-
-	void Reset()
-	{
-		Resource.Reset();
-		RtvHandle.ptr = 0;
-	}
-};
-
 class GBuffer
 {
 public:
@@ -34,8 +20,7 @@ public:
 	//onresize
 	void OnResize(int width, int height);
 
-	void CreateGBufferTexture(int i, CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHeapHandle, D3D12_CPU_DESCRIPTOR_HANDLE srvHeapHandle,
-		CD3DX12_CPU_DESCRIPTOR_HANDLE dsvHeapHandle);
+	void CreateGBufferTexture(int i, D3D12_CPU_DESCRIPTOR_HANDLE otherHeapHandle, D3D12_CPU_DESCRIPTOR_HANDLE srvHeapHandle);
 
 	D3D12_CPU_DESCRIPTOR_HANDLE DepthStencilView();
 
@@ -64,6 +49,11 @@ public:
 		return TextureManager::srvHeapAllocator->GetGpuHandle(_info[0].SrvIndex);
 	}
 
+	D3D12_GPU_DESCRIPTOR_HANDLE GetDepthSRV() const
+	{
+		return TextureManager::srvHeapAllocator->GetGpuHandle(_info[(int)GBufferInfo::Depth].SrvIndex);
+	}
+
 private:
 	int _height;
 	int _width;
@@ -71,12 +61,8 @@ private:
 	UINT _srvDescriptorSize;
 	UINT _dsvDescriptorSize;
 
-	GBufferTexture _info[(int)GBufferInfo::Count];
-
-	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> _infoRTVHeap;
-	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> _infoDSVHeap;
+	RtvSrvTexture _info[(int)GBufferInfo::Count];
 
 	Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> _cmdList;
-
 	Microsoft::WRL::ComPtr<ID3D12Device> _device;
 };

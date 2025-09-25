@@ -151,6 +151,7 @@
     <ClInclude Include="Material.h" />
     <ClInclude Include="ModelManager.h" />
     <ClInclude Include="OpaqueObjectManager.h" />
+    <ClInclude Include="PostProcessManager.h" />
     <ClInclude Include="UnlitObjectManager.h" />
     <ClInclude Include="UploadManager.h" />
     <ClInclude Include="FrameResource.h" />
@@ -213,6 +214,7 @@
     <ClCompile Include="ObjectLoader.cpp" />
     <ClCompile Include="ObjectManager.cpp" />
     <ClCompile Include="OpaqueObjectManager.cpp" />
+    <ClCompile Include="PostProcessManager.cpp" />
     <ClCompile Include="TextureManager.cpp" />
     <ClCompile Include="UnlitObjectManager.cpp" />
     <ClCompile Include="UploadManager.cpp" />

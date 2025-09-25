@@ -1,4 +1,5 @@
 #include "MyApp.h"
+#include "PostProcessManager.h"
 
 
 #pragma comment(lib, "ComCtl32.lib")
@@ -319,6 +320,10 @@ void MyApp::BuildDescriptorHeaps()
 }
 
 void MyApp::BuildShadersAndInputLayout()
+{
+}
+
+void PostProcessManager::GodRaysPass(ID3D12GraphicsCommandList* cmdList)
 {
 }
 

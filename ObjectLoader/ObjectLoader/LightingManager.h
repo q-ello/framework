@@ -88,6 +88,16 @@ public:
 		_shadowInputLayout = inputLayout;
 	}
 
+	ID3DBlob* GetFullScreenVS()
+	{
+		return _dirLightVSShader.Get();
+	}
+
+	D3D12_GPU_DESCRIPTOR_HANDLE GetCascadeShadowSRV() const
+	{
+		return TextureManager::srvHeapAllocator->GetGpuHandle(_cascadeShadowTextureArray.SRV);
+	}
+
 private:
 	ID3D12Device* _device = nullptr;
 
@@ -146,10 +156,6 @@ private:
 	D3D12_RECT _shadowScissorRect{ 0, 0, 0, 0 };
 	int _shadowMapResolution{1028};
 	UINT _shadowCBSize = d3dUtil::CalcConstantBufferByteSize(sizeof(ShadowLightConstants));
-
-	//texture managers
-	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> _shadowDSVHeap;
-	std::unique_ptr<DescriptorHeapAllocator> _shadowDSVAllocator;
 
 	//lights culling
 	std::vector<int> _lightsInsideFrustum{};

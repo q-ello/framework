@@ -2,8 +2,12 @@
 
 std::unique_ptr<DescriptorHeapAllocator> TextureManager::srvHeapAllocator = nullptr;
 Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> TextureManager::srvDescriptorHeap = nullptr;
+std::unique_ptr<DescriptorHeapAllocator> TextureManager::rtvHeapAllocator = nullptr;
+Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> TextureManager::rtvDescriptorHeap = nullptr;
 ID3D12Device* TextureManager::_device = nullptr;
 UINT TextureManager::_srvDescriptorSize = 0;
+UINT TextureManager::_rtvDescriptorSize = 0;
+UINT TextureManager::_dsvDescriptorSize = 0;
 
 std::unordered_map<std::wstring, std::unique_ptr<Texture>>& TextureManager::textures()
 {
@@ -117,8 +121,22 @@ void TextureManager::Init(ID3D12Device* device)
 	srvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 	ThrowIfFailed(_device->CreateDescriptorHeap(&srvHeapDesc, IID_PPV_ARGS(&srvDescriptorHeap)));
 	_srvDescriptorSize = _device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-
 	srvHeapAllocator = std::make_unique<DescriptorHeapAllocator>(srvDescriptorHeap.Get(), _srvDescriptorSize, srvHeapDesc.NumDescriptors);
+
+	//create the rtv heap
+	D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc = srvHeapDesc;
+	rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+	rtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+	ThrowIfFailed(_device->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&rtvDescriptorHeap)));
+	_rtvDescriptorSize = _device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+	rtvHeapAllocator = std::make_unique<DescriptorHeapAllocator>(rtvDescriptorHeap.Get(), _rtvDescriptorSize, rtvHeapDesc.NumDescriptors);
+
+	//create the dsv heap
+	D3D12_DESCRIPTOR_HEAP_DESC dsvHeapDesc = rtvHeapDesc;
+	dsvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
+	ThrowIfFailed(_device->CreateDescriptorHeap(&dsvHeapDesc, IID_PPV_ARGS(&dsvDescriptorHeap)));
+	_dsvDescriptorSize = _device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
+	dsvHeapAllocator = std::make_unique<DescriptorHeapAllocator>(dsvDescriptorHeap.Get(), _dsvDescriptorSize, dsvHeapDesc.NumDescriptors);
 
 	LoadTexture();
 }

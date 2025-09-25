@@ -7,6 +7,19 @@
 #include "UploadManager.h"
 #include <assimp/scene.h>
 
+struct RtvSrvTexture
+{
+	Microsoft::WRL::ComPtr<ID3D12Resource> Resource = nullptr;
+	int otherIndex = -1;
+	int SrvIndex = -1;
+	D3D12_RESOURCE_STATES prevState = D3D12_RESOURCE_STATE_COMMON;
+
+	void Reset()
+	{
+		Resource.Reset();
+	}
+};
+
 class TextureManager
 {
 public:
@@ -21,9 +34,17 @@ public:
 	static std::array<const CD3DX12_STATIC_SAMPLER_DESC, 2> GetShadowSamplers();
 	static std::unique_ptr<DescriptorHeapAllocator> srvHeapAllocator;
 	static Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> srvDescriptorHeap;
+
+	static std::unique_ptr<DescriptorHeapAllocator> rtvHeapAllocator;
+	static Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> rtvDescriptorHeap;
+
+	static std::unique_ptr<DescriptorHeapAllocator> dsvHeapAllocator;
+	static Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> dsvDescriptorHeap;
 private:
 	static ID3D12Device* _device;
 	static UINT _srvDescriptorSize;
+	static UINT _rtvDescriptorSize;
+	static UINT _dsvDescriptorSize;
 
 	static std::unordered_map<std::wstring, UINT>& _texIndices();
 	static std::unordered_map<std::wstring, int>& _texUsed();
