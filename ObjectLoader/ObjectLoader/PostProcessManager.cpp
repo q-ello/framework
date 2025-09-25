@@ -25,7 +25,7 @@ void PostProcessManager::BindToManagers(GBuffer* gbuffer, LightingManager* light
 	_lightOcclusionMaskVS = _lightingManager->GetFullScreenVS();
 }
 
-void PostProcessManager::GodRaysPass(ID3D12GraphicsCommandList* cmdList)
+void PostProcessManager::GodRaysPass(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource)
 {
 	//occlusion mask to rtv
 	cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(_lightOcclusionMask.Resource.Get(), 
@@ -38,6 +38,13 @@ void PostProcessManager::GodRaysPass(ID3D12GraphicsCommandList* cmdList)
 	cmdList->SetGraphicsRootSignature(_lightOcclusionMaskRootSignature.Get());
 	cmdList->SetGraphicsRootDescriptorTable(0, _gBuffer->GetDepthSRV());
 	cmdList->SetGraphicsRootDescriptorTable(5, _lightingManager->GetCascadeShadowSRV()); //cascades shadow map
+
+	auto lightingPassCB = currFrameResource->LightingPassCB->Resource();
+	cmdList->SetGraphicsRootConstantBufferView(2, lightingPassCB->GetGPUVirtualAddress());
+
+	auto dirLightCB = currFrameResource->DirLightCB->Resource();
+	cmdList->SetGraphicsRootConstantBufferView(3, dirLightCB->GetGPUVirtualAddress());
+
 	cmdList->ClearRenderTargetView(lomRtv, Colors::Black, 0, nullptr);
 	cmdList->OMSetRenderTargets(1, &lomRtv, true, nullptr);
 	cmdList->DrawInstanced(3, 1, 0, 0);
@@ -95,7 +102,7 @@ void PostProcessManager::BuildRootSignature()
 }
 void PostProcessManager::BuildShaders()
 { 
-	_lightOcclusionMaskPS = d3dUtil::CompileShader(L"Shaders\\PostProcess.hlsl", nullptr, "PS_GodRays", "ps_5_0");
+	_lightOcclusionMaskPS = d3dUtil::CompileShader(L"Shaders\\GodRays.hlsl", nullptr, "LightOcclusionPS", "ps_5_1");
 }
 
 void PostProcessManager::BuildPSOs()
@@ -170,7 +177,7 @@ void PostProcessManager::BuildTextures()
 	//create SRV
 	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-	srvDesc.Format = DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
+	srvDesc.Format = _format;
 	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
 	srvDesc.Texture2D.MipLevels = 1;
 

@@ -82,7 +82,8 @@ void MyApp::OnResize()
 {
 	//resizing the render window
 	D3DApp::OnResize();
-	_postProcessManager->OnResize(mClientWidth, mClientHeight);
+	if (_postProcessManager != nullptr)
+		_postProcessManager->OnResize(mClientWidth, mClientHeight);
 
 	_camera.SetLens(0.25f * MathHelper::Pi, AspectRatio(), 10.f, 2000.f);
 	_camera.UpdateFrustum();
@@ -148,7 +149,7 @@ void MyApp::Draw(const GameTimer& gt)
 		LightingPass();
 
 		if (_godRays)
-			_postProcessManager->GodRaysPass(mCommandList.Get());
+			_postProcessManager->GodRaysPass(mCommandList.Get(), mCurrFrameResource);
 	}
 
 	//drawing grid
@@ -1399,8 +1400,8 @@ void MyApp::InitManagers()
 	_lightingManager->Init(_gBuffer->InfoCount(false));
 
 	_postProcessManager = std::make_unique<PostProcessManager>(md3dDevice.Get());
-	_postProcessManager->Init(mClientWidth, mClientHeight);
 	_postProcessManager->BindToManagers(_gBuffer.get(), _lightingManager.get());
+	_postProcessManager->Init(mClientWidth, mClientHeight);
 }
 
 void MyApp::GBufferPass()

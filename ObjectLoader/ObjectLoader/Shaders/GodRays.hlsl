@@ -18,7 +18,7 @@ float4 LightOcclusionPS(VertexOut pin) : SV_Target
         int cascadeIdx = CalculateCascadeIndex(posW);
         //main light intensity is 3
 
-        mask = mainLightColor * ShadowFactor(posW, cascades[cascadeIdx].viewProj, cascadeIdx, true);
+        mask = mainLightColor * ShadowFactor(posW, cascades[cascadeIdx].viewProj, cascadeIdx, gCascadesShadowMap);
     }
     
     return float4(mask, 1.f);

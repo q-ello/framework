@@ -144,6 +144,6 @@ private:
 	std::vector<Toast> _notifications;
 
 	//post process effects
-	bool _godRays;
+	bool _godRays = false;
 };
 

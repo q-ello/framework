@@ -15,7 +15,7 @@ public:
 	void Init(int width, int height);
 	void BindToManagers(GBuffer* gbuffer, LightingManager* lightingManager);
 
-	void GodRaysPass(ID3D12GraphicsCommandList* cmdList);
+	void GodRaysPass(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource);
 
 	void OnResize(int newWidth, int newHeight);
 private:
