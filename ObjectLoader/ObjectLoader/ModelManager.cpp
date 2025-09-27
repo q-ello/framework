@@ -46,7 +46,8 @@ int ModelManager::ImportObject(WCHAR* filename)
 		aiProcess_FlipWindingOrder |
 		aiProcess_FlipUVs |
 		aiProcess_CalcTangentSpace |
-		aiProcess_GenUVCoords
+		aiProcess_GenUVCoords |
+		aiProcess_GenNormals
 	);
 	if (nullptr == _scene) {
 		MessageBox(0, L"Failed to open file", L"", MB_OK);

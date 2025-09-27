@@ -76,9 +76,11 @@ private:
 	//imgui staff
 	void DrawInterface();
 	void DrawObjectsList(int& btnId);
+
 	void DrawHandSpotlight(int& buttonId);
 	void DrawLightData(int& btnId);
 	void DrawLocalLightData(int& btnId, int lightIndex);
+
 	void DrawObjectInfo(int& btnId);
 	void DrawMultiObjectTransform(int& btnId);
 	void DrawTransformInput(const std::string& label, int btnId, int transformIndex, float speed);
@@ -90,6 +92,8 @@ private:
 	void DrawMaterialTexture(Material* material, const std::string& label, size_t index, int& btnId, bool hasAdditionalInfo = false, const std::string& additionalInfoLabel = "", size_t additionalInfoIndex = -1);
 	void DrawMaterialARMTexture(Material* material, const std::string& label, size_t index, int& btnId);
 	void DrawLODs(int& btnId);
+	
+	void DrawPostProcesses();
 
 	void AddToast(const std::string& msg, float lifetime = 3.0f);
 	void DrawToasts();

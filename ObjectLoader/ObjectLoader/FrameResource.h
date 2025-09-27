@@ -120,6 +120,16 @@ struct LightIndex
     int pad[3] = { 0, 0, 0 };
 };
 
+struct GodRaysConstants
+{
+    int samplesCount = 40;
+    float decay = 0.98f;
+    float exposure = 0.92f;
+    float density = 0.96;
+    float weight = 0.58;
+    float pad[3];
+};
+
 // Stores the resources needed for the CPU to build the command lists
 // for a frame.  
 struct FrameResource
@@ -152,6 +162,7 @@ public:
     std::unique_ptr<UploadBuffer<Light>> LocalLightCB = nullptr;
     std::unique_ptr<UploadBuffer<LightIndex>> LightsInsideFrustum = nullptr;
     std::unique_ptr<UploadBuffer<LightIndex>> LightsContainingFrustum = nullptr;
+    std::unique_ptr<UploadBuffer<GodRaysConstants>> GodRaysCB = nullptr;
 
     std::unordered_map<std::uint32_t, std::unique_ptr<UploadBuffer<OpaqueObjectConstants>>> OpaqueObjCB = {};
     std::unordered_map<std::uint32_t, std::unique_ptr<UploadBuffer<MaterialConstants>>> MaterialCB = {};

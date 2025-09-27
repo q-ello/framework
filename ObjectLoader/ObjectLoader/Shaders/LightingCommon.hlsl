@@ -128,7 +128,7 @@ float ShadowFactor(float3 worldPos, float4x4 transformMatrix, int index, Texture
         }
     }
 
-    return lerp(0.2f, 1.f, shadow / count);
+    return shadow / count;
 }
 
 int CalculateCascadeIndex(float3 worldPos)

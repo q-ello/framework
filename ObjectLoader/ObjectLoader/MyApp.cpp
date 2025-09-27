@@ -149,7 +149,7 @@ void MyApp::Draw(const GameTimer& gt)
 		LightingPass();
 
 		if (_godRays)
-			_postProcessManager->GodRaysPass(mCommandList.Get(), mCurrFrameResource);
+			_postProcessManager->DrawPass(mCommandList.Get(), mCurrFrameResource, CurrentBackBufferView());
 	}
 
 	//drawing grid
@@ -341,6 +341,7 @@ void MyApp::BuildFrameResources()
 		_gridManager->AddObjectToResource(md3dDevice, FrameResource::frameResources()[i].get());
 		_objectsManager->AddObjectToResource(md3dDevice, FrameResource::frameResources()[i].get());
 	}
+	_postProcessManager->Update();
 }
 
 void MyApp::DrawInterface()
@@ -365,11 +366,15 @@ void MyApp::DrawInterface()
 		ImGui::EndTabItem();
 	}
 
+	if (ImGui::BeginTabItem("Post Processing"))
+	{
+		DrawPostProcesses();
+		ImGui::EndTabItem();
+	}
+
 	if (ImGui::BeginTabItem("Other"))
 	{
 		ImGui::Checkbox("Wireframe", &_isWireframe);
-		ImGui::Checkbox("God Rays", &_godRays);
-
 		ImGui::EndTabItem();
 	}
 
@@ -1168,6 +1173,22 @@ void MyApp::DrawLODs(int& btnId)
 		{
 			AddLOD();
 		}
+	}
+}
+
+void MyApp::DrawPostProcesses()
+{
+	if (ImGui::CollapsingHeader("God Rays"))
+	{
+		bool isDirty = false;
+		isDirty = ImGui::Checkbox("Enabled##godrays", &_godRays) || isDirty;
+		isDirty = ImGui::DragInt("Samples##godrays", &_postProcessManager->GodRaysParameters.samplesCount, 5, 10, 100) || isDirty;
+		isDirty = ImGui::DragFloat("Decay##godrays", &_postProcessManager->GodRaysParameters.decay, 0.05f, 0.1f, 1.0f) || isDirty;
+		isDirty = ImGui::DragFloat("Exposure##godrays", &_postProcessManager->GodRaysParameters.exposure, 0.05f, 0.1f, 1.0f) || isDirty;
+		isDirty = ImGui::DragFloat("Density##godrays", &_postProcessManager->GodRaysParameters.density, 0.05f, 0.1f, 1.0f) || isDirty;
+		isDirty = ImGui::DragFloat("Weight##godrays", &_postProcessManager->GodRaysParameters.weight, 0.05f, 0.1f, 1.0f) || isDirty;
+		if (isDirty)
+			_postProcessManager->Update();
 	}
 }
 
