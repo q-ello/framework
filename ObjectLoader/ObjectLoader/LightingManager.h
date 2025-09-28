@@ -6,6 +6,8 @@
 #include "GeometryManager.h"
 #include "Camera.h"
 #include "TextureManager.h"
+#include "CubeMapManager.h"
+#include "../../Common/GBuffer.h"
 
 struct ShadowTextureArray
 {
@@ -40,13 +42,14 @@ public:
 	void CalculateCascadesViewProjs();
 
 	//different draw calls
-	void DrawDirLight(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, D3D12_GPU_DESCRIPTOR_HANDLE descTable);
+	void DrawDirLight(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource);
 	void DrawLocalLights(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource);
 	void DrawDebug(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource);
 	void DrawEmissive(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource);
 	void DrawShadows(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, std::vector<std::shared_ptr<EditableRenderItem>>& objects);
 
-	void Init(int srvAmount);
+	void Init();
+	void BindToOtherData(GBuffer* gbuffer, CubeMapManager* cubeMapManager, Camera* camera, std::vector<D3D12_INPUT_ELEMENT_DESC> inputLayout);
 
 	bool* IsMainLightOn()
 	{
@@ -81,12 +84,6 @@ public:
 	int LightsInsideFrustum() const
 	{
 		return (int)_lightsInsideFrustum.size();
-	}
-
-	void SetData(Camera* camera, std::vector<D3D12_INPUT_ELEMENT_DESC> inputLayout)
-	{
-		_camera = camera;
-		_shadowInputLayout = inputLayout;
 	}
 
 	ID3DBlob* GetFullScreenVS()
@@ -124,6 +121,8 @@ private:
 	Light _handSpotlight = Light(false);
 
 	Camera* _camera;
+	CubeMapManager* _cubeMapManager;
+	GBuffer* _gbuffer;
 
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> _rootSignature;
 
@@ -164,7 +163,7 @@ private:
 
 	//default functions
 	void BuildInputLayout();
-	void BuildRootSignature(int srvAmount);
+	void BuildRootSignature();
 	void BuildShaders();
 	void BuildPSO();
 

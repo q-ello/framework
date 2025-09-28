@@ -360,17 +360,18 @@ void LightingManager::CalculateCascadesViewProjs()
 	}
 }
 
-void LightingManager::DrawDirLight(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, D3D12_GPU_DESCRIPTOR_HANDLE descTable)
+void LightingManager::DrawDirLight(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource)
 {
 	// Indicate a state transition on the resource usage.
 
 	cmdList->SetGraphicsRootSignature(_rootSignature.Get());
 
-	cmdList->SetGraphicsRootDescriptorTable(0, descTable);
+	cmdList->SetGraphicsRootDescriptorTable(0, _gbuffer->SRVGPUHandle());
 	cmdList->SetGraphicsRootShaderResourceView(1, currFrameResource->LocalLightCB.get()->Resource()->GetGPUVirtualAddress());
 	cmdList->SetGraphicsRootShaderResourceView(4, currFrameResource->LightsContainingFrustum.get()->Resource()->GetGPUVirtualAddress());
 	cmdList->SetGraphicsRootDescriptorTable(5, TextureManager::srvHeapAllocator->GetGpuHandle(_cascadeShadowTextureArray.SRV));
 	cmdList->SetGraphicsRootDescriptorTable(6, TextureManager::srvHeapAllocator->GetGpuHandle(_localLightsShadowTextureArray.SRV));
+	cmdList->SetGraphicsRootDescriptorTable(7, _cubeMapManager->GetCubeMapGPUHandle());
 
 	cmdList->SetPipelineState(_dirLightPSO.Get());
 	cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -494,12 +495,20 @@ void LightingManager::DrawShadows(ID3D12GraphicsCommandList* cmdList, FrameResou
 	cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(_localLightsShadowTextureArray.textureArray.Get(), D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_GENERIC_READ));
 }
 
-void LightingManager::Init(int srvAmount)
+void LightingManager::Init()
 {
-	BuildRootSignature(srvAmount);
+	BuildRootSignature();
 	BuildShaders();
 	BuildInputLayout();
 	BuildPSO();
+}
+
+void LightingManager::BindToOtherData(GBuffer* gbuffer, CubeMapManager* cubeMapManager, Camera* camera, std::vector<D3D12_INPUT_ELEMENT_DESC> inputLayout)
+{
+	_gbuffer = gbuffer;
+	_cubeMapManager = cubeMapManager;
+	_camera = camera;
+	_shadowInputLayout = inputLayout;
 }
 
 void LightingManager::BuildInputLayout()
@@ -511,8 +520,9 @@ void LightingManager::BuildInputLayout()
 	};
 }
 
-void LightingManager::BuildRootSignature(int srvAmount)
+void LightingManager::BuildRootSignature()
 {
+	int srvAmount = _gbuffer->InfoCount(false);
 	//lighting root signature
 	CD3DX12_DESCRIPTOR_RANGE lightingRange;
 	lightingRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, srvAmount, 0);
@@ -522,8 +532,11 @@ void LightingManager::BuildRootSignature(int srvAmount)
 	//shadow map
 	CD3DX12_DESCRIPTOR_RANGE shadowTexTable;
 	shadowTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, srvAmount++);
+	//sky
+	CD3DX12_DESCRIPTOR_RANGE skyTexTable;
+	skyTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, srvAmount++);
 
-	const int rootParameterCount = 7;
+	const int rootParameterCount = 8;
 
 	CD3DX12_ROOT_PARAMETER lightingSlotRootParameter[rootParameterCount];
 
@@ -534,6 +547,7 @@ void LightingManager::BuildRootSignature(int srvAmount)
 	lightingSlotRootParameter[4].InitAsShaderResourceView(1, 1);
 	lightingSlotRootParameter[5].InitAsDescriptorTable(1, &cascadesShadowTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
 	lightingSlotRootParameter[6].InitAsDescriptorTable(1, &shadowTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
+	lightingSlotRootParameter[7].InitAsDescriptorTable(1, &skyTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
 
 	CD3DX12_ROOT_SIGNATURE_DESC lightingRootSigDesc(rootParameterCount, lightingSlotRootParameter, TextureManager::GetShadowSamplers().size(), TextureManager::GetShadowSamplers().data(), D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 

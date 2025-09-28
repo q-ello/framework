@@ -7,6 +7,7 @@ Texture2D gORM : register(t3);
 Texture2D gDepth : register(t4);
 Texture2DArray gCascadesShadowMap : register(t5);
 Texture2DArray gShadowMap : register(t6);
+TextureCube gSky : register(t7);
 
 //pbr stuff
 float DistributionGGX(float3 N, float3 H, float roughness)
@@ -174,6 +175,20 @@ float4 DirLightingPS(VertexOut pin) : SV_Target
     {
         finalColor.xyz += ComputeLocalLighting(lightIndices[i].index, posW, coords).xyz;
     }
+    
+    //reflection
+    float3 N = normalize(gNormal.Load(coords).xyz);
+    float3 V = normalize(gEyePosW - posW);
+    float3 R = reflect(-V, N);
+
+    float3 orm = gORM.Load(coords).xyz;
+    float metallic = orm.b;
+
+    float3 F0 = lerp(float3(0.04, 0.04, 0.04), albedo.rgb, metallic);
+    float3 F = FresnelSchlick(saturate(dot(N, V)), F0);
+
+    float3 envReflection = gSky.Sample(gsamLinearWrap, R).rgb;
+    finalColor.xyz += F * envReflection;
     
     return finalColor;
 }

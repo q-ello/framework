@@ -40,6 +40,8 @@ public:
 	void AddEnvironment(TextureHandle handle);
 	void DeleteEnvironment(int i);
 
+	D3D12_GPU_DESCRIPTOR_HANDLE GetCubeMapGPUHandle();
+
 private:
 	ID3D12Device* _device = nullptr;
 

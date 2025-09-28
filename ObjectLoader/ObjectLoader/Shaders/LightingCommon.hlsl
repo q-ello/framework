@@ -23,6 +23,7 @@ static const float gShadowMapResolution = 1024.0f;
 
 SamplerComparisonState gsamShadow : register(s0);
 SamplerState gsamLinear : register(s1);
+SamplerState gsamLinearWrap : register(s2);
 
 static const float PI = 3.14159265f;
 

@@ -1489,13 +1489,13 @@ void MyApp::InitManagers()
 	_objectsManager->SetCamera(&_camera);
 	_gridManager = std::make_unique<UnlitObjectManager>(_device.Get());
 	_gridManager->Init();
-	
-	_lightingManager = std::make_unique<LightingManager>(_device.Get());
-	_lightingManager->SetData(&_camera, _objectsManager->InputLayout());
-	_lightingManager->Init(_gBuffer->InfoCount(false));
 
 	_cubeMapManager = std::make_unique<CubeMapManager>(_device.Get());
 	_cubeMapManager->Init();
+
+	_lightingManager = std::make_unique<LightingManager>(_device.Get());
+	_lightingManager->BindToOtherData(_gBuffer.get(), _cubeMapManager.get(), &_camera, _objectsManager->InputLayout());
+	_lightingManager->Init();
 
 	_postProcessManager = std::make_unique<PostProcessManager>(_device.Get());
 	_postProcessManager->BindToManagers(_gBuffer.get(), _lightingManager.get());
@@ -1529,7 +1529,7 @@ void MyApp::LightingPass()
 	ID3D12DescriptorHeap* descriptorHeaps[] = { TextureManager::srvDescriptorHeap.Get()};
 	mCommandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
 
-	_lightingManager->DrawDirLight(mCommandList.Get(), mCurrFrameResource, _gBuffer->SRVGPUHandle());
+	_lightingManager->DrawDirLight(mCommandList.Get(), mCurrFrameResource);
 
 	if (_lightingManager->LightsCount() > 0)
 	{

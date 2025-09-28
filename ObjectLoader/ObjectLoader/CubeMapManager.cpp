@@ -74,6 +74,16 @@ void CubeMapManager::DeleteEnvironment(int i)
 	}
 }
 
+D3D12_GPU_DESCRIPTOR_HANDLE CubeMapManager::GetCubeMapGPUHandle()
+{
+	//if there are no environments yet than get the first just to get something...
+	if (_environments.empty())
+	{
+		return TextureManager::srvHeapAllocator->GetGpuHandle(0);
+	}
+	return TextureManager::srvHeapAllocator->GetGpuHandle(_environments[_selected].index);
+}
+
 void CubeMapManager::BuildInputLayout()
 {
 	_inputLayout =

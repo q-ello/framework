@@ -268,7 +268,7 @@ std::array<const CD3DX12_STATIC_SAMPLER_DESC, 8> TextureManager::GetStaticSample
 		anisotropicWrap, anisotropicClamp, linearMirror };
 }
 
-std::array<const CD3DX12_STATIC_SAMPLER_DESC, 2> TextureManager::GetShadowSamplers()
+std::array<const CD3DX12_STATIC_SAMPLER_DESC, 3> TextureManager::GetShadowSamplers()
 {
 	const CD3DX12_STATIC_SAMPLER_DESC shadow(
 		0, // shaderRegister (e.g. s1)
@@ -292,13 +292,13 @@ std::array<const CD3DX12_STATIC_SAMPLER_DESC, 2> TextureManager::GetShadowSample
 		D3D12_TEXTURE_ADDRESS_MODE_CLAMP); // addressW
 
 	const CD3DX12_STATIC_SAMPLER_DESC linearWrap(
-		1, // shaderRegister
-		D3D12_FILTER_MIN_MAG_MIP_POINT, // filter
-		D3D12_TEXTURE_ADDRESS_MODE_CLAMP,  // addressU
-		D3D12_TEXTURE_ADDRESS_MODE_CLAMP,  // addressV
-		D3D12_TEXTURE_ADDRESS_MODE_CLAMP); // addressW
+		2, // shaderRegister
+		D3D12_FILTER_MIN_MAG_MIP_LINEAR, // filter
+		D3D12_TEXTURE_ADDRESS_MODE_WRAP,  // addressU
+		D3D12_TEXTURE_ADDRESS_MODE_WRAP,  // addressV
+		D3D12_TEXTURE_ADDRESS_MODE_WRAP); // addressW
 
-	return { shadow, pointClamp };
+	return { shadow, pointClamp, linearWrap };
 }
 
 
