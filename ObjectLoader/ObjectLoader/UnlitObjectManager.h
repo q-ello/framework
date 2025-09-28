@@ -14,6 +14,7 @@ public:
 
 private:
 	std::vector<std::unique_ptr<UnlitRenderItem>> _objects;
+	UINT _cbSize = d3dUtil::CalcConstantBufferByteSize(sizeof(StaticObjectConstants));
 
 	void BuildInputLayout() override;
 	void BuildRootSignature() override;

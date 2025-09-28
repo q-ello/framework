@@ -1,5 +1,7 @@
 #include "FrameResource.h"
 
+UINT FrameResource::staticObjectCount = 0;
+
 FrameResource::FrameResource(ID3D12Device* device, UINT passCount)
 {
     ThrowIfFailed(device->CreateCommandAllocator(
@@ -15,6 +17,7 @@ FrameResource::FrameResource(ID3D12Device* device, UINT passCount)
     LightsContainingFrustum = std::make_unique<UploadBuffer<LightIndex>>(device, 512, false);
     LightsInsideFrustum = std::make_unique<UploadBuffer<LightIndex>>(device, 512, false);
 	GodRaysCB = std::make_unique<UploadBuffer<GodRaysConstants>>(device, passCount, true);
+    StaticObjCB = std::make_unique < UploadBuffer<StaticObjectConstants>>(device, 512, true);
 }
 
 FrameResource::~FrameResource()
@@ -32,16 +35,6 @@ void FrameResource::removeOpaqueObjectBuffer(ID3D12Device* device, std::uint32_t
 {
     OpaqueObjCB.erase(uid);
     MaterialCB.erase(uid);
-}
-
-void FrameResource::addUnlitObjectBuffer(ID3D12Device* device, std::uint32_t uid)
-{
-    UnlitObjCB[uid] = std::make_unique<UploadBuffer<UnlitObjectConstants>>(device, 1, true);
-}
-
-void FrameResource::removeUnlitObjectBuffer(ID3D12Device* device, std::uint32_t uid)
-{
-    UnlitObjCB.erase(uid);
 }
 
 std::vector<std::unique_ptr<FrameResource>>& FrameResource::frameResources()

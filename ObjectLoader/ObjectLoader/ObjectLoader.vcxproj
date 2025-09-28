@@ -146,6 +146,7 @@
     <ClInclude Include="..\..\Common\UploadBuffer.h" />
     <ClInclude Include="BasicUtil.h" />
     <ClInclude Include="Camera.h" />
+    <ClInclude Include="CubeMapManager.h" />
     <ClInclude Include="GeometryManager.h" />
     <ClInclude Include="LightingManager.h" />
     <ClInclude Include="Material.h" />
@@ -182,6 +183,7 @@
     <ClCompile Include="..\..\Common\MathHelper.cpp" />
     <ClCompile Include="BasicUtil.cpp" />
     <ClCompile Include="Camera.cpp" />
+    <ClCompile Include="CubeMapManager.cpp" />
     <ClCompile Include="DirectXTex\DirectXTexConvert.cpp" />
     <ClCompile Include="DirectXTex\DirectXTexD3D11.cpp" />
     <ClCompile Include="DirectXTex\DirectXTexD3D12.cpp" />

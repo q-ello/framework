@@ -171,6 +171,9 @@
     <ClInclude Include="PostProcessManager.h">
       <Filter>Header Files\Deferred</Filter>
     </ClInclude>
+    <ClInclude Include="CubeMapManager.h">
+      <Filter>Header Files\Deferred</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="MyApp.cpp">
@@ -306,6 +309,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="PostProcessManager.cpp">
+      <Filter>Source Files\Deferred</Filter>
+    </ClCompile>
+    <ClCompile Include="CubeMapManager.cpp">
       <Filter>Source Files\Deferred</Filter>
     </ClCompile>
   </ItemGroup>

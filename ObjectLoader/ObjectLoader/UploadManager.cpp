@@ -22,7 +22,7 @@ void UploadManager::InitUploadCmdList(ID3D12Device* Device, Microsoft::WRL::ComP
 
 void UploadManager::ExecuteUploadCommandList()
 {
-	OutputDebugString(L"Executing upload command list");
+	OutputDebugString(L"Executing upload command list\n");
 	ThrowIfFailed(uploadCmdList->Close());
 	ID3D12CommandList* cmds[] = { uploadCmdList.Get() };
 	_commandQueue->ExecuteCommandLists(1, cmds);

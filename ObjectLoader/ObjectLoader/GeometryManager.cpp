@@ -19,6 +19,7 @@ void GeometryManager::BuildNecessaryGeometry()
 	GeometryGenerator geoGen;
 	GeometryGenerator::MeshData grid = geoGen.CreateGrid(1000.f, 1000.f, 10.f);
 	GeometryGenerator::MeshData box = geoGen.CreateBox(1.0f, 1.0f, 1.0f, 0);
+	GeometryGenerator::MeshData sphere = geoGen.CreateSphere(0.5f, 20, 20);
 
 	SubmeshGeometry gridSubmesh;
 	gridSubmesh.IndexCount = (UINT)grid.Indices32.size();
@@ -30,9 +31,14 @@ void GeometryManager::BuildNecessaryGeometry()
 	boxSubmesh.StartIndexLocation = gridSubmesh.IndexCount;
 	boxSubmesh.BaseVertexLocation = (INT)grid.Vertices.size();
 
+	SubmeshGeometry sphereSubmesh;
+	sphereSubmesh.IndexCount = (UINT)sphere.Indices32.size();
+	sphereSubmesh.StartIndexLocation = boxSubmesh.StartIndexLocation + boxSubmesh.IndexCount;
+	sphereSubmesh.BaseVertexLocation = boxSubmesh.BaseVertexLocation + (UINT)box.Vertices.size();
+
 	const size_t gridVerticesCount = grid.Vertices.size();
 
-	std::vector<LightVertex> vertices(gridVerticesCount + box.Vertices.size());
+	std::vector<LightVertex> vertices(gridVerticesCount + box.Vertices.size() + sphere.Vertices.size());
 
 	for (size_t i = 0; i < gridVerticesCount; ++i)
 	{
@@ -42,11 +48,17 @@ void GeometryManager::BuildNecessaryGeometry()
 
 	for (size_t i = 0; i < box.Vertices.size(); ++i)
 	{
-		vertices[gridVerticesCount + i].Pos = box.Vertices[i].Position;
+		vertices[boxSubmesh.BaseVertexLocation + i].Pos = box.Vertices[i].Position;
+	}
+
+	for (size_t i = 0; i < sphere.Vertices.size(); i++)
+	{
+		vertices[sphereSubmesh.BaseVertexLocation + i].Pos = sphere.Vertices[i].Position;
 	}
 
 	std::vector<std::uint16_t> indices = grid.GetIndices16();
 	indices.insert(indices.end(), box.GetIndices16().begin(), box.GetIndices16().end());
+	indices.insert(indices.end(), sphere.GetIndices16().begin(), sphere.GetIndices16().end());
 
 	const UINT vbByteSize = (UINT)vertices.size() * sizeof(LightVertex);
 	const UINT ibByteSize = (UINT)indices.size() * sizeof(std::uint16_t);
@@ -73,6 +85,7 @@ void GeometryManager::BuildNecessaryGeometry()
 
 	geo->DrawArgs["grid"] = gridSubmesh;
 	geo->DrawArgs["box"] = boxSubmesh;
+	geo->DrawArgs["sphere"] = sphereSubmesh;
 
 	geometries().emplace(
 		geo->Name,

@@ -2,7 +2,7 @@
 
 void UnlitObjectManager::UpdateObjectCBs(FrameResource* currFrameResource)
 {
-	auto& currObjectsCB = currFrameResource->UnlitObjCB;
+	auto& currObjectsCB = currFrameResource->StaticObjCB;
 	for (int i = 0; i < _objects.size(); i++)
 	{
 		// Only update the cbuffer data if the constants have changed.  
@@ -10,10 +10,10 @@ void UnlitObjectManager::UpdateObjectCBs(FrameResource* currFrameResource)
 		auto& ri = _objects[i];
 		if (ri->NumFramesDirty > 0)
 		{
-			UnlitObjectConstants objConstants;
+			StaticObjectConstants objConstants;
 			XMStoreFloat4x4(&objConstants.World, XMMatrixIdentity());
 
-			currObjectsCB[ri->uid].get()->CopyData(0, objConstants);
+			currObjectsCB.get()->CopyData(ri->uid, objConstants);
 
 			ri->NumFramesDirty--;
 		}
@@ -100,14 +100,12 @@ void UnlitObjectManager::BuildShaders()
 
 void UnlitObjectManager::AddObjectToResource(Microsoft::WRL::ComPtr<ID3D12Device> device, FrameResource* currFrameResource)
 {
-	for (auto& obj : _objects)
-		currFrameResource->addUnlitObjectBuffer(device.Get(), obj->uid);
 }
 
 int UnlitObjectManager::AddRenderItem(ID3D12Device* device, ModelData&& modelData)
 {
 	auto renderItem = std::make_unique<UnlitRenderItem>();
-	renderItem->uid = uidCount++;
+	renderItem->uid = FrameResource::staticObjectCount++;
 	const std::string& itemName = modelData.croppedName;
 	std::string name(itemName.begin(), itemName.end());
 
@@ -115,7 +113,6 @@ int UnlitObjectManager::AddRenderItem(ID3D12Device* device, ModelData&& modelDat
 	renderItem->nameCount = _objectCounters[itemName]++;
 	renderItem->Geo = &GeometryManager::geometries()["shapeGeo"];
 	renderItem->PrimitiveType = D3D11_PRIMITIVE_TOPOLOGY_LINELIST;
-	renderItem->IndexCount = renderItem->Geo->begin()->get()->DrawArgs[itemName].IndexCount;
 
 	for (int i = 0; i < FrameResource::frameResources().size(); ++i)
 	{
@@ -175,23 +172,23 @@ void UnlitObjectManager::Draw(ID3D12GraphicsCommandList* cmdList, FrameResource*
 	auto passCB = currFrameResource->GBufferPassCB->Resource();
 	cmdList->SetGraphicsRootConstantBufferView(1, passCB->GetGPUVirtualAddress());
 
-	UINT objCBByteSize = d3dUtil::CalcConstantBufferByteSize(sizeof(UnlitObjectConstants));
+	UINT objCBByteSize = d3dUtil::CalcConstantBufferByteSize(sizeof(StaticObjectConstants));
 
 	// For each render item...
 	for (size_t i = 0; i < _objects.size(); i++)
 	{
 		auto& ri = _objects[i];
-		auto objectCB = currFrameResource->UnlitObjCB[ri->uid]->Resource();
+		auto objectCB = currFrameResource->StaticObjCB->Resource();
 
 		auto geo = ri->Geo->begin()->get();
 		cmdList->IASetVertexBuffers(0, 1, &geo->VertexBufferView());
 		cmdList->IASetIndexBuffer(&geo->IndexBufferView());
 		cmdList->IASetPrimitiveTopology(ri->PrimitiveType);
 
-		D3D12_GPU_VIRTUAL_ADDRESS objCBAddress = objectCB->GetGPUVirtualAddress();
+		D3D12_GPU_VIRTUAL_ADDRESS objCBAddress = objectCB->GetGPUVirtualAddress() + ri->uid * _cbSize;
 
 		cmdList->SetGraphicsRootConstantBufferView(0, objCBAddress);
 
-		cmdList->DrawIndexedInstanced(ri->IndexCount, 1, 0, 0, 0);
+		cmdList->DrawIndexedInstanced(geo->DrawArgs["grid"].IndexCount, 1, 0, 0, 0);
 	}
 }

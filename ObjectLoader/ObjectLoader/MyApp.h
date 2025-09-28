@@ -20,6 +20,7 @@
 #include "OpaqueObjectManager.h"
 #include "UnlitObjectManager.h"
 #include "PostProcessManager.h"
+#include "CubeMapManager.h"
 
 struct Toast {
 	std::string message;
@@ -76,6 +77,7 @@ private:
 	//imgui staff
 	void DrawInterface();
 	void DrawObjectsList(int& btnId);
+	void DrawEnvironmentsList(int& btnId);
 
 	void DrawHandSpotlight(int& buttonId);
 	void DrawLightData(int& btnId);
@@ -108,6 +110,7 @@ private:
 	void AddModel();
 	void AddMultipleModels();
 	void AddLOD();
+	void AddEnvironment();
 
 	void InitManagers();
 
@@ -127,6 +130,7 @@ private:
 	std::unique_ptr<UnlitObjectManager> _gridManager;
 	std::unique_ptr<EditableObjectManager> _objectsManager;
 	std::unique_ptr<LightingManager> _lightingManager = nullptr;
+	std::unique_ptr<CubeMapManager> _cubeMapManager = nullptr;
 	std::unique_ptr<PostProcessManager> _postProcessManager = nullptr;
 
 	GBufferPassConstants _GBufferCB;

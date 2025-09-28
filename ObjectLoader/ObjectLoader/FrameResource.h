@@ -5,12 +5,12 @@
 #include "../../Common/UploadBuffer.h"
 #include "VertexData.h"
 
-struct UnlitObjectConstants
+struct StaticObjectConstants
 {
     DirectX::XMFLOAT4X4 World = MathHelper::Identity4x4();
 };
 
-struct OpaqueObjectConstants : public UnlitObjectConstants
+struct OpaqueObjectConstants : public StaticObjectConstants
 {
     DirectX::XMFLOAT4X4 WorldInvTranspose = MathHelper::Identity4x4();
 };
@@ -144,9 +144,6 @@ public:
     void addOpaqueObjectBuffer(ID3D12Device* device, std::uint32_t uid, int meshesCount, int materialsCount);
     void removeOpaqueObjectBuffer(ID3D12Device* device, std::uint32_t uid);
 
-    void addUnlitObjectBuffer(ID3D12Device* device, std::uint32_t uid);
-    void removeUnlitObjectBuffer(ID3D12Device* device, std::uint32_t uid);
-
     // We cannot reset the allocator until the GPU is done processing the commands.
     // So each frame needs their own allocator.
     Microsoft::WRL::ComPtr<ID3D12CommandAllocator> CmdListAlloc;
@@ -163,11 +160,11 @@ public:
     std::unique_ptr<UploadBuffer<LightIndex>> LightsInsideFrustum = nullptr;
     std::unique_ptr<UploadBuffer<LightIndex>> LightsContainingFrustum = nullptr;
     std::unique_ptr<UploadBuffer<GodRaysConstants>> GodRaysCB = nullptr;
+    std::unique_ptr<UploadBuffer<StaticObjectConstants>> StaticObjCB = nullptr;
 
     std::unordered_map<std::uint32_t, std::unique_ptr<UploadBuffer<OpaqueObjectConstants>>> OpaqueObjCB = {};
     std::unordered_map<std::uint32_t, std::unique_ptr<UploadBuffer<MaterialConstants>>> MaterialCB = {};
-    std::unordered_map<std::uint32_t, std::unique_ptr<UploadBuffer<UnlitObjectConstants>>> UnlitObjCB = {};
-
+    static UINT staticObjectCount;
     // Fence value to mark commands up to this fence point.  This lets us
     // check if these frame resources are still in use by the GPU.
     UINT64 Fence = 0;

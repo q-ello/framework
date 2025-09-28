@@ -66,5 +66,4 @@ struct EditableRenderItem : public RenderItem
 struct UnlitRenderItem : public RenderItem
 {
 	XMFLOAT4 Color = {.0f, .0f, .0f, 1.f};
-	UINT IndexCount = 0;
 };

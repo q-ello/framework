@@ -13,7 +13,7 @@ MyApp::MyApp(HINSTANCE hInstance)
 
 MyApp::~MyApp()
 {
-	if (md3dDevice != nullptr)
+	if (_device != nullptr)
 		FlushCommandQueue();
 
 	ImGui_ImplDX12_Shutdown();
@@ -29,12 +29,12 @@ bool MyApp::Initialize()
 	// Reset the command list to prep for initialization commands.
 	ThrowIfFailed(mCommandList->Reset(mDirectCmdListAlloc.Get(), nullptr));
 
+	GeometryManager::BuildNecessaryGeometry();
 	InitManagers();
 	BuildRootSignatures();
 	BuildDescriptorHeaps();
 	BuildShadersAndInputLayout();
-	GeometryManager::BuildNecessaryGeometry();
-	_gridManager->AddRenderItem(md3dDevice.Get(), { "grid" });
+	_gridManager->AddRenderItem(_device.Get(), { "grid" });
 	BuildFrameResources();
 	BuildPSOs();
 
@@ -57,7 +57,7 @@ bool MyApp::Initialize()
 	// Setup Platform/Renderer backends
 	ImGui_ImplDX12_InitInfo info;
 	info.CommandQueue = mCommandQueue.Get();
-	info.Device = md3dDevice.Get();
+	info.Device = _device.Get();
 	info.NumFramesInFlight = gNumFrameResources;
 	info.RTVFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
 	info.DSVFormat = DXGI_FORMAT_UNKNOWN;
@@ -147,7 +147,7 @@ void MyApp::Draw(const GameTimer& gt)
 		_lightingManager->DrawShadows(mCommandList.Get(), mCurrFrameResource, _objectsManager->Objects());
 		GBufferPass();
 		LightingPass();
-
+		_cubeMapManager->Draw(mCommandList.Get(), mCurrFrameResource);
 		if (_godRays)
 			_postProcessManager->DrawPass(mCommandList.Get(), mCurrFrameResource, CurrentBackBufferView());
 	}
@@ -320,7 +320,7 @@ void MyApp::BuildDescriptorHeaps()
 	heapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 	heapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 
-	ThrowIfFailed(md3dDevice->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(&_imGuiDescriptorHeap)));
+	ThrowIfFailed(_device->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(&_imGuiDescriptorHeap)));
 }
 
 void MyApp::BuildShadersAndInputLayout()
@@ -336,10 +336,11 @@ void MyApp::BuildFrameResources()
 {
 	for (int i = 0; i < gNumFrameResources; ++i)
 	{
-		FrameResource::frameResources().push_back(std::make_unique<FrameResource>(md3dDevice.Get(),
+		FrameResource::frameResources().push_back(std::make_unique<FrameResource>(_device.Get(),
 			1));
-		_gridManager->AddObjectToResource(md3dDevice, FrameResource::frameResources()[i].get());
-		_objectsManager->AddObjectToResource(md3dDevice, FrameResource::frameResources()[i].get());
+		_gridManager->AddObjectToResource(_device, FrameResource::frameResources()[i].get());
+		_objectsManager->AddObjectToResource(_device, FrameResource::frameResources()[i].get());
+		_cubeMapManager->AddObjectToResource(FrameResource::frameResources()[i].get());
 	}
 	_postProcessManager->Update();
 }
@@ -354,9 +355,10 @@ void MyApp::DrawInterface()
 	ImGui::Begin("Data", 0, ImGuiWindowFlags_NoResize);
 	ImGui::BeginTabBar("#data");
 	
-	if (ImGui::BeginTabItem("Objects"))
+	if (ImGui::BeginTabItem("Main Data"))
 	{
 		DrawObjectsList(buttonId);
+		DrawEnvironmentsList(buttonId);
 		ImGui::EndTabItem();
 	}
 
@@ -366,15 +368,10 @@ void MyApp::DrawInterface()
 		ImGui::EndTabItem();
 	}
 
-	if (ImGui::BeginTabItem("Post Processing"))
-	{
-		DrawPostProcesses();
-		ImGui::EndTabItem();
-	}
-
 	if (ImGui::BeginTabItem("Other"))
 	{
 		ImGui::Checkbox("Wireframe", &_isWireframe);
+		DrawPostProcesses();
 		ImGui::EndTabItem();
 	}
 
@@ -408,7 +405,7 @@ void MyApp::DrawObjectsList(int& btnId)
 {
 	ImGui::Checkbox("Draw Debug", _objectsManager->drawDebug());
 
-	if (ImGui::CollapsingHeader("Opaque Objects", ImGuiTreeNodeFlags_DefaultOpen))
+	if (ImGui::CollapsingHeader("Objects", ImGuiTreeNodeFlags_DefaultOpen))
 	{
 		if (ImGui::Button("Add New"))
 		{
@@ -419,6 +416,15 @@ void MyApp::DrawObjectsList(int& btnId)
 		DrawImportModal();
 
 		ImGui::Spacing();
+
+		// Begin a scrollable child
+
+		int objectsCount = _objectsManager->ObjectsCount();
+		int maxVisible = 10;
+
+		ImVec2 listSize = ImVec2(-FLT_MIN, ImGui::GetTextLineHeightWithSpacing() * (maxVisible < objectsCount ? maxVisible : objectsCount) + 1); // Width x Height
+		
+		ImGui::BeginChild("ObjectList", listSize, false /* border */, 0);
 
 		//for shift spacing
 		static int lastClicked = -1;
@@ -496,6 +502,56 @@ void MyApp::DrawObjectsList(int& btnId)
 			}
 			
 		}
+
+		ImGui::EndChild();
+	}
+}
+
+void MyApp::DrawEnvironmentsList(int& btnId)
+{
+	if (ImGui::CollapsingHeader("Environment cube maps"))
+	{
+		ImGui::PushID(btnId++);
+		if (ImGui::Button("Add New"))
+		{
+			AddEnvironment();
+		}
+		ImGui::PopID();
+
+		ImGui::Spacing();
+
+		int selectedEnvironment = _cubeMapManager->SelectedEnvironment();
+
+		for (int i = 0; i < _cubeMapManager->EnvironmentsCount(); i++)
+		{
+			ImGui::PushID(btnId++);
+
+			bool isSelected = i == selectedEnvironment;
+
+			ImGui::PushStyleColor(ImGuiCol_Button, isSelected ? ImVec4(0.2f, 0.6f, 1.0f, 1.0f) : ImVec4(0.2f, 0.2f, 0.2f, 1.0f));
+
+			std::string name = BasicUtil::trimName(_cubeMapManager->EnvironmentName(i), 15);
+			if (ImGui::Button(name.c_str()))
+			{
+				_cubeMapManager->SetSelected(i);
+			}
+			ImGui::PopStyleColor();
+			ImGui::PopID();
+
+			if (ImGui::BeginPopupContextItem())
+			{
+				ImGui::PushID(btnId++);
+				if (ImGui::Button("delete"))
+				{
+					_cubeMapManager->DeleteEnvironment(i);
+				}
+				ImGui::PopID();
+				ImGui::EndPopup();
+			}
+
+		}
+
+		
 	}
 }
 
@@ -557,7 +613,7 @@ void MyApp::DrawLightData(int& btnId)
 		ImGui::Checkbox("Debug", _lightingManager->DebugEnabled());
 		if (ImGui::Button("Add light"))
 		{
-			_lightingManager->AddLight(md3dDevice.Get());
+			_lightingManager->AddLight(_device.Get());
 		}
 		
 		for (int i = 0; i < _lightingManager->LightsCount(); i++)
@@ -1283,7 +1339,7 @@ void MyApp::DrawImportModal()
 			//merge meshes into one file
 			ModelData data = std::move(GeometryManager::BuildModelGeometry(_modelManager->ParseAsOneObject().get()));
 			_selectedModels.clear();
-			_selectedModels.insert(_objectsManager->AddRenderItem(md3dDevice.Get(), std::move(data)));
+			_selectedModels.insert(_objectsManager->AddRenderItem(_device.Get(), std::move(data)));
 			ImGui::CloseCurrentPopup();
 		}
 
@@ -1341,7 +1397,7 @@ void MyApp::AddModel()
 			//generating it as one mesh
 			ModelData data = GeometryManager::BuildModelGeometry(model.get());
 			_selectedModels.clear();
-			_selectedModels.insert(_objectsManager->AddRenderItem(md3dDevice.Get(), std::move(data)));
+			_selectedModels.insert(_objectsManager->AddRenderItem(_device.Get(), std::move(data)));
 		}
 		else if (modelCount >= 20)
 		{
@@ -1360,7 +1416,7 @@ void MyApp::AddMultipleModels()
 		ModelData data = std::move(GeometryManager::BuildModelGeometry(model.get()));
 		if (data.lodsData.empty())
 			continue;
-		_selectedModels.insert(_objectsManager->AddRenderItem(md3dDevice.Get(), std::move(data)));
+		_selectedModels.insert(_objectsManager->AddRenderItem(_device.Get(), std::move(data)));
 	}
 }
 
@@ -1376,11 +1432,29 @@ void MyApp::AddLOD()
 			auto lod = _modelManager->ParseAsLODObject();
 			LODData data = { (int)lod.indices.size() / 3, lod.meshes };
 			//generating it as one mesh
-			int LODIdx = _objectsManager->AddLOD(md3dDevice.Get(), data, ri);
+			int LODIdx = _objectsManager->AddLOD(_device.Get(), data, ri);
 			GeometryManager::AddLODGeometry(ri->Name, LODIdx, lod);
 			AddToast("Your LOD was added as LOD" + std::to_string(LODIdx) + "!");
 		}
 		CoTaskMemFree(pszFilePath);
+	}
+}
+
+void MyApp::AddEnvironment()
+{
+	WCHAR* texturePath;
+	if (BasicUtil::TryToOpenFile(L"Image Files", L"*.dds", texturePath))
+	{
+		TextureHandle cubeMapHandle;
+		if (TextureManager::LoadCubeTexture(texturePath, cubeMapHandle))
+		{
+			_cubeMapManager->AddEnvironment(cubeMapHandle);
+		}
+		else
+		{
+			AddToast("The chosen file is not a cubemap texture", 7.0f);
+		}
+		CoTaskMemFree(texturePath);
 	}
 }
 
@@ -1410,17 +1484,20 @@ void MyApp::ClearData()
 
 void MyApp::InitManagers()
 {
-	_objectsManager = std::make_unique<EditableObjectManager>(md3dDevice.Get());
+	_objectsManager = std::make_unique<EditableObjectManager>(_device.Get());
 	_objectsManager->Init();
 	_objectsManager->SetCamera(&_camera);
-	_gridManager = std::make_unique<UnlitObjectManager>(md3dDevice.Get());
+	_gridManager = std::make_unique<UnlitObjectManager>(_device.Get());
 	_gridManager->Init();
 	
-	_lightingManager = std::make_unique<LightingManager>(md3dDevice.Get());
+	_lightingManager = std::make_unique<LightingManager>(_device.Get());
 	_lightingManager->SetData(&_camera, _objectsManager->InputLayout());
 	_lightingManager->Init(_gBuffer->InfoCount(false));
 
-	_postProcessManager = std::make_unique<PostProcessManager>(md3dDevice.Get());
+	_cubeMapManager = std::make_unique<CubeMapManager>(_device.Get());
+	_cubeMapManager->Init();
+
+	_postProcessManager = std::make_unique<PostProcessManager>(_device.Get());
 	_postProcessManager->BindToManagers(_gBuffer.get(), _lightingManager.get());
 	_postProcessManager->Init(mClientWidth, mClientHeight);
 }
