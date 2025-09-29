@@ -125,8 +125,8 @@ struct GodRaysConstants
     int samplesCount = 40;
     float decay = 0.98f;
     float exposure = 0.92f;
-    float density = 0.96;
-    float weight = 0.58;
+    float density = 0.96f;
+    float weight = 0.58f;
     float pad[3];
 };
 

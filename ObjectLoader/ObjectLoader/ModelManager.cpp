@@ -54,7 +54,9 @@ int ModelManager::ImportObject(WCHAR* filename)
 		return 0;
 	}
 
-	_sceneName = std::string(_scene->GetShortFilename(s.c_str())).substr(0, _sceneName.find_last_of('.'));
+	std::string shortName = _scene->GetShortFilename(s.c_str());
+	_sceneName = shortName.substr(0, shortName.find_last_of('.'));
+
 	if (_scene->mRootNode->mNumMeshes > 0 || _scene->mRootNode->mNumChildren == 1)
 	{
 		return 1;
@@ -162,9 +164,14 @@ LOD ModelManager::ParseAsLODObject()
 	{
 		lodModel = std::make_unique<Model>(_scene->mRootNode, _scene->mMeshes);
 	}
-	else
+	else if (_scene->mRootNode->mNumChildren > 0)
 	{
 		lodModel = std::make_unique<Model>(_scene->mRootNode->mChildren[0], _scene->mMeshes);
+	}
+	else
+	{
+		OutputDebugString(L"LOD file contains no meshes or child nodes");
+		return LOD();
 	}
 
 	return *lodModel->lods().begin();

@@ -138,6 +138,9 @@ void MyApp::Draw(const GameTimer& gt)
 	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(CurrentBackBuffer(),
 		D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET));
 
+	mCommandList->ClearRenderTargetView(CurrentBackBufferView(), Colors::LightSteelBlue, 0, nullptr);
+
+
 	if (_isWireframe)
 	{
 		WireframePass();
@@ -150,6 +153,7 @@ void MyApp::Draw(const GameTimer& gt)
 		_cubeMapManager->Draw(mCommandList.Get(), mCurrFrameResource);
 		if (_godRays)
 			_postProcessManager->DrawPass(mCommandList.Get(), mCurrFrameResource, CurrentBackBufferView());
+		FinalPass();
 	}
 
 	//drawing grid
@@ -1493,7 +1497,7 @@ void MyApp::InitManagers()
 	_cubeMapManager = std::make_unique<CubeMapManager>(_device.Get());
 	_cubeMapManager->Init();
 
-	_lightingManager = std::make_unique<LightingManager>(_device.Get());
+	_lightingManager = std::make_unique<LightingManager>(_device.Get(), mClientWidth, mClientHeight);
 	_lightingManager->BindToOtherData(_gBuffer.get(), _cubeMapManager.get(), &_camera, _objectsManager->InputLayout());
 	_lightingManager->Init();
 
@@ -1504,6 +1508,9 @@ void MyApp::InitManagers()
 
 void MyApp::GBufferPass()
 {
+	ID3D12DescriptorHeap* descriptorHeaps[] = { TextureManager::srvDescriptorHeap.Get() };
+	mCommandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
+
 	mCommandList->RSSetViewports(1, &mScreenViewport);
 	mCommandList->RSSetScissorRects(1, &mScissorRect);
 
@@ -1514,20 +1521,13 @@ void MyApp::GBufferPass()
 	_gBuffer->ClearInfo(Colors::Transparent);
 	mCommandList->OMSetRenderTargets(_gBuffer->InfoCount(), _gBuffer->RTVs().data(),
 		false, &_gBuffer->DepthStencilView());
-	_objectsManager->Draw(mCommandList.Get(), mCurrFrameResource, mClientHeight, _isWireframe, _fixedLOD);
+	_objectsManager->Draw(mCommandList.Get(), mCurrFrameResource, (float)mClientHeight, _isWireframe, _fixedLOD);
 }
 
 void MyApp::LightingPass()
 {
 	_gBuffer->ChangeRTVsState(D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 	_gBuffer->ChangeDSVState(D3D12_RESOURCE_STATE_DEPTH_READ);
-
-	mCommandList->ClearRenderTargetView(CurrentBackBufferView(), Colors::LightSteelBlue, 0, nullptr);
-
-	mCommandList->OMSetRenderTargets(1, &CurrentBackBufferView(), true, &_gBuffer->DepthStencilView());
-
-	ID3D12DescriptorHeap* descriptorHeaps[] = { TextureManager::srvDescriptorHeap.Get()};
-	mCommandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
 
 	_lightingManager->DrawDirLight(mCommandList.Get(), mCurrFrameResource);
 
@@ -1549,11 +1549,15 @@ void MyApp::WireframePass()
 {
 	_gBuffer->ChangeDSVState(D3D12_RESOURCE_STATE_DEPTH_WRITE);
 	_gBuffer->ClearInfo(Colors::Transparent);
-
-	mCommandList->ClearRenderTargetView(CurrentBackBufferView(), Colors::LightSteelBlue, 0, nullptr);
 	mCommandList->OMSetRenderTargets(1, &CurrentBackBufferView(), true, &_gBuffer->DepthStencilView());
 
-	_objectsManager->Draw(mCommandList.Get(), mCurrFrameResource, mClientHeight, _isWireframe);
+	_objectsManager->Draw(mCommandList.Get(), mCurrFrameResource, (float)mClientHeight, _isWireframe);
+}
+
+void MyApp::FinalPass()
+{
+	mCommandList->OMSetRenderTargets(1, &CurrentBackBufferView(), true, nullptr);
+	_lightingManager->DrawIntoBackBuffer(mCommandList.Get(), mCurrFrameResource);
 }
 
 //some wndproc stuff

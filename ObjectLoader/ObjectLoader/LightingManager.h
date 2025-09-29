@@ -8,11 +8,12 @@
 #include "TextureManager.h"
 #include "CubeMapManager.h"
 #include "../../Common/GBuffer.h"
+#include <DirectXColors.h>
 
 struct ShadowTextureArray
 {
 	Microsoft::WRL::ComPtr<ID3D12Resource> textureArray;
-	int SRV;
+	int SRV = -1;
 };
 
 struct LightRenderItem
@@ -21,13 +22,13 @@ struct LightRenderItem
 	BoundingSphere Bounds;
 	int NumFramesDirty = gNumFrameResources;
 	int LightIndex = -1;
-	int ShadowMapDSV;
+	int ShadowMapDSV = -1;
 };
 
 class LightingManager
 {
 public:
-	LightingManager(ID3D12Device* device);
+	LightingManager(ID3D12Device* device, UINT width, UINT height);
 	~LightingManager();
 
 	void AddLight(ID3D12Device* device);
@@ -47,9 +48,11 @@ public:
 	void DrawDebug(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource);
 	void DrawEmissive(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource);
 	void DrawShadows(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, std::vector<std::shared_ptr<EditableRenderItem>>& objects);
+	void DrawIntoBackBuffer(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource);
 
 	void Init();
 	void BindToOtherData(GBuffer* gbuffer, CubeMapManager* cubeMapManager, Camera* camera, std::vector<D3D12_INPUT_ELEMENT_DESC> inputLayout);
+	void OnResize(UINT newWidth, UINT newHeight);
 
 	bool* IsMainLightOn()
 	{
@@ -120,9 +123,9 @@ private:
 	//hand spotlight
 	Light _handSpotlight = Light(false);
 
-	Camera* _camera;
-	CubeMapManager* _cubeMapManager;
-	GBuffer* _gbuffer;
+	Camera* _camera = nullptr;
+	CubeMapManager* _cubeMapManager = nullptr;
+	GBuffer* _gbuffer = nullptr;
 
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> _rootSignature;
 
@@ -154,18 +157,29 @@ private:
 	//shadow rects
 	D3D12_VIEWPORT _shadowViewport{ 0, 0, 0, 0, 0, 1 };
 	D3D12_RECT _shadowScissorRect{ 0, 0, 0, 0 };
-	int _shadowMapResolution{1028};
+	float _shadowMapResolution{1028.f};
 	UINT _shadowCBSize = d3dUtil::CalcConstantBufferByteSize(sizeof(ShadowLightConstants));
 
 	//lights culling
 	std::vector<int> _lightsInsideFrustum{};
 	std::vector<int> _lightsContainingFrustum{};
 
+	//middleware to backbuffer
+	RtvSrvTexture _middlewareTexture;
+	DXGI_FORMAT _middlewareTextureFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
+	UINT _width;
+	UINT _height;
+	Microsoft::WRL::ComPtr<ID3D12PipelineState> _finalPassPSO;
+	Microsoft::WRL::ComPtr<ID3D12RootSignature> _finalPassRootSignature;
+	Microsoft::WRL::ComPtr<ID3DBlob> _finalPassVSShader;
+	Microsoft::WRL::ComPtr<ID3DBlob> _finalPassPSShader;
+private:
 	//default functions
 	void BuildInputLayout();
 	void BuildRootSignature();
 	void BuildShaders();
 	void BuildPSO();
+	void BuildDescriptors();
 
 	//helpers
 	int CreateShadowTextureDSV(bool forCascade, int index);
@@ -174,4 +188,5 @@ private:
 	std::vector<int> FrustumCulling(std::vector<std::shared_ptr<EditableRenderItem>>& objects, DirectX::BoundingSphere lightAABB);
 	void ShadowPass(FrameResource* currFrameResource, ID3D12GraphicsCommandList* cmdList, std::vector<int> visibleObjects, std::vector<std::shared_ptr<EditableRenderItem>>& objects);
 	void SnapToTexel(DirectX::XMFLOAT3& minPt, DirectX::XMFLOAT3& maxPt) const;
+	void CreateMiddlewareTexture();
 };

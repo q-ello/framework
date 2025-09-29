@@ -3,73 +3,11 @@
 using namespace Microsoft::WRL;
 using namespace DirectX;
 
-LightingManager::LightingManager(ID3D12Device* device)
+LightingManager::LightingManager(ID3D12Device* device, UINT width, UINT height)
 {
 	_device = device;
-
-	//creating shadow textures arrays
-	D3D12_RESOURCE_DESC texDesc = {};
-	texDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-	texDesc.Alignment = 0;
-	texDesc.Width = _shadowMapResolution;
-	texDesc.Height = _shadowMapResolution;
-	texDesc.DepthOrArraySize = (UINT16)gCascadesCount; // first cascades
-	texDesc.MipLevels = 1;
-	texDesc.Format = DXGI_FORMAT_R32_TYPELESS; // for depth
-	texDesc.SampleDesc.Count = 1;
-	texDesc.SampleDesc.Quality = 0;
-	texDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
-	texDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
-
-	D3D12_CLEAR_VALUE clearValue = {};
-	clearValue.Format = DXGI_FORMAT_D32_FLOAT;
-	clearValue.DepthStencil.Depth = 1.0f;
-	clearValue.DepthStencil.Stencil = 0;
-
-	CD3DX12_HEAP_PROPERTIES heapProps(D3D12_HEAP_TYPE_DEFAULT);
-
-	ThrowIfFailed(_device->CreateCommittedResource(
-		&heapProps, D3D12_HEAP_FLAG_NONE, &texDesc, D3D12_RESOURCE_STATE_GENERIC_READ,
-		&clearValue, IID_PPV_ARGS(&_cascadeShadowTextureArray.textureArray)));
-
-	texDesc.DepthOrArraySize = (UINT16)MaxLights; // then local lights
-	ThrowIfFailed(_device->CreateCommittedResource(
-		&heapProps, D3D12_HEAP_FLAG_NONE, &texDesc, D3D12_RESOURCE_STATE_GENERIC_READ,
-		&clearValue, IID_PPV_ARGS(&_localLightsShadowTextureArray.textureArray)
-	));
-
-	//create SRVs for texture arrays
-	auto& allocator = TextureManager::srvHeapAllocator;
-	UINT srvIndex = allocator->Allocate();
-	D3D12_CPU_DESCRIPTOR_HANDLE srvHandle = allocator->GetCpuHandle(srvIndex);
-
-	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-	srvDesc.Format = DXGI_FORMAT_R32_FLOAT;
-	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DARRAY;
-	srvDesc.Texture2DArray.ArraySize = gCascadesCount;
-	srvDesc.Texture2DArray.FirstArraySlice = 0;
-	srvDesc.Texture2DArray.MostDetailedMip = 0;
-	srvDesc.Texture2DArray.MipLevels = 1;
-	srvDesc.Texture2DArray.PlaneSlice = 0;
-	_device->CreateShaderResourceView(_cascadeShadowTextureArray.textureArray.Get(), &srvDesc, srvHandle);
-	_cascadeShadowTextureArray.SRV = srvIndex;
-
-	srvDesc.Texture2DArray.ArraySize = MaxLights;
-	srvIndex = allocator->Allocate();
-	srvHandle = allocator->GetCpuHandle(srvIndex);
-	_device->CreateShaderResourceView(_localLightsShadowTextureArray.textureArray.Get(), &srvDesc, srvHandle);
-	_localLightsShadowTextureArray.SRV = srvIndex;
-
-	//make dsvs for cascades
-	for (int i = 0; i < gCascadesCount; i++)
-		_cascades[i].shadowMapDSV = CreateShadowTextureDSV(true, i);
-
-	//rects for shadows should be different
-	_shadowViewport.Height = _shadowMapResolution;
-	_shadowViewport.Width = _shadowMapResolution;
-	_shadowScissorRect.right = _shadowMapResolution;
-	_shadowScissorRect.bottom = _shadowMapResolution;
+	_width = width;
+	_height = height;
 }
 
 LightingManager::~LightingManager()
@@ -121,7 +59,7 @@ void LightingManager::UpdateDirectionalLightCB(FrameResource* currFrameResource)
 	direction = DirectX::XMVector3Normalize(direction);
 	DirectX::XMStoreFloat3(&dirLightCB.mainLightDirection, direction);
 	dirLightCB.mainSpotlight = _handSpotlight;
-	dirLightCB.lightsContainingFrustum = _lightsContainingFrustum.size();
+	dirLightCB.lightsContainingFrustum = (int)_lightsContainingFrustum.size();
 
 	auto currShadowDirLightCB = currFrameResource->ShadowDirLightCB.get();
 
@@ -382,6 +320,13 @@ void LightingManager::DrawDirLight(ID3D12GraphicsCommandList* cmdList, FrameReso
 	auto dirLightCB = currFrameResource->DirLightCB->Resource();
 	cmdList->SetGraphicsRootConstantBufferView(3, dirLightCB->GetGPUVirtualAddress());
 
+	cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(_middlewareTexture.Resource.Get(), _middlewareTexture.prevState, D3D12_RESOURCE_STATE_RENDER_TARGET));
+	_middlewareTexture.prevState = D3D12_RESOURCE_STATE_RENDER_TARGET;
+
+	auto& middlewareRTV = TextureManager::rtvHeapAllocator->GetCpuHandle(_middlewareTexture.otherIndex);
+	cmdList->ClearRenderTargetView(middlewareRTV, Colors::LightSteelBlue, 0, nullptr);
+	cmdList->OMSetRenderTargets(1, &middlewareRTV, true, &_gbuffer->DepthStencilView());
+
 	//draw directional light
 	cmdList->DrawInstanced(3, 1, 0, 0);
 }
@@ -495,12 +440,25 @@ void LightingManager::DrawShadows(ID3D12GraphicsCommandList* cmdList, FrameResou
 	cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(_localLightsShadowTextureArray.textureArray.Get(), D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_GENERIC_READ));
 }
 
+void LightingManager::DrawIntoBackBuffer(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource)
+{
+	//middleware to srv
+	cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(_middlewareTexture.Resource.Get(), _middlewareTexture.prevState, D3D12_RESOURCE_STATE_GENERIC_READ));
+	_middlewareTexture.prevState = D3D12_RESOURCE_STATE_GENERIC_READ;
+
+	cmdList->SetGraphicsRootSignature(_finalPassRootSignature.Get());
+	cmdList->SetGraphicsRootDescriptorTable(0, TextureManager::srvHeapAllocator->GetGpuHandle(_middlewareTexture.SrvIndex));
+	cmdList->SetPipelineState(_finalPassPSO.Get());
+	cmdList->DrawInstanced(3, 1, 0, 0);
+}
+
 void LightingManager::Init()
 {
 	BuildRootSignature();
 	BuildShaders();
 	BuildInputLayout();
 	BuildPSO();
+	BuildDescriptors();
 }
 
 void LightingManager::BindToOtherData(GBuffer* gbuffer, CubeMapManager* cubeMapManager, Camera* camera, std::vector<D3D12_INPUT_ELEMENT_DESC> inputLayout)
@@ -509,6 +467,13 @@ void LightingManager::BindToOtherData(GBuffer* gbuffer, CubeMapManager* cubeMapM
 	_cubeMapManager = cubeMapManager;
 	_camera = camera;
 	_shadowInputLayout = inputLayout;
+}
+
+void LightingManager::OnResize(UINT newWidth, UINT newHeight)
+{
+	_width = newWidth;
+	_height = newHeight;
+	CreateMiddlewareTexture();
 }
 
 void LightingManager::BuildInputLayout()
@@ -549,7 +514,7 @@ void LightingManager::BuildRootSignature()
 	lightingSlotRootParameter[6].InitAsDescriptorTable(1, &shadowTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
 	lightingSlotRootParameter[7].InitAsDescriptorTable(1, &skyTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
 
-	CD3DX12_ROOT_SIGNATURE_DESC lightingRootSigDesc(rootParameterCount, lightingSlotRootParameter, TextureManager::GetShadowSamplers().size(), TextureManager::GetShadowSamplers().data(), D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+	CD3DX12_ROOT_SIGNATURE_DESC lightingRootSigDesc(rootParameterCount, lightingSlotRootParameter, (UINT)TextureManager::GetShadowSamplers().size(), TextureManager::GetShadowSamplers().data(), D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 
 	ComPtr<ID3DBlob> serializedRootSig = nullptr;
 	ComPtr<ID3DBlob> errorBlob = nullptr;
@@ -562,7 +527,7 @@ void LightingManager::BuildRootSignature()
 	}
 	ThrowIfFailed(hr);
 
-	ThrowIfFailed(UploadManager::device->CreateRootSignature(
+	ThrowIfFailed(_device->CreateRootSignature(
 		0,
 		serializedRootSig->GetBufferPointer(),
 		serializedRootSig->GetBufferSize(),
@@ -587,17 +552,50 @@ void LightingManager::BuildRootSignature()
 		shadowSerializedRootSig->GetBufferPointer(),
 		shadowSerializedRootSig->GetBufferSize(),
 		IID_PPV_ARGS(_shadowRootSignature.GetAddressOf())));
+
+	//final pass root signature
+	CD3DX12_DESCRIPTOR_RANGE middlewareTexRange;
+	middlewareTexRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
+
+	CD3DX12_ROOT_PARAMETER finalPassSlotRootParameter[1];
+
+	finalPassSlotRootParameter[0].InitAsDescriptorTable(1, &middlewareTexRange);
+
+	CD3DX12_ROOT_SIGNATURE_DESC finalRootSigDesc(rootParameterCount, lightingSlotRootParameter, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+
+	serializedRootSig = nullptr;
+	errorBlob = nullptr;
+	hr = D3D12SerializeRootSignature(&finalRootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1,
+		serializedRootSig.GetAddressOf(), errorBlob.GetAddressOf());
+
+	if (errorBlob != nullptr)
+	{
+		::OutputDebugStringA((char*)errorBlob->GetBufferPointer());
+	}
+	ThrowIfFailed(hr);
+
+	ThrowIfFailed(_device->CreateRootSignature(
+		0,
+		serializedRootSig->GetBufferPointer(),
+		serializedRootSig->GetBufferSize(),
+		IID_PPV_ARGS(_finalPassRootSignature.GetAddressOf())));
 }
 
 void LightingManager::BuildShaders()
 {
 	_dirLightVSShader = d3dUtil::CompileShader(L"Shaders\\Lighting.hlsl", nullptr, "DirLightingVS", "vs_5_1");
 	_dirLightPSShader = d3dUtil::CompileShader(L"Shaders\\Lighting.hlsl", nullptr, "DirLightingPS", "ps_5_1");
+
 	_localLightsVSShader = d3dUtil::CompileShader(L"Shaders\\Lighting.hlsl", nullptr, "LocalLightingVS", "vs_5_1");
 	_localLightsPSShader = d3dUtil::CompileShader(L"Shaders\\Lighting.hlsl", nullptr, "LocalLightingPS", "ps_5_1");
 	_localLightsWireframePSShader = d3dUtil::CompileShader(L"Shaders\\Lighting.hlsl", nullptr, "LocalLightingWireframePS", "ps_5_1");
+
 	_emissivePSShader = d3dUtil::CompileShader(L"Shaders\\Lighting.hlsl", nullptr, "EmissivePS", "ps_5_1");
+
 	_shadowVSShader = d3dUtil::CompileShader(L"Shaders\\ShadowPass.hlsl", nullptr, "ShadowVS", "vs_5_1");
+
+	_finalPassVSShader = d3dUtil::CompileShader(L"Shaders\\MiddlewareToBackBuffer.hlsl", nullptr, "VS", "vs_5_1");
+	_finalPassPSShader = d3dUtil::CompileShader(L"Shaders\\MiddlewareToBackBuffer.hlsl", nullptr, "PS", "ps_5_1");
 }
 
 void LightingManager::BuildPSO()
@@ -623,7 +621,7 @@ void LightingManager::BuildPSO()
 	lightingPSODesc.SampleMask = UINT_MAX;
 	lightingPSODesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
 	lightingPSODesc.NumRenderTargets = 1;
-	lightingPSODesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+	lightingPSODesc.RTVFormats[0] = _middlewareTextureFormat;
 	lightingPSODesc.DepthStencilState.DepthEnable = false;
 	lightingPSODesc.DepthStencilState.StencilEnable = false;
 	lightingPSODesc.SampleDesc.Count = 1;
@@ -700,7 +698,7 @@ void LightingManager::BuildPSO()
 	//rasterizer state with biases
 	D3D12_RASTERIZER_DESC shadowRasterDesc = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
 
-	//useless thing
+	//useless thing for now
 	/*shadowRasterDesc.DepthBias = 100;
 	shadowRasterDesc.DepthBiasClamp = 10.0f;
 	*/
@@ -717,6 +715,96 @@ void LightingManager::BuildPSO()
 	shadowPSODesc.SampleDesc.Quality = 0;
 	shadowPSODesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
 	ThrowIfFailed(_device->CreateGraphicsPipelineState(&shadowPSODesc, IID_PPV_ARGS(&_shadowPSO)));
+
+	//final pass
+	//directional light pso
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC finalPSODesc = lightingPSODesc;
+
+	finalPSODesc.pRootSignature = _finalPassRootSignature.Get();
+	finalPSODesc.VS =
+	{
+		reinterpret_cast<BYTE*>(_finalPassVSShader->GetBufferPointer()),
+		_finalPassVSShader->GetBufferSize()
+	};
+	finalPSODesc.PS =
+	{
+		reinterpret_cast<BYTE*>(_finalPassPSShader->GetBufferPointer()),
+		_finalPassPSShader->GetBufferSize()
+	};
+	ThrowIfFailed(_device->CreateGraphicsPipelineState(&finalPSODesc, IID_PPV_ARGS(&_finalPassPSO)));
+}
+
+void LightingManager::BuildDescriptors()
+{
+	//creating shadow textures arrays
+	D3D12_RESOURCE_DESC texDesc = {};
+	texDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+	texDesc.Alignment = 0;
+	texDesc.Width = _shadowMapResolution;
+	texDesc.Height = _shadowMapResolution;
+	texDesc.DepthOrArraySize = (UINT16)gCascadesCount; // first cascades
+	texDesc.MipLevels = 1;
+	texDesc.Format = DXGI_FORMAT_R32_TYPELESS; // for depth
+	texDesc.SampleDesc.Count = 1;
+	texDesc.SampleDesc.Quality = 0;
+	texDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+	texDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+
+	D3D12_CLEAR_VALUE clearValue = {};
+	clearValue.Format = DXGI_FORMAT_D32_FLOAT;
+	clearValue.DepthStencil.Depth = 1.0f;
+	clearValue.DepthStencil.Stencil = 0;
+
+	CD3DX12_HEAP_PROPERTIES heapProps(D3D12_HEAP_TYPE_DEFAULT);
+
+	ThrowIfFailed(_device->CreateCommittedResource(
+		&heapProps, D3D12_HEAP_FLAG_NONE, &texDesc, D3D12_RESOURCE_STATE_GENERIC_READ,
+		&clearValue, IID_PPV_ARGS(&_cascadeShadowTextureArray.textureArray)));
+
+	texDesc.DepthOrArraySize = (UINT16)MaxLights; // then local lights
+	ThrowIfFailed(_device->CreateCommittedResource(
+		&heapProps, D3D12_HEAP_FLAG_NONE, &texDesc, D3D12_RESOURCE_STATE_GENERIC_READ,
+		&clearValue, IID_PPV_ARGS(&_localLightsShadowTextureArray.textureArray)
+	));
+
+	//create SRVs for texture arrays
+	auto& allocator = TextureManager::srvHeapAllocator;
+	UINT srvIndex = allocator->Allocate();
+	D3D12_CPU_DESCRIPTOR_HANDLE srvHandle = allocator->GetCpuHandle(srvIndex);
+
+	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	srvDesc.Format = DXGI_FORMAT_R32_FLOAT;
+	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DARRAY;
+	srvDesc.Texture2DArray.ArraySize = gCascadesCount;
+	srvDesc.Texture2DArray.FirstArraySlice = 0;
+	srvDesc.Texture2DArray.MostDetailedMip = 0;
+	srvDesc.Texture2DArray.MipLevels = 1;
+	srvDesc.Texture2DArray.PlaneSlice = 0;
+	_device->CreateShaderResourceView(_cascadeShadowTextureArray.textureArray.Get(), &srvDesc, srvHandle);
+	_cascadeShadowTextureArray.SRV = srvIndex;
+
+	srvDesc.Texture2DArray.ArraySize = MaxLights;
+	srvIndex = allocator->Allocate();
+	srvHandle = allocator->GetCpuHandle(srvIndex);
+	_device->CreateShaderResourceView(_localLightsShadowTextureArray.textureArray.Get(), &srvDesc, srvHandle);
+	_localLightsShadowTextureArray.SRV = srvIndex;
+
+	//make dsvs for cascades
+	for (int i = 0; i < gCascadesCount; i++)
+		_cascades[i].shadowMapDSV = CreateShadowTextureDSV(true, i);
+
+	//rects for shadows should be different
+	_shadowViewport.Height = _shadowMapResolution;
+	_shadowViewport.Width = _shadowMapResolution;
+	_shadowScissorRect.right = _shadowMapResolution;
+	_shadowScissorRect.bottom = _shadowMapResolution;
+
+	//allocating indices for middleware texture once
+	_middlewareTexture.SrvIndex = TextureManager::srvHeapAllocator->Allocate();
+	_middlewareTexture.otherIndex = TextureManager::rtvHeapAllocator->Allocate();
+	//but remaking it every time we resize
+	CreateMiddlewareTexture();
 }
 
 int LightingManager::CreateShadowTextureDSV(bool forCascade, int index)
@@ -828,4 +916,56 @@ void LightingManager::SnapToTexel(DirectX::XMFLOAT3& cascadeMinPt, DirectX::XMFL
 	cascadeMaxPt.x = cx + (cascadeMaxPt.x - cascadeMinPt.x) * 0.5f;
 	cascadeMinPt.y = cy - (cascadeMaxPt.y - cascadeMinPt.y) * 0.5f;
 	cascadeMaxPt.y = cy + (cascadeMaxPt.y - cascadeMinPt.y) * 0.5f;
+}
+
+void LightingManager::CreateMiddlewareTexture()
+{
+	//middleware texture
+	D3D12_RESOURCE_DESC texDesc = {};
+	texDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+	texDesc.Alignment = 0;
+	texDesc.Width = _width;
+	texDesc.Height = _height;
+	texDesc.DepthOrArraySize = 1;
+	texDesc.MipLevels = 1;
+	texDesc.Format = _middlewareTextureFormat;
+	texDesc.SampleDesc.Count = 1;
+	texDesc.SampleDesc.Quality = 0;
+	texDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+	texDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+
+	D3D12_CLEAR_VALUE clearValue = {};
+	clearValue.Format = _middlewareTextureFormat;
+	clearValue.Color[0] = 0.690196097f;
+	clearValue.Color[1] = 0.768627524f;
+	clearValue.Color[2] = 0.870588303f;
+	clearValue.Color[3] = 1.f;
+
+	CD3DX12_HEAP_PROPERTIES heapProps(D3D12_HEAP_TYPE_DEFAULT);
+
+	ThrowIfFailed(_device->CreateCommittedResource(
+		&heapProps, D3D12_HEAP_FLAG_NONE, &texDesc, D3D12_RESOURCE_STATE_GENERIC_READ,
+		&clearValue, IID_PPV_ARGS(&_middlewareTexture.Resource)));
+
+	//create SRV
+	auto& srvAllocator = TextureManager::srvHeapAllocator;
+	D3D12_CPU_DESCRIPTOR_HANDLE srvHandle = srvAllocator->GetCpuHandle(_middlewareTexture.SrvIndex);
+
+	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	srvDesc.Format = _middlewareTextureFormat;
+	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+	srvDesc.Texture2D.MipLevels = 1;
+	_device->CreateShaderResourceView(_middlewareTexture.Resource.Get(), &srvDesc, srvHandle);
+
+	//create RTV
+	auto& rtvAllocator = TextureManager::rtvHeapAllocator;
+	D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = rtvAllocator->GetCpuHandle(_middlewareTexture.otherIndex);
+
+	D3D12_RENDER_TARGET_VIEW_DESC rtvDesc = {};
+	rtvDesc.Format = _middlewareTextureFormat;
+	rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
+	rtvDesc.Texture2D.MipSlice = 0;
+	rtvDesc.Texture2D.PlaneSlice = 0;
+	_device->CreateRenderTargetView(_middlewareTexture.Resource.Get(), &rtvDesc, rtvHandle);
 }

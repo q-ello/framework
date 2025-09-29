@@ -118,6 +118,8 @@ private:
 	void GBufferPass();
 	void LightingPass();
 	void WireframePass();
+	//presenting middleware texture to backbuffer
+	void FinalPass();
 
 	FrameResource* mCurrFrameResource = nullptr;
 	int mCurrFrameResourceIndex = 0;
