@@ -19,6 +19,7 @@ public:
 	void OcclusionMaskPass(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource);
 	void GodRaysPass(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource);
 	void DrawSSR(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource);
+	void DrawChromaticAberration(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource);
 
 	void OnResize(int newWidth, int newHeight);
 	void UpdateGodRaysParameters();
@@ -26,6 +27,7 @@ public:
 
 	GodRaysConstants GodRaysParameters;
 	SSRConstants SSRParameters;
+	float ChromaticAberrationStrength = 0.05f;
 private:
 	void BuildRootSignature();
 	void BuildShaders();
@@ -54,10 +56,16 @@ private:
 	//screen space reflection
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> _ssrRootSignature;
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> _ssrPSO;
-	Microsoft::WRL::ComPtr<ID3DBlob> _ssrVS;
 	Microsoft::WRL::ComPtr<ID3DBlob> _ssrPS;
 	RtvSrvTexture _ssrTexture;
 
+	//chromatic aberration
+	Microsoft::WRL::ComPtr<ID3D12RootSignature> _chromaticAberrationRootSignature;
+	Microsoft::WRL::ComPtr<ID3D12PipelineState> _chromaticAberrationPSO;
+	Microsoft::WRL::ComPtr<ID3DBlob> _chromaticAberrationPS;
+	RtvSrvTexture _chromaticAberrationTexture;
+
+	Microsoft::WRL::ComPtr<ID3DBlob> _fullscreenLightVS;
 	Microsoft::WRL::ComPtr<ID3DBlob> _fullscreenVS;
 	DXGI_FORMAT _format = DXGI_FORMAT_R8G8B8A8_UNORM;
 	D3D12_VIEWPORT _viewport{ 0, 0, 0, 0, 0, 1 };

@@ -7,8 +7,16 @@ void PostProcessManager::Init(int width, int height)
 	SetNewResolutionAndRects(width, height);
 
 	//get srv and rtv indices
-	_lightOcclusionMask.otherIndex = TextureManager::rtvHeapAllocator->Allocate();
-	_lightOcclusionMask.SrvIndex = TextureManager::srvHeapAllocator->Allocate();
+	{
+		auto& rtvAllocator = TextureManager::rtvHeapAllocator;
+		auto& srvAllocator = TextureManager::srvHeapAllocator;
+		_lightOcclusionMask.otherIndex = rtvAllocator->Allocate();
+		_lightOcclusionMask.SrvIndex = srvAllocator->Allocate();
+		_ssrTexture.otherIndex = rtvAllocator->Allocate();
+		_ssrTexture.SrvIndex = srvAllocator->Allocate();
+		_chromaticAberrationTexture.otherIndex = rtvAllocator->Allocate();
+		_chromaticAberrationTexture.SrvIndex = srvAllocator->Allocate();
+	}
 
 	BuildRootSignature();
 	BuildShaders();
@@ -22,8 +30,8 @@ void PostProcessManager::BindToManagers(GBuffer* gbuffer, LightingManager* light
 	_lightingManager = lightingManager;
 	_camera = camera;
 
-	_fullscreenVS = _lightingManager->GetFullScreenVSWithSamplers();
-	_ssrVS = _lightingManager->GetFullScreenVS();
+	_fullscreenLightVS = _lightingManager->GetFullScreenVSWithSamplers();
+	_fullscreenVS = _lightingManager->GetFullScreenVS();
 }
 
 void PostProcessManager::DrawGodRaysPass(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource)
@@ -39,8 +47,7 @@ void PostProcessManager::OcclusionMaskPass(ID3D12GraphicsCommandList* cmdList, F
 {
 	//occlusion mask to rtv
 	cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(_lightOcclusionMask.Resource.Get(),
-		_lightOcclusionMask.prevState, D3D12_RESOURCE_STATE_RENDER_TARGET));
-	_lightOcclusionMask.prevState = D3D12_RESOURCE_STATE_RENDER_TARGET;
+		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET));
 
 	cmdList->RSSetViewports(1, &_occlusionMaskViewport);
 	cmdList->RSSetScissorRects(1, &_occlusionMaskScissorRect);
@@ -66,8 +73,7 @@ void PostProcessManager::OcclusionMaskPass(ID3D12GraphicsCommandList* cmdList, F
 
 	//occlusion mask to srv
 	cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(_lightOcclusionMask.Resource.Get(),
-		_lightOcclusionMask.prevState, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE));
-	_lightOcclusionMask.prevState = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+		D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE));
 }
 
 void PostProcessManager::GodRaysPass(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource)
@@ -98,7 +104,7 @@ void PostProcessManager::DrawSSR(ID3D12GraphicsCommandList* cmdList, FrameResour
 	cmdList->SetGraphicsRootSignature(_ssrRootSignature.Get());
 
 	_lightingManager->ChangeMiddlewareState(cmdList, D3D12_RESOURCE_STATE_GENERIC_READ);
-	cmdList->SetGraphicsRootDescriptorTable(0, _lightingManager->GetMiddlewareSRV());
+	cmdList->SetGraphicsRootDescriptorTable(0, _lightingManager->GetFinalTextureSRV());
 
 	cmdList->SetGraphicsRootDescriptorTable(1, _gBuffer->GetNormalSRV());
 	
@@ -108,16 +114,39 @@ void PostProcessManager::DrawSSR(ID3D12GraphicsCommandList* cmdList, FrameResour
 	auto ssrCB = currFrameResource->SSRCB->Resource();
 	cmdList->SetGraphicsRootConstantBufferView(3, ssrCB->GetGPUVirtualAddress());
 
-	cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(_ssrTexture.Resource.Get(), _ssrTexture.prevState, D3D12_RESOURCE_STATE_RENDER_TARGET));
-	_ssrTexture.prevState = D3D12_RESOURCE_STATE_RENDER_TARGET;
+	cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(_ssrTexture.Resource.Get(), D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET));
 
 	cmdList->OMSetRenderTargets(1, &TextureManager::rtvHeapAllocator->GetCpuHandle(_ssrTexture.otherIndex), true, nullptr);
 	cmdList->DrawInstanced(3, 1, 0, 0);
 
-	cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(_ssrTexture.Resource.Get(), _ssrTexture.prevState, D3D12_RESOURCE_STATE_GENERIC_READ));
-	_ssrTexture.prevState = D3D12_RESOURCE_STATE_GENERIC_READ;
+	cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(_ssrTexture.Resource.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ));
 
 	_lightingManager->SetFinalTextureIndex(_ssrTexture.SrvIndex);
+}
+
+void PostProcessManager::DrawChromaticAberration(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource)
+{
+	_lightingManager->ChangeMiddlewareState(cmdList, D3D12_RESOURCE_STATE_GENERIC_READ);
+
+	cmdList->SetPipelineState(_chromaticAberrationPSO.Get());
+	cmdList->SetGraphicsRootSignature(_chromaticAberrationRootSignature.Get());
+
+	cmdList->SetGraphicsRootDescriptorTable(0, _lightingManager->GetFinalTextureSRV());
+
+	auto lightingPassCB = currFrameResource->LightingPassCB->Resource();
+	cmdList->SetGraphicsRootConstantBufferView(1, lightingPassCB->GetGPUVirtualAddress());
+
+	auto ssrCB = currFrameResource->SSRCB->Resource();
+	cmdList->SetGraphicsRoot32BitConstants(2, 1, &ChromaticAberrationStrength, 0);
+
+	cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(_chromaticAberrationTexture.Resource.Get(), D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET));
+
+	cmdList->OMSetRenderTargets(1, &TextureManager::rtvHeapAllocator->GetCpuHandle(_chromaticAberrationTexture.otherIndex), true, nullptr);
+	cmdList->DrawInstanced(3, 1, 0, 0);
+
+	cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(_chromaticAberrationTexture.Resource.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ));
+
+	_lightingManager->SetFinalTextureIndex(_chromaticAberrationTexture.SrvIndex);
 }
 
 void PostProcessManager::OnResize(int newWidth, int newHeight)
@@ -145,106 +174,141 @@ void PostProcessManager::UpdateSSRParameters(FrameResource* currFrame)
 void PostProcessManager::BuildRootSignature()
 {
 	//mask occlusion root signature
-	CD3DX12_DESCRIPTOR_RANGE depthTexTable;
-	depthTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
-	//cascades shadow map
-	CD3DX12_DESCRIPTOR_RANGE cascadesShadowTexTable;
-	cascadesShadowTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1);
-
-	const int rootParameterCount = 4;
-
-	CD3DX12_ROOT_PARAMETER lightingSlotRootParameter[rootParameterCount];
-
-	lightingSlotRootParameter[0].InitAsDescriptorTable(1, &depthTexTable);
-	lightingSlotRootParameter[1].InitAsDescriptorTable(1, &cascadesShadowTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
-	lightingSlotRootParameter[2].InitAsConstantBufferView(0);
-	lightingSlotRootParameter[3].InitAsConstantBufferView(1);
-
-	CD3DX12_ROOT_SIGNATURE_DESC lightingRootSigDesc(rootParameterCount, lightingSlotRootParameter, TextureManager::GetShadowSamplers().size(), TextureManager::GetShadowSamplers().data(), D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
-
-	ComPtr<ID3DBlob> serializedRootSig = nullptr;
-	ComPtr<ID3DBlob> errorBlob = nullptr;
-	HRESULT hr = D3D12SerializeRootSignature(&lightingRootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1,
-		serializedRootSig.GetAddressOf(), errorBlob.GetAddressOf());
-
-	if (errorBlob != nullptr)
 	{
-		::OutputDebugStringA((char*)errorBlob->GetBufferPointer());
+		CD3DX12_DESCRIPTOR_RANGE depthTexTable;
+		depthTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
+		//cascades shadow map
+		CD3DX12_DESCRIPTOR_RANGE cascadesShadowTexTable;
+		cascadesShadowTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1);
+
+		const int rootParameterCount = 4;
+
+		CD3DX12_ROOT_PARAMETER lightingSlotRootParameter[rootParameterCount];
+
+		lightingSlotRootParameter[0].InitAsDescriptorTable(1, &depthTexTable);
+		lightingSlotRootParameter[1].InitAsDescriptorTable(1, &cascadesShadowTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
+		lightingSlotRootParameter[2].InitAsConstantBufferView(0);
+		lightingSlotRootParameter[3].InitAsConstantBufferView(1);
+
+		CD3DX12_ROOT_SIGNATURE_DESC lightingRootSigDesc(rootParameterCount, lightingSlotRootParameter, TextureManager::GetLinearSamplers().size(), TextureManager::GetLinearSamplers().data(), D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+
+		ComPtr<ID3DBlob> serializedRootSig = nullptr;
+		ComPtr<ID3DBlob> errorBlob = nullptr;
+		HRESULT hr = D3D12SerializeRootSignature(&lightingRootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1,
+			serializedRootSig.GetAddressOf(), errorBlob.GetAddressOf());
+
+		if (errorBlob != nullptr)
+		{
+			::OutputDebugStringA((char*)errorBlob->GetBufferPointer());
+		}
+		ThrowIfFailed(hr);
+
+		ThrowIfFailed(_device->CreateRootSignature(
+			0,
+			serializedRootSig->GetBufferPointer(),
+			serializedRootSig->GetBufferSize(),
+			IID_PPV_ARGS(_lightOcclusionMaskRootSignature.GetAddressOf())));
 	}
-	ThrowIfFailed(hr);
-
-	ThrowIfFailed(_device->CreateRootSignature(
-		0,
-		serializedRootSig->GetBufferPointer(),
-		serializedRootSig->GetBufferSize(),
-		IID_PPV_ARGS(_lightOcclusionMaskRootSignature.GetAddressOf())));
-
 	//god rays root signature
-	CD3DX12_DESCRIPTOR_RANGE lightOcclusionMaskTexTable;
-	lightOcclusionMaskTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
-
-	const int GRrootParameterCount = 4;
-
-	CD3DX12_ROOT_PARAMETER godRaysSlotRootParameter[GRrootParameterCount];
-
-	godRaysSlotRootParameter[0].InitAsDescriptorTable(1, &lightOcclusionMaskTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
-	godRaysSlotRootParameter[1].InitAsConstantBufferView(0);
-	godRaysSlotRootParameter[2].InitAsConstantBufferView(1);
-	godRaysSlotRootParameter[3].InitAsConstantBufferView(2);
-
-	CD3DX12_ROOT_SIGNATURE_DESC godRaysRootSigDesc(GRrootParameterCount, godRaysSlotRootParameter, TextureManager::GetShadowSamplers().size(), TextureManager::GetShadowSamplers().data(), D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
-
-	serializedRootSig = nullptr;
-	errorBlob = nullptr;
-	hr = D3D12SerializeRootSignature(&godRaysRootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1,
-		serializedRootSig.GetAddressOf(), errorBlob.GetAddressOf());
-
-	if (errorBlob != nullptr)
 	{
-		::OutputDebugStringA((char*)errorBlob->GetBufferPointer());
+		CD3DX12_DESCRIPTOR_RANGE lightOcclusionMaskTexTable;
+		lightOcclusionMaskTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
+
+		const int GRrootParameterCount = 4;
+
+		CD3DX12_ROOT_PARAMETER godRaysSlotRootParameter[GRrootParameterCount];
+
+		godRaysSlotRootParameter[0].InitAsDescriptorTable(1, &lightOcclusionMaskTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
+		godRaysSlotRootParameter[1].InitAsConstantBufferView(0);
+		godRaysSlotRootParameter[2].InitAsConstantBufferView(1);
+		godRaysSlotRootParameter[3].InitAsConstantBufferView(2);
+
+		CD3DX12_ROOT_SIGNATURE_DESC godRaysRootSigDesc(GRrootParameterCount, godRaysSlotRootParameter, TextureManager::GetLinearSamplers().size(), TextureManager::GetLinearSamplers().data(), D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+
+		ComPtr<ID3DBlob> serializedRootSig = nullptr;
+		ComPtr<ID3DBlob> errorBlob = nullptr;
+		HRESULT hr = D3D12SerializeRootSignature(&godRaysRootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1,
+			serializedRootSig.GetAddressOf(), errorBlob.GetAddressOf());
+
+		if (errorBlob != nullptr)
+		{
+			::OutputDebugStringA((char*)errorBlob->GetBufferPointer());
+		}
+		ThrowIfFailed(hr);
+
+		ThrowIfFailed(_device->CreateRootSignature(
+			0,
+			serializedRootSig->GetBufferPointer(),
+			serializedRootSig->GetBufferSize(),
+			IID_PPV_ARGS(_godRaysRootSignature.GetAddressOf())));
 	}
-	ThrowIfFailed(hr);
-
-	ThrowIfFailed(_device->CreateRootSignature(
-		0,
-		serializedRootSig->GetBufferPointer(),
-		serializedRootSig->GetBufferSize(),
-		IID_PPV_ARGS(_godRaysRootSignature.GetAddressOf())));
-
 	//ssr root signature
-	//god rays root signature
-	CD3DX12_DESCRIPTOR_RANGE litSceneTexTable;
-	litSceneTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
-	CD3DX12_DESCRIPTOR_RANGE gbufferTexTable;
-	gbufferTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 3, 1);
-
-	const int ssrRootParameterCount = 4;
-
-	CD3DX12_ROOT_PARAMETER ssrSlotRootParameter[ssrRootParameterCount];
-
-	ssrSlotRootParameter[0].InitAsDescriptorTable(1, &litSceneTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
-	ssrSlotRootParameter[1].InitAsDescriptorTable(1, &gbufferTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
-	ssrSlotRootParameter[2].InitAsConstantBufferView(0);
-	ssrSlotRootParameter[3].InitAsConstantBufferView(1);
-
-	CD3DX12_ROOT_SIGNATURE_DESC ssrRootSigDesc(ssrRootParameterCount, ssrSlotRootParameter, TextureManager::GetShadowSamplers().size(), TextureManager::GetShadowSamplers().data(), D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
-
-	serializedRootSig = nullptr;
-	errorBlob = nullptr;
-	hr = D3D12SerializeRootSignature(&ssrRootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1,
-		serializedRootSig.GetAddressOf(), errorBlob.GetAddressOf());
-
-	if (errorBlob != nullptr)
 	{
-		::OutputDebugStringA((char*)errorBlob->GetBufferPointer());
-	}
-	ThrowIfFailed(hr);
+		CD3DX12_DESCRIPTOR_RANGE litSceneTexTable;
+		litSceneTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
+		CD3DX12_DESCRIPTOR_RANGE gbufferTexTable;
+		gbufferTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 3, 1);
 
-	ThrowIfFailed(_device->CreateRootSignature(
-		0,
-		serializedRootSig->GetBufferPointer(),
-		serializedRootSig->GetBufferSize(),
-		IID_PPV_ARGS(_ssrRootSignature.GetAddressOf())));
+		const int ssrRootParameterCount = 4;
+
+		CD3DX12_ROOT_PARAMETER ssrSlotRootParameter[ssrRootParameterCount];
+
+		ssrSlotRootParameter[0].InitAsDescriptorTable(1, &litSceneTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
+		ssrSlotRootParameter[1].InitAsDescriptorTable(1, &gbufferTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
+		ssrSlotRootParameter[2].InitAsConstantBufferView(0);
+		ssrSlotRootParameter[3].InitAsConstantBufferView(1);
+
+		CD3DX12_ROOT_SIGNATURE_DESC ssrRootSigDesc(ssrRootParameterCount, ssrSlotRootParameter, TextureManager::GetLinearSamplers().size(), TextureManager::GetLinearSamplers().data(), D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+
+		ComPtr<ID3DBlob> serializedRootSig = nullptr;
+		ComPtr<ID3DBlob> errorBlob = nullptr;
+		HRESULT hr = D3D12SerializeRootSignature(&ssrRootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1,
+			serializedRootSig.GetAddressOf(), errorBlob.GetAddressOf());
+
+		if (errorBlob != nullptr)
+		{
+			::OutputDebugStringA((char*)errorBlob->GetBufferPointer());
+		}
+		ThrowIfFailed(hr);
+
+		ThrowIfFailed(_device->CreateRootSignature(
+			0,
+			serializedRootSig->GetBufferPointer(),
+			serializedRootSig->GetBufferSize(),
+			IID_PPV_ARGS(_ssrRootSignature.GetAddressOf())));
+	}
+	//chromatic aberration root signature
+	{
+		CD3DX12_DESCRIPTOR_RANGE litSceneTexTable;
+		litSceneTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
+
+		const int chromaticAberrationRootParameterCount = 3;
+
+		CD3DX12_ROOT_PARAMETER chromaticAberrationSlotRootParameter[chromaticAberrationRootParameterCount];
+
+		chromaticAberrationSlotRootParameter[0].InitAsDescriptorTable(1, &litSceneTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
+		chromaticAberrationSlotRootParameter[1].InitAsConstantBufferView(0);
+		chromaticAberrationSlotRootParameter[2].InitAsConstants(1, 1);
+
+		CD3DX12_ROOT_SIGNATURE_DESC chromaticAberrationRootSigDesc(chromaticAberrationRootParameterCount, chromaticAberrationSlotRootParameter, TextureManager::GetLinearSamplers().size(), TextureManager::GetLinearSamplers().data(), D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+
+		ComPtr<ID3DBlob> serializedRootSig = nullptr;
+		ComPtr<ID3DBlob> errorBlob = nullptr;
+		HRESULT hr = D3D12SerializeRootSignature(&chromaticAberrationRootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1,
+			serializedRootSig.GetAddressOf(), errorBlob.GetAddressOf());
+
+		if (errorBlob != nullptr)
+		{
+			::OutputDebugStringA((char*)errorBlob->GetBufferPointer());
+		}
+		ThrowIfFailed(hr);
+
+		ThrowIfFailed(_device->CreateRootSignature(
+			0,
+			serializedRootSig->GetBufferPointer(),
+			serializedRootSig->GetBufferSize(),
+			IID_PPV_ARGS(_chromaticAberrationRootSignature.GetAddressOf())));
+	}
 }
 
 void PostProcessManager::BuildShaders()
@@ -252,6 +316,7 @@ void PostProcessManager::BuildShaders()
 	_lightOcclusionMaskPS = d3dUtil::CompileShader(L"Shaders\\LightOcclusionMask.hlsl", nullptr, "LightOcclusionPS", "ps_5_1");
 	_godRaysPS = d3dUtil::CompileShader(L"Shaders\\GodRays.hlsl", nullptr, "GodRaysPS", "ps_5_1");
 	_ssrPS = d3dUtil::CompileShader(L"Shaders\\ScreenSpaceReflection.hlsl", nullptr, "PS", "ps_5_1");
+	_chromaticAberrationPS = d3dUtil::CompileShader(L"Shaders\\ChromaticAberration.hlsl", nullptr, "PS", "ps_5_1");
 }
 
 void PostProcessManager::BuildPSOs()
@@ -262,8 +327,8 @@ void PostProcessManager::BuildPSOs()
 	lightOcclusionMaskPsoDesc.pRootSignature = _lightOcclusionMaskRootSignature.Get();
 	lightOcclusionMaskPsoDesc.VS = 
 	{
-	reinterpret_cast<BYTE*>(_fullscreenVS->GetBufferPointer()),
-	_fullscreenVS->GetBufferSize()
+	reinterpret_cast<BYTE*>(_fullscreenLightVS->GetBufferPointer()),
+	_fullscreenLightVS->GetBufferSize()
 	};
 	lightOcclusionMaskPsoDesc.PS = 
 	{
@@ -306,8 +371,8 @@ void PostProcessManager::BuildPSOs()
 	ssrPSODesc.pRootSignature = _ssrRootSignature.Get();
 	ssrPSODesc.VS =
 	{
-	reinterpret_cast<BYTE*>(_ssrVS->GetBufferPointer()),
-	_ssrVS->GetBufferSize()
+	reinterpret_cast<BYTE*>(_fullscreenVS->GetBufferPointer()),
+	_fullscreenVS->GetBufferSize()
 	};
 	ssrPSODesc.PS =
 	{
@@ -317,6 +382,15 @@ void PostProcessManager::BuildPSOs()
 	ssrPSODesc.RTVFormats[0] = _format;
 	ThrowIfFailed(_device->CreateGraphicsPipelineState(&ssrPSODesc, IID_PPV_ARGS(&_ssrPSO)));
 
+	//chromatic aberration
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC chromaticAberrationPSODesc = ssrPSODesc;
+	chromaticAberrationPSODesc.pRootSignature = _chromaticAberrationRootSignature.Get();
+	chromaticAberrationPSODesc.PS =
+	{
+		reinterpret_cast<BYTE*>(_chromaticAberrationPS->GetBufferPointer()),
+		_chromaticAberrationPS->GetBufferSize()
+	};
+	ThrowIfFailed(_device->CreateGraphicsPipelineState(&chromaticAberrationPSODesc, IID_PPV_ARGS(&_chromaticAberrationPSO)));
 }
 
 void PostProcessManager::BuildTextures()
@@ -371,9 +445,55 @@ void PostProcessManager::BuildTextures()
 		TextureManager::srvHeapAllocator->GetCpuHandle(_lightOcclusionMask.SrvIndex));
 
 	//ssr texture
-	_ssrTexture.otherIndex = TextureManager::rtvHeapAllocator->Allocate();
-	_ssrTexture.SrvIndex = TextureManager::srvHeapAllocator->Allocate();
 	CreateSSRTexture();
+
+	//chromatic aberration texture
+	{
+		D3D12_RESOURCE_DESC texDesc = {};
+		texDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+		texDesc.Alignment = 0;
+		texDesc.Width = _width;
+		texDesc.Height = _height;
+		texDesc.DepthOrArraySize = 1;
+		texDesc.MipLevels = 1;
+		texDesc.Format = _format;
+		texDesc.SampleDesc.Count = 1;
+		texDesc.SampleDesc.Quality = 0;
+		texDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+		texDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+
+		D3D12_CLEAR_VALUE clearValue = {};
+		clearValue.Format = _format;
+		clearValue.Color[0] = 0.0f;
+		clearValue.Color[1] = 0.0f;
+		clearValue.Color[2] = 0.0f;
+		clearValue.Color[3] = 0.0f;
+
+		CD3DX12_HEAP_PROPERTIES heapProps(D3D12_HEAP_TYPE_DEFAULT);
+
+		ThrowIfFailed(_device->CreateCommittedResource(
+			&heapProps, D3D12_HEAP_FLAG_NONE, &texDesc, D3D12_RESOURCE_STATE_COMMON,
+			&clearValue, IID_PPV_ARGS(&_chromaticAberrationTexture.Resource)));
+
+		// Create RTV
+		D3D12_RENDER_TARGET_VIEW_DESC rtvDesc = {};
+		rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
+		rtvDesc.Texture2D.MipSlice = 0;
+		rtvDesc.Texture2D.PlaneSlice = 0;
+		rtvDesc.Format = _format;
+
+		_device->CreateRenderTargetView(_chromaticAberrationTexture.Resource.Get(), &rtvDesc, TextureManager::rtvHeapAllocator->GetCpuHandle(_chromaticAberrationTexture.otherIndex));
+
+		//create SRV
+		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+		srvDesc.Format = _format;
+		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+		srvDesc.Texture2D.MipLevels = 1;
+
+		_device->CreateShaderResourceView(_chromaticAberrationTexture.Resource.Get(), &srvDesc,
+			TextureManager::srvHeapAllocator->GetCpuHandle(_chromaticAberrationTexture.SrvIndex));
+	}
 }
 
 void PostProcessManager::CreateSSRTexture()

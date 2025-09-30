@@ -320,8 +320,7 @@ void LightingManager::DrawDirLight(ID3D12GraphicsCommandList* cmdList, FrameReso
 	auto dirLightCB = currFrameResource->DirLightCB->Resource();
 	cmdList->SetGraphicsRootConstantBufferView(3, dirLightCB->GetGPUVirtualAddress());
 
-	cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(_middlewareTexture.Resource.Get(), _middlewareTexture.prevState, D3D12_RESOURCE_STATE_RENDER_TARGET));
-	_middlewareTexture.prevState = D3D12_RESOURCE_STATE_RENDER_TARGET;
+	ChangeMiddlewareState(cmdList, D3D12_RESOURCE_STATE_RENDER_TARGET);
 
 	auto& middlewareRTV = TextureManager::rtvHeapAllocator->GetCpuHandle(_middlewareTexture.otherIndex);
 	cmdList->ClearRenderTargetView(middlewareRTV, Colors::LightSteelBlue, 0, nullptr);
@@ -330,7 +329,7 @@ void LightingManager::DrawDirLight(ID3D12GraphicsCommandList* cmdList, FrameReso
 	//draw directional light
 	cmdList->DrawInstanced(3, 1, 0, 0);
 
-	_srvIndexOfFinalTexture = _middlewareTexture.SrvIndex;
+	_finalTextureSrvIndex = _middlewareTexture.SrvIndex;
 }
 
 void LightingManager::DrawLocalLights(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource)
@@ -445,12 +444,12 @@ void LightingManager::DrawShadows(ID3D12GraphicsCommandList* cmdList, FrameResou
 void LightingManager::DrawIntoBackBuffer(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource)
 {
 	//middleware to srv
-	if (_srvIndexOfFinalTexture == _middlewareTexture.SrvIndex)
+	if (_finalTextureSrvIndex == _middlewareTexture.SrvIndex)
 	{
 		ChangeMiddlewareState(cmdList, D3D12_RESOURCE_STATE_GENERIC_READ);
 	}
 	cmdList->SetGraphicsRootSignature(_finalPassRootSignature.Get());
-	cmdList->SetGraphicsRootDescriptorTable(0, TextureManager::srvHeapAllocator->GetGpuHandle(_srvIndexOfFinalTexture));
+	cmdList->SetGraphicsRootDescriptorTable(0, TextureManager::srvHeapAllocator->GetGpuHandle(_finalTextureSrvIndex));
 	cmdList->SetPipelineState(_finalPassPSO.Get());
 	cmdList->DrawInstanced(3, 1, 0, 0);
 }
@@ -477,6 +476,14 @@ void LightingManager::OnResize(UINT newWidth, UINT newHeight)
 	_width = newWidth;
 	_height = newHeight;
 	CreateMiddlewareTexture();
+}
+
+void LightingManager::ChangeMiddlewareState(ID3D12GraphicsCommandList* cmdList, D3D12_RESOURCE_STATES newState)
+{
+	if (_middlewareTexture.prevState == newState)
+		return;
+	cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(_middlewareTexture.Resource.Get(), _middlewareTexture.prevState, newState));
+	_middlewareTexture.prevState = newState;
 }
 
 void LightingManager::BuildInputLayout()
@@ -517,7 +524,7 @@ void LightingManager::BuildRootSignature()
 	lightingSlotRootParameter[6].InitAsDescriptorTable(1, &shadowTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
 	lightingSlotRootParameter[7].InitAsDescriptorTable(1, &skyTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
 
-	CD3DX12_ROOT_SIGNATURE_DESC lightingRootSigDesc(rootParameterCount, lightingSlotRootParameter, (UINT)TextureManager::GetShadowSamplers().size(), TextureManager::GetShadowSamplers().data(), D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+	CD3DX12_ROOT_SIGNATURE_DESC lightingRootSigDesc(rootParameterCount, lightingSlotRootParameter, (UINT)TextureManager::GetLinearSamplers().size(), TextureManager::GetLinearSamplers().data(), D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 
 	ComPtr<ID3DBlob> serializedRootSig = nullptr;
 	ComPtr<ID3DBlob> errorBlob = nullptr;

@@ -106,7 +106,7 @@ public:
 
 	void SetFinalTextureIndex(int newIndex)
 	{
-		_srvIndexOfFinalTexture = newIndex;
+		_finalTextureSrvIndex = newIndex;
 	}
 
 	D3D12_CPU_DESCRIPTOR_HANDLE GetMiddlewareRTV() const
@@ -114,16 +114,12 @@ public:
 		return TextureManager::rtvHeapAllocator->GetCpuHandle(_middlewareTexture.otherIndex);
 	}
 
-	D3D12_GPU_DESCRIPTOR_HANDLE GetMiddlewareSRV() const
+	D3D12_GPU_DESCRIPTOR_HANDLE GetFinalTextureSRV() const
 	{
-		return TextureManager::srvHeapAllocator->GetGpuHandle(_middlewareTexture.SrvIndex);
+		return TextureManager::srvHeapAllocator->GetGpuHandle(_finalTextureSrvIndex);
 	}
 
-	void ChangeMiddlewareState(ID3D12GraphicsCommandList* cmdList, D3D12_RESOURCE_STATES newState)
-	{
-		cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(_middlewareTexture.Resource.Get(), _middlewareTexture.prevState, newState));
-		_middlewareTexture.prevState = newState;
-	}
+	void ChangeMiddlewareState(ID3D12GraphicsCommandList* cmdList, D3D12_RESOURCE_STATES newState);
 
 private:
 	ID3D12Device* _device = nullptr;
@@ -200,7 +196,7 @@ private:
 	Microsoft::WRL::ComPtr<ID3DBlob> _finalPassVSShader;
 	Microsoft::WRL::ComPtr<ID3DBlob> _finalPassPSShader;
 
-	int _srvIndexOfFinalTexture = -1;
+	int _finalTextureSrvIndex = -1;
 private:
 	//default functions
 	void BuildInputLayout();

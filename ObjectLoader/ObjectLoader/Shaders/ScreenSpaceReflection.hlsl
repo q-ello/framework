@@ -6,7 +6,7 @@ Texture2D gNormal : register(t1);
 Texture2D gARM : register(t2);
 Texture2D gDepth : register(t3);
 
-cbuffer SSRParameters
+cbuffer SSRParameters : register(b1)
 {
     float4x4 gInvProj;
     int StepScale;

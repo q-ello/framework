@@ -158,6 +158,8 @@ void MyApp::Draw(const GameTimer& gt)
 			_postProcessManager->DrawGodRaysPass(mCommandList.Get(), mCurrFrameResource);
 		if (_ssr)
 			_postProcessManager->DrawSSR(mCommandList.Get(), mCurrFrameResource);
+		if (_chromaticAberration)
+			_postProcessManager->DrawChromaticAberration(mCommandList.Get(), mCurrFrameResource);
 		FinalPass();
 	}
 
@@ -1263,6 +1265,13 @@ void MyApp::DrawPostProcesses()
 		ImGui::DragInt("Step Size##ssr", &_postProcessManager->SSRParameters.StepScale, 1, 1, 20);
 		ImGui::DragInt("Max Screen Distance##ssr", &_postProcessManager->SSRParameters.MaxScreenDistance, 5, 100, 1000);
 		ImGui::DragInt("Max Steps##ssr", &_postProcessManager->SSRParameters.MaxSteps, 5, 100, 500);
+	}
+
+	if (ImGui::CollapsingHeader("Chromatic Aberration"))
+	{
+		//no need for dirty flag 'cause we just have one root constant
+		ImGui::Checkbox("Enabled##chromaticaberration", &_chromaticAberration);
+		ImGui::DragFloat("Strength##chromaticaberration", &_postProcessManager->ChromaticAberrationStrength, 0.01f, 0.0f, 0.1f);
 	}
 }
 
