@@ -329,6 +329,8 @@ void LightingManager::DrawDirLight(ID3D12GraphicsCommandList* cmdList, FrameReso
 
 	//draw directional light
 	cmdList->DrawInstanced(3, 1, 0, 0);
+
+	_srvIndexOfFinalTexture = _middlewareTexture.SrvIndex;
 }
 
 void LightingManager::DrawLocalLights(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource)
@@ -443,11 +445,12 @@ void LightingManager::DrawShadows(ID3D12GraphicsCommandList* cmdList, FrameResou
 void LightingManager::DrawIntoBackBuffer(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource)
 {
 	//middleware to srv
-	cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(_middlewareTexture.Resource.Get(), _middlewareTexture.prevState, D3D12_RESOURCE_STATE_GENERIC_READ));
-	_middlewareTexture.prevState = D3D12_RESOURCE_STATE_GENERIC_READ;
-
+	if (_srvIndexOfFinalTexture == _middlewareTexture.SrvIndex)
+	{
+		ChangeMiddlewareState(cmdList, D3D12_RESOURCE_STATE_GENERIC_READ);
+	}
 	cmdList->SetGraphicsRootSignature(_finalPassRootSignature.Get());
-	cmdList->SetGraphicsRootDescriptorTable(0, TextureManager::srvHeapAllocator->GetGpuHandle(_middlewareTexture.SrvIndex));
+	cmdList->SetGraphicsRootDescriptorTable(0, TextureManager::srvHeapAllocator->GetGpuHandle(_srvIndexOfFinalTexture));
 	cmdList->SetPipelineState(_finalPassPSO.Get());
 	cmdList->DrawInstanced(3, 1, 0, 0);
 }

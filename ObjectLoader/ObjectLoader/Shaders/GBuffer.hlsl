@@ -246,8 +246,8 @@ VertexOut TessDS(PatchTess patchTess,
 struct GBufferInfo
 {
     float4 BaseColor : SV_Target0;
-    float4 Normal : SV_Target1;
-    float4 Emissive : SV_Target2;
+    float4 Emissive : SV_Target1;
+    float4 Normal : SV_Target2;
     float4 ORM : SV_Target3;
 };
 

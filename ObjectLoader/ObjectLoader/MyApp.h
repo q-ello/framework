@@ -155,5 +155,6 @@ private:
 
 	//post process effects
 	bool _godRays = false;
+	bool _ssr = false;
 };
 

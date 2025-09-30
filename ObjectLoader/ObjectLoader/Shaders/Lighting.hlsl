@@ -1,8 +1,8 @@
 #include "LightingCommon.hlsl"
 
 Texture2D gBaseColor : register(t0);
-Texture2D gNormal : register(t1);
-Texture2D gEmissive : register(t2);
+Texture2D gEmissive : register(t1);
+Texture2D gNormal : register(t2);
 Texture2D gORM : register(t3);
 Texture2D gDepth : register(t4);
 Texture2DArray gCascadesShadowMap : register(t5);
@@ -135,12 +135,15 @@ float4 DirLightingPS(VertexOut pin) : SV_Target
     float3 normalW = normalize(gNormal.Load(coords).xyz);
     float3 posOffseted = posW + normalW * 0.01f;
     
+    float shadowFactor;
+    
     if (mainLightIsOn)
     {
         int cascadeIdx = CalculateCascadeIndex(posW);
         //main light intensity is 3
         finalColor.xyz = PBRShading(coords, -mainLightDirection, mainLightColor, posW) * 3.f;
-        finalColor.xyz *= lerp(0.2f, 1.f, ShadowFactor(posOffseted, cascades[cascadeIdx].viewProj, cascadeIdx, gCascadesShadowMap));
+        shadowFactor = ShadowFactor(posOffseted, cascades[cascadeIdx].viewProj, cascadeIdx, gCascadesShadowMap);
+        finalColor.xyz *= lerp(0.2f, 1.f, shadowFactor);
     }
     
     //spotlight in hand

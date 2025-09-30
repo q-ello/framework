@@ -13,22 +13,25 @@ public:
 	{};
 	~PostProcessManager() {};
 	void Init(int width, int height);
-	void BindToManagers(GBuffer* gbuffer, LightingManager* lightingManager);
+	void BindToManagers(GBuffer* gbuffer, LightingManager* lightingManager, Camera* camera);
 
-	void DrawPass(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, D3D12_CPU_DESCRIPTOR_HANDLE backBuffer);
+	void DrawGodRaysPass(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource);
 	void OcclusionMaskPass(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource);
-	void GodRaysPass(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, D3D12_CPU_DESCRIPTOR_HANDLE backBuffer);
+	void GodRaysPass(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource);
+	void DrawSSR(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource);
 
 	void OnResize(int newWidth, int newHeight);
-	void Update();
+	void UpdateGodRaysParameters();
+	void UpdateSSRParameters(FrameResource* currFrame);
 
-	//god rays parameters
 	GodRaysConstants GodRaysParameters;
+	SSRConstants SSRParameters;
 private:
 	void BuildRootSignature();
 	void BuildShaders();
 	void BuildPSOs();
 	void BuildTextures();
+	void CreateSSRTexture();
 
 	void SetNewResolutionAndRects(int newWidth, int newHeight);
 
@@ -48,6 +51,13 @@ private:
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> _godRaysPSO;
 	Microsoft::WRL::ComPtr<ID3DBlob> _godRaysPS;
 
+	//screen space reflection
+	Microsoft::WRL::ComPtr<ID3D12RootSignature> _ssrRootSignature;
+	Microsoft::WRL::ComPtr<ID3D12PipelineState> _ssrPSO;
+	Microsoft::WRL::ComPtr<ID3DBlob> _ssrVS;
+	Microsoft::WRL::ComPtr<ID3DBlob> _ssrPS;
+	RtvSrvTexture _ssrTexture;
+
 	Microsoft::WRL::ComPtr<ID3DBlob> _fullscreenVS;
 	DXGI_FORMAT _format = DXGI_FORMAT_R8G8B8A8_UNORM;
 	D3D12_VIEWPORT _viewport{ 0, 0, 0, 0, 0, 1 };
@@ -56,6 +66,8 @@ private:
 	ID3D12Device* _device = nullptr;
 	GBuffer* _gBuffer = nullptr;
 	LightingManager* _lightingManager = nullptr;
+	Camera* _camera = nullptr;
+
 	int _width = 0;
 	int _height = 0;
 };

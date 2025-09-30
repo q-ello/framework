@@ -5,8 +5,8 @@
 enum class GBufferInfo
 {
 	BaseColor = 0,
-	Normals,
 	Emissive,
+	Normals,
 	ORM,
 	Depth,
 	Count
@@ -52,6 +52,11 @@ public:
 	D3D12_GPU_DESCRIPTOR_HANDLE GetDepthSRV() const
 	{
 		return TextureManager::srvHeapAllocator->GetGpuHandle(_info[(int)GBufferInfo::Depth].SrvIndex);
+	}
+
+	D3D12_GPU_DESCRIPTOR_HANDLE GetNormalSRV() const
+	{
+		return TextureManager::srvHeapAllocator->GetGpuHandle(_info[(int)GBufferInfo::Normals].SrvIndex);
 	}
 
 private:

@@ -113,6 +113,9 @@ void MyApp::Update(const GameTimer& gt)
 	UpdateObjectCBs(gt);
 	UpdateMainPassCBs(gt);
 	_lightingManager->UpdateLightCBs(mCurrFrameResource);
+	
+	//camera gets changed every frame so we update ssr every frame too
+	_postProcessManager->UpdateSSRParameters(mCurrFrameResource);
 }
 
 void MyApp::Draw(const GameTimer& gt)
@@ -152,7 +155,9 @@ void MyApp::Draw(const GameTimer& gt)
 		LightingPass();
 		_cubeMapManager->Draw(mCommandList.Get(), mCurrFrameResource);
 		if (_godRays)
-			_postProcessManager->DrawPass(mCommandList.Get(), mCurrFrameResource, CurrentBackBufferView());
+			_postProcessManager->DrawGodRaysPass(mCommandList.Get(), mCurrFrameResource);
+		if (_ssr)
+			_postProcessManager->DrawSSR(mCommandList.Get(), mCurrFrameResource);
 		FinalPass();
 	}
 
@@ -346,7 +351,7 @@ void MyApp::BuildFrameResources()
 		_objectsManager->AddObjectToResource(_device, FrameResource::frameResources()[i].get());
 		_cubeMapManager->AddObjectToResource(FrameResource::frameResources()[i].get());
 	}
-	_postProcessManager->Update();
+	_postProcessManager->UpdateGodRaysParameters();
 }
 
 void MyApp::DrawInterface()
@@ -426,7 +431,7 @@ void MyApp::DrawObjectsList(int& btnId)
 		int objectsCount = _objectsManager->ObjectsCount();
 		int maxVisible = 10;
 
-		ImVec2 listSize = ImVec2(-FLT_MIN, ImGui::GetTextLineHeightWithSpacing() * (maxVisible < objectsCount ? maxVisible : objectsCount) + 1); // Width x Height
+		ImVec2 listSize = ImVec2(-FLT_MIN, ImGui::GetTextLineHeightWithSpacing() * 1.5f * (maxVisible < objectsCount ? maxVisible : objectsCount) + 1); // Width x Height
 		
 		ImGui::BeginChild("ObjectList", listSize, false /* border */, 0);
 
@@ -1248,7 +1253,16 @@ void MyApp::DrawPostProcesses()
 		isDirty = ImGui::DragFloat("Density##godrays", &_postProcessManager->GodRaysParameters.density, 0.05f, 0.1f, 1.0f) || isDirty;
 		isDirty = ImGui::DragFloat("Weight##godrays", &_postProcessManager->GodRaysParameters.weight, 0.05f, 0.1f, 1.0f) || isDirty;
 		if (isDirty)
-			_postProcessManager->Update();
+			_postProcessManager->UpdateGodRaysParameters();
+	}
+
+	if (ImGui::CollapsingHeader("Screen Space Reflection"))
+	{
+		//no need for dirty flag 'cause we update it every frame
+		ImGui::Checkbox("Enabled##ssr", &_ssr);
+		ImGui::DragInt("Step Size##ssr", &_postProcessManager->SSRParameters.StepScale, 1, 1, 20);
+		ImGui::DragInt("Max Screen Distance##ssr", &_postProcessManager->SSRParameters.MaxScreenDistance, 5, 100, 1000);
+		ImGui::DragInt("Max Steps##ssr", &_postProcessManager->SSRParameters.MaxSteps, 5, 100, 500);
 	}
 }
 
@@ -1502,7 +1516,7 @@ void MyApp::InitManagers()
 	_lightingManager->Init();
 
 	_postProcessManager = std::make_unique<PostProcessManager>(_device.Get());
-	_postProcessManager->BindToManagers(_gBuffer.get(), _lightingManager.get());
+	_postProcessManager->BindToManagers(_gBuffer.get(), _lightingManager.get(), &_camera);
 	_postProcessManager->Init(mClientWidth, mClientHeight);
 }
 

@@ -89,14 +89,40 @@ public:
 		return (int)_lightsInsideFrustum.size();
 	}
 
-	ID3DBlob* GetFullScreenVS()
+	ID3DBlob* GetFullScreenVSWithSamplers()
 	{
 		return _dirLightVSShader.Get();
+	}
+
+	ID3DBlob* GetFullScreenVS()
+	{
+		return _finalPassVSShader.Get();
 	}
 
 	D3D12_GPU_DESCRIPTOR_HANDLE GetCascadeShadowSRV() const
 	{
 		return TextureManager::srvHeapAllocator->GetGpuHandle(_cascadeShadowTextureArray.SRV);
+	}
+
+	void SetFinalTextureIndex(int newIndex)
+	{
+		_srvIndexOfFinalTexture = newIndex;
+	}
+
+	D3D12_CPU_DESCRIPTOR_HANDLE GetMiddlewareRTV() const
+	{
+		return TextureManager::rtvHeapAllocator->GetCpuHandle(_middlewareTexture.otherIndex);
+	}
+
+	D3D12_GPU_DESCRIPTOR_HANDLE GetMiddlewareSRV() const
+	{
+		return TextureManager::srvHeapAllocator->GetGpuHandle(_middlewareTexture.SrvIndex);
+	}
+
+	void ChangeMiddlewareState(ID3D12GraphicsCommandList* cmdList, D3D12_RESOURCE_STATES newState)
+	{
+		cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(_middlewareTexture.Resource.Get(), _middlewareTexture.prevState, newState));
+		_middlewareTexture.prevState = newState;
 	}
 
 private:
@@ -173,6 +199,8 @@ private:
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> _finalPassRootSignature;
 	Microsoft::WRL::ComPtr<ID3DBlob> _finalPassVSShader;
 	Microsoft::WRL::ComPtr<ID3DBlob> _finalPassPSShader;
+
+	int _srvIndexOfFinalTexture = -1;
 private:
 	//default functions
 	void BuildInputLayout();

@@ -130,6 +130,15 @@ struct GodRaysConstants
     float pad[3];
 };
 
+struct SSRConstants
+{
+    DirectX::XMMATRIX InvProj = DirectX::XMMatrixIdentity();
+    int StepScale = 1;
+    int MaxSteps = 200;
+    int MaxScreenDistance = 500;
+    float pad = 0.0f;
+};
+
 // Stores the resources needed for the CPU to build the command lists
 // for a frame.  
 struct FrameResource
@@ -150,17 +159,21 @@ public:
 
     // We cannot update a cbuffer until the GPU is done processing the commands
     // that reference it.  So each frame needs their own cbuffers.
-   // std::unique_ptr<UploadBuffer<FrameConstants>> FrameCB = nullptr;
     std::unique_ptr<UploadBuffer<GBufferPassConstants>> GBufferPassCB = nullptr;
     std::unique_ptr<UploadBuffer<LightingPassConstants>> LightingPassCB = nullptr;
     std::unique_ptr<UploadBuffer<DirectionalLightConstants>> DirLightCB = nullptr;
+
     std::unique_ptr<UploadBuffer<ShadowLightConstants>> ShadowDirLightCB = nullptr;
     std::unique_ptr<UploadBuffer<ShadowLightConstants>> ShadowLocalLightCB = nullptr;
+    
     std::unique_ptr<UploadBuffer<Light>> LocalLightCB = nullptr;
     std::unique_ptr<UploadBuffer<LightIndex>> LightsInsideFrustum = nullptr;
     std::unique_ptr<UploadBuffer<LightIndex>> LightsContainingFrustum = nullptr;
-    std::unique_ptr<UploadBuffer<GodRaysConstants>> GodRaysCB = nullptr;
+    
     std::unique_ptr<UploadBuffer<StaticObjectConstants>> StaticObjCB = nullptr;
+    
+    std::unique_ptr<UploadBuffer<GodRaysConstants>> GodRaysCB = nullptr;
+    std::unique_ptr<UploadBuffer<SSRConstants>> SSRCB = nullptr;
 
     std::unordered_map<std::uint32_t, std::unique_ptr<UploadBuffer<OpaqueObjectConstants>>> OpaqueObjCB = {};
     std::unordered_map<std::uint32_t, std::unique_ptr<UploadBuffer<MaterialConstants>>> MaterialCB = {};

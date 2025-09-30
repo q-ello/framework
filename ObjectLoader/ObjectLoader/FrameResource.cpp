@@ -18,6 +18,7 @@ FrameResource::FrameResource(ID3D12Device* device, UINT passCount)
     LightsInsideFrustum = std::make_unique<UploadBuffer<LightIndex>>(device, 512, false);
 	GodRaysCB = std::make_unique<UploadBuffer<GodRaysConstants>>(device, passCount, true);
     StaticObjCB = std::make_unique < UploadBuffer<StaticObjectConstants>>(device, 512, true);
+    SSRCB = std::make_unique<UploadBuffer<SSRConstants>>(device, passCount, true);
 }
 
 FrameResource::~FrameResource()
