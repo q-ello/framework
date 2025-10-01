@@ -372,6 +372,7 @@ void MyApp::DrawInterface()
 	{
 		DrawObjectsList(buttonId);
 		DrawEnvironmentsList(buttonId);
+		DrawShadowMasksList(buttonId);
 		ImGui::EndTabItem();
 	}
 
@@ -565,6 +566,56 @@ void MyApp::DrawEnvironmentsList(int& btnId)
 		}
 
 		
+	}
+}
+
+void MyApp::DrawShadowMasksList(int& btnId)
+{
+	if (ImGui::CollapsingHeader("Shadow masks"))
+	{
+		ImGui::PushID(btnId++);
+		if (ImGui::Button("Add New"))
+		{
+			AddShadowMask();
+		}
+		ImGui::PopID();
+
+		ImGui::Spacing();
+
+		ImGui::DragFloat("UV Scale", &_lightingManager->shadowMaskUVScale, 0.1f, 0.1f, 20.0f);
+
+		int selectedShadowMask = _lightingManager->SelectedShadowMask();
+
+		for (size_t i = 0; i < _lightingManager->ShadowMaskCount(); i++)
+		{
+			ImGui::PushID(btnId++);
+
+			bool isSelected = i == selectedShadowMask;
+
+			ImGui::PushStyleColor(ImGuiCol_Button, isSelected ? ImVec4(0.2f, 0.6f, 1.0f, 1.0f) : ImVec4(0.2f, 0.2f, 0.2f, 1.0f));
+
+			std::string name = BasicUtil::trimName(_lightingManager->ShadowMaskName(i), 15);
+			if (ImGui::Button(name.c_str()))
+			{
+				_lightingManager->SetSelectedShadowMask(i);
+			}
+			ImGui::PopStyleColor();
+			ImGui::PopID();
+
+			if (ImGui::BeginPopupContextItem())
+			{
+				ImGui::PushID(btnId++);
+				if (ImGui::Button("delete"))
+				{
+					_lightingManager->DeleteShadowMask(i);
+				}
+				ImGui::PopID();
+				ImGui::EndPopup();
+			}
+
+		}
+
+
 	}
 }
 
@@ -1489,6 +1540,17 @@ void MyApp::AddEnvironment()
 		{
 			AddToast("The chosen file is not a cubemap texture", 7.0f);
 		}
+		CoTaskMemFree(texturePath);
+	}
+}
+
+void MyApp::AddShadowMask()
+{
+	WCHAR* texturePath;
+	if (BasicUtil::TryToOpenFile(L"Image Files", L"*.dds;*.png;*.jpg;*.jpeg;*.tga;*.bmp", texturePath))
+	{
+		TextureHandle texHandle = TextureManager::LoadTexture(texturePath, -1, 1);
+		_lightingManager->AddShadowMask(texHandle);
 		CoTaskMemFree(texturePath);
 	}
 }

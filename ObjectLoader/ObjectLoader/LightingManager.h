@@ -121,6 +121,27 @@ public:
 
 	void ChangeMiddlewareState(ID3D12GraphicsCommandList* cmdList, D3D12_RESOURCE_STATES newState);
 
+	//shadow mask stuff
+	void AddShadowMask(TextureHandle handle);
+	void DeleteShadowMask(int i);
+	void SetSelectedShadowMask(int i)
+	{
+		_selectedShadowMask = i;
+	}
+	std::string ShadowMaskName(int i) const
+	{
+		return _shadowMasks[i].name;
+	}
+	size_t SelectedShadowMask() const
+	{
+		return _selectedShadowMask;
+	}
+	size_t ShadowMaskCount() const
+	{
+		return _shadowMasks.size();
+	}
+	float shadowMaskUVScale = 1.f;
+
 private:
 	ID3D12Device* _device = nullptr;
 
@@ -213,4 +234,8 @@ private:
 	void ShadowPass(FrameResource* currFrameResource, ID3D12GraphicsCommandList* cmdList, std::vector<int> visibleObjects, std::vector<std::shared_ptr<EditableRenderItem>>& objects);
 	void SnapToTexel(DirectX::XMFLOAT3& minPt, DirectX::XMFLOAT3& maxPt) const;
 	void CreateMiddlewareTexture();
+
+	//shadow mask stuff
+	std::vector<TextureHandle> _shadowMasks;
+	size_t _selectedShadowMask = -1;
 };

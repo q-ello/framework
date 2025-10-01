@@ -4,10 +4,17 @@ Texture2D gBaseColor : register(t0);
 Texture2D gEmissive : register(t1);
 Texture2D gNormal : register(t2);
 Texture2D gORM : register(t3);
-Texture2D gDepth : register(t4);
-Texture2DArray gCascadesShadowMap : register(t5);
-Texture2DArray gShadowMap : register(t6);
-TextureCube gSky : register(t7);
+Texture2D gTexCoord : register(t4);
+Texture2D gDepth : register(t5);
+Texture2DArray gCascadesShadowMap : register(t6);
+Texture2DArray gShadowMap : register(t7);
+TextureCube gSky : register(t8);
+Texture2D gShadowMask : register(t9);
+
+cbuffer shadowMaskUVScale : register(b2)
+{
+    float scale;
+};
 
 //pbr stuff
 float DistributionGGX(float3 N, float3 H, float roughness)
@@ -143,7 +150,7 @@ float4 DirLightingPS(VertexOut pin) : SV_Target
         //main light intensity is 3
         finalColor.xyz = PBRShading(coords, -mainLightDirection, mainLightColor, posW) * 3.f;
         shadowFactor = ShadowFactor(posOffseted, cascades[cascadeIdx].viewProj, cascadeIdx, gCascadesShadowMap);
-        finalColor.xyz *= lerp(0.2f, 1.f, shadowFactor);
+        finalColor.xyz *= lerp(shadowFactor, 1.0f, 1.0f - gShadowMask.Sample(gsamLinearWrap, gTexCoord.Load(coords).xy * scale).a);
     }
     
     //spotlight in hand

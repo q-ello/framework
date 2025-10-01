@@ -249,6 +249,7 @@ struct GBufferInfo
     float4 Emissive : SV_Target1;
     float4 Normal : SV_Target2;
     float4 ORM : SV_Target3;
+    float4 TexCoord : SV_Target4;
 };
 
 GBufferInfo GBufferPS(VertexOut pin)
@@ -287,6 +288,7 @@ GBufferInfo GBufferPS(VertexOut pin)
     }
     res.Emissive.xyz = useEmissiveMap ? gEmissiveMap.Sample(gsamPointClamp, pin.TexC).xyz : emissive;
     res.Emissive.a = emissiveIntensity;
+    res.TexCoord.xy = pin.TexC;
     
     return res;
 }

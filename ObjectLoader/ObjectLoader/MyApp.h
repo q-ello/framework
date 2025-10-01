@@ -78,6 +78,7 @@ private:
 	void DrawInterface();
 	void DrawObjectsList(int& btnId);
 	void DrawEnvironmentsList(int& btnId);
+	void DrawShadowMasksList(int& btnId);
 
 	void DrawHandSpotlight(int& buttonId);
 	void DrawLightData(int& btnId);
@@ -111,6 +112,7 @@ private:
 	void AddMultipleModels();
 	void AddLOD();
 	void AddEnvironment();
+	void AddShadowMask();
 
 	void InitManagers();
 

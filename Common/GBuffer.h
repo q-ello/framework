@@ -8,6 +8,7 @@ enum class GBufferInfo
 	Emissive,
 	Normals,
 	ORM,
+	TexCoord,
 	Depth,
 	Count
 };
@@ -41,6 +42,7 @@ public:
 	DXGI_FORMAT_R16G16B16A16_FLOAT,		// Normals
 	DXGI_FORMAT_R16G16B16A16_FLOAT,		//Emissive
 	DXGI_FORMAT_R8G8B8A8_UNORM,			//ORM
+	DXGI_FORMAT_R16G16B16A16_FLOAT,		//Tex Coords
 	DXGI_FORMAT_R24G8_TYPELESS,         // Depth
 	};
 

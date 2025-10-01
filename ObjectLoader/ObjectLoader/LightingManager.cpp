@@ -304,12 +304,19 @@ void LightingManager::DrawDirLight(ID3D12GraphicsCommandList* cmdList, FrameReso
 
 	cmdList->SetGraphicsRootSignature(_rootSignature.Get());
 
+	auto& srvAllocator = TextureManager::srvHeapAllocator;
+
 	cmdList->SetGraphicsRootDescriptorTable(0, _gbuffer->SRVGPUHandle());
 	cmdList->SetGraphicsRootShaderResourceView(1, currFrameResource->LocalLightCB.get()->Resource()->GetGPUVirtualAddress());
 	cmdList->SetGraphicsRootShaderResourceView(4, currFrameResource->LightsContainingFrustum.get()->Resource()->GetGPUVirtualAddress());
-	cmdList->SetGraphicsRootDescriptorTable(5, TextureManager::srvHeapAllocator->GetGpuHandle(_cascadeShadowTextureArray.SRV));
-	cmdList->SetGraphicsRootDescriptorTable(6, TextureManager::srvHeapAllocator->GetGpuHandle(_localLightsShadowTextureArray.SRV));
+	cmdList->SetGraphicsRootDescriptorTable(5, srvAllocator->GetGpuHandle(_cascadeShadowTextureArray.SRV));
+	cmdList->SetGraphicsRootDescriptorTable(6, srvAllocator->GetGpuHandle(_localLightsShadowTextureArray.SRV));
 	cmdList->SetGraphicsRootDescriptorTable(7, _cubeMapManager->GetCubeMapGPUHandle());
+	
+	int shadowMaskSrvIndex = _shadowMasks.empty() ? 0 : _shadowMasks[_selectedShadowMask].index;
+	cmdList->SetGraphicsRootDescriptorTable(8, srvAllocator->GetGpuHandle(shadowMaskSrvIndex));
+
+	cmdList->SetGraphicsRoot32BitConstants(9, 1, &shadowMaskUVScale, 0);
 
 	cmdList->SetPipelineState(_dirLightPSO.Get());
 	cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -486,6 +493,23 @@ void LightingManager::ChangeMiddlewareState(ID3D12GraphicsCommandList* cmdList, 
 	_middlewareTexture.prevState = newState;
 }
 
+void LightingManager::AddShadowMask(TextureHandle handle)
+{
+	_selectedShadowMask = _shadowMasks.size();
+	_shadowMasks.push_back(handle);
+}
+
+void LightingManager::DeleteShadowMask(int i)
+{
+	const std::string texName = _shadowMasks[i].name;
+	TextureManager::deleteTexture(std::wstring(texName.begin(), texName.end()), 1);
+	_shadowMasks.erase(_shadowMasks.begin() + i);
+	if (_selectedShadowMask >= _shadowMasks.size())
+	{
+		_selectedShadowMask = _shadowMasks.size() - 1;
+	}
+}
+
 void LightingManager::BuildInputLayout()
 {
 	_localLightsInputLayout =
@@ -510,8 +534,11 @@ void LightingManager::BuildRootSignature()
 	//sky
 	CD3DX12_DESCRIPTOR_RANGE skyTexTable;
 	skyTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, srvAmount++);
+	//shadow mask
+	CD3DX12_DESCRIPTOR_RANGE shadowMaskTexTable;
+	shadowMaskTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, srvAmount++);
 
-	const int rootParameterCount = 8;
+	const int rootParameterCount = 10;
 
 	CD3DX12_ROOT_PARAMETER lightingSlotRootParameter[rootParameterCount];
 
@@ -523,6 +550,8 @@ void LightingManager::BuildRootSignature()
 	lightingSlotRootParameter[5].InitAsDescriptorTable(1, &cascadesShadowTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
 	lightingSlotRootParameter[6].InitAsDescriptorTable(1, &shadowTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
 	lightingSlotRootParameter[7].InitAsDescriptorTable(1, &skyTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
+	lightingSlotRootParameter[8].InitAsDescriptorTable(1, &shadowMaskTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
+	lightingSlotRootParameter[9].InitAsConstants(1, 2);
 
 	CD3DX12_ROOT_SIGNATURE_DESC lightingRootSigDesc(rootParameterCount, lightingSlotRootParameter, (UINT)TextureManager::GetLinearSamplers().size(), TextureManager::GetLinearSamplers().data(), D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 
