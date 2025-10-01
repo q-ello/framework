@@ -582,7 +582,7 @@ void MyApp::DrawShadowMasksList(int& btnId)
 
 		ImGui::Spacing();
 
-		ImGui::DragFloat("UV Scale", &_lightingManager->shadowMaskUVScale, 0.1f, 0.1f, 20.0f);
+		ImGui::DragFloat("UV Scale", &_lightingManager->shadowMaskUVScale, 0.05f, 0.1f, 1.0f);
 
 		int selectedShadowMask = _lightingManager->SelectedShadowMask();
 

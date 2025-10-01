@@ -50,7 +50,7 @@ float3 FresnelSchlick(float cosTheta, float3 F0)
     return F0 + (1.0 - F0) * pow(1.0 - cosTheta, 5.0);
 }
 
-float3 PBRShading(float3 coords, float3 lightDir, float3 lightColor, float3 worldPos)
+float3 PBRShading(float3 coords, float3 lightDir, float3 lightColor, float3 worldPos, float shadowFactor)
 {
     float3 N = normalize(gNormal.Load(coords).xyz);
     float3 V = normalize(gEyePosW - worldPos);
@@ -85,7 +85,7 @@ float3 PBRShading(float3 coords, float3 lightDir, float3 lightColor, float3 worl
 
     float3 ambient = 0.1 * ao * albedo;
 
-    float3 color = (diffuse + specular) * lightColor * NdotL;
+    float3 color = (diffuse + specular) * lightColor * NdotL * shadowFactor;
 
     return ambient + color;
 }
@@ -118,7 +118,7 @@ float4 ComputeLocalLighting(int lightIndex, float3 posW, float3 coords)
     
     float finalIntensity = attenuation * spotFactor * light.intensity;
     
-    float3 finalColor = PBRShading(coords, -normalizedLightDir, light.color, posW) * finalIntensity;
+    float3 finalColor = PBRShading(coords, -normalizedLightDir, light.color, posW, 1.f) * finalIntensity;
 
     return float4(finalColor, albedo.a);
 }
@@ -148,9 +148,11 @@ float4 DirLightingPS(VertexOut pin) : SV_Target
     {
         int cascadeIdx = CalculateCascadeIndex(posW);
         //main light intensity is 3
-        finalColor.xyz = PBRShading(coords, -mainLightDirection, mainLightColor, posW) * 3.f;
         shadowFactor = ShadowFactor(posOffseted, cascades[cascadeIdx].viewProj, cascadeIdx, gCascadesShadowMap);
-        finalColor.xyz *= lerp(shadowFactor, 1.0f, 1.0f - gShadowMask.Sample(gsamLinearWrap, gTexCoord.Load(coords).xy * scale).a);
+        shadowFactor += gShadowMask.Sample(gsamLinearWrap, gTexCoord.Load(coords).xy).a * scale;
+        
+        finalColor.xyz = PBRShading(coords, -mainLightDirection, mainLightColor, posW, saturate(shadowFactor));
+        //finalColor.xyz *= lerp(shadowFactor, 1.0f, gShadowMask.Sample(gsamLinearWrap, gTexCoord.Load(coords).xy * scale).a);
     }
     
     //spotlight in hand
@@ -175,7 +177,7 @@ float4 DirLightingPS(VertexOut pin) : SV_Target
     
                 float finalIntensity = mainSpotlight.intensity * attenuation * spotFactor;
     
-                finalColor.xyz += PBRShading(coords, -normalizedCurrDir, mainSpotlight.color, posW) * finalIntensity;
+                finalColor.xyz += PBRShading(coords, -normalizedCurrDir, mainSpotlight.color, posW, 1.f) * finalIntensity;
             }
         }
     }
