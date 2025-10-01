@@ -139,6 +139,14 @@ struct SSRConstants
     float pad = 0.0f;
 };
 
+struct SphereConstants
+{
+    DirectX::XMFLOAT4X4 World = MathHelper::Identity4x4();
+    float roughness = 1.f;
+    float metallic = 1.f;
+    float pad[2] = { 0.0f, 0.0f };
+};
+
 // Stores the resources needed for the CPU to build the command lists
 // for a frame.  
 struct FrameResource
@@ -171,6 +179,8 @@ public:
     std::unique_ptr<UploadBuffer<LightIndex>> LightsContainingFrustum = nullptr;
     
     std::unique_ptr<UploadBuffer<StaticObjectConstants>> StaticObjCB = nullptr;
+
+    std::unique_ptr<UploadBuffer<SphereConstants>> SphereObjCB = nullptr;
     
     std::unique_ptr<UploadBuffer<GodRaysConstants>> GodRaysCB = nullptr;
     std::unique_ptr<UploadBuffer<SSRConstants>> SSRCB = nullptr;

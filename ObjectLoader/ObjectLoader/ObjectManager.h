@@ -14,7 +14,7 @@ public:
 	ObjectManager(ID3D12Device* device);
 	~ObjectManager();
 
-	virtual int AddRenderItem(ID3D12Device* device, ModelData&& modelData) = 0;
+	virtual int AddRenderItem(ModelData&& modelData) = 0;
 	virtual bool DeleteObject(int selectedObject) = 0;
 
 	virtual void UpdateObjectCBs(FrameResource* currFrameResource) = 0;

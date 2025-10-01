@@ -14,4 +14,5 @@ struct LightVertex
 {
     DirectX::XMFLOAT3 Pos;
     DirectX::XMFLOAT4 Color;
+    DirectX::XMFLOAT3 Normal;
 };

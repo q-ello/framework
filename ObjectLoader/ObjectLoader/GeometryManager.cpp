@@ -54,6 +54,7 @@ void GeometryManager::BuildNecessaryGeometry()
 	for (size_t i = 0; i < sphere.Vertices.size(); i++)
 	{
 		vertices[sphereSubmesh.BaseVertexLocation + i].Pos = sphere.Vertices[i].Position;
+		vertices[sphereSubmesh.BaseVertexLocation + i].Normal = sphere.Vertices[i].Normal;
 	}
 
 	std::vector<std::uint16_t> indices = grid.GetIndices16();

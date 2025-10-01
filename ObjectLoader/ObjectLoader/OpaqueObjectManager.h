@@ -10,7 +10,7 @@ public:
 	void UpdateObjectCBs(FrameResource* currFrameResource) override;
 	void SetCamera(Camera* camera);
 	void AddObjectToResource(Microsoft::WRL::ComPtr<ID3D12Device> device, FrameResource* currFrameResource) override;
-	int AddRenderItem(ID3D12Device* device, ModelData&& modelData) override;
+	int AddRenderItem(ModelData&& modelData) override;
 	bool DeleteObject(int selectedObject) override;
 	int AddLOD(ID3D12Device* device, LODData lod, EditableRenderItem* ri);
 	void DeleteLOD(EditableRenderItem* ri, int index);
@@ -21,9 +21,10 @@ public:
 	std::string objectName(int i) override;
 	EditableRenderItem* object(int i);
 	void Draw(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, float screenHeight, bool isWireframe = false, bool fixedLOD = false);
-	void DrawObjects(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, std::vector<uint32_t> indices, std::unordered_map<uint32_t, EditableRenderItem*> objects, float screenHeight,
-		bool fixedLOD);
 	void DrawAABBs(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource);
+	
+	void InitSpheresInfo();
+	void DrawSpheres(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource);
 
 	std::vector< D3D12_INPUT_ELEMENT_DESC > InputLayout() const
 	{
@@ -47,6 +48,9 @@ private:
 	void CountLODIndex(EditableRenderItem* ri, float screenHeight);
 	float ComputeScreenSize(XMVECTOR& center, float radius, float screenHeight);
 
+	void DrawObjects(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, std::vector<uint32_t> indices, std::unordered_map<uint32_t, EditableRenderItem*> objects, float screenHeight,
+		bool fixedLOD);
+
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> _wireframePSO;
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> _tesselatedPSO;
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> _wireframeTesselatedPSO;
@@ -66,4 +70,9 @@ private:
 	UINT _cbMaterialElementSize = d3dUtil::CalcConstantBufferByteSize(sizeof(MaterialConstants));
 
 	Camera* _camera;
+
+	std::vector< D3D12_INPUT_ELEMENT_DESC > _sphereInputLayout;
+	Microsoft::WRL::ComPtr<ID3D12PipelineState> _spherePSO;
+	Microsoft::WRL::ComPtr<ID3DBlob> _sphereVSShader;
+	Microsoft::WRL::ComPtr<ID3DBlob> _spherePSShader;
 };
