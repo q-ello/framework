@@ -157,5 +157,6 @@ private:
 	bool _godRays = false;
 	bool _ssr = false;
 	bool _chromaticAberration = false;
+	bool _vignetting = false;
 };
 

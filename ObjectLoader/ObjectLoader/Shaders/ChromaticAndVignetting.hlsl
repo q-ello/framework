@@ -3,12 +3,12 @@
 
 Texture2D gLitScene : register(t0);
 
-cbuffer ChromaticAberrationParameters : register(b1)
+cbuffer Parameters : register(b1)
 {
     float strength;
 };
 
-float4 PS(VertexOut pin) : SV_Target
+float4 ChromaticPS(VertexOut pin) : SV_Target
 {
     float3 coords = (int3) pin.PosH.xyz;
     float2 uv = coords.xy / gRTSize;
@@ -31,4 +31,17 @@ float4 PS(VertexOut pin) : SV_Target
     col *= edgeFade;
     
     return float4(col, 1);
+}
+
+
+float4 VignettingPS(VertexOut pin) : SV_Target
+{
+    float3 coords = (int3) pin.PosH.xyz;
+    float2 uv = coords.xy / gRTSize;
+    
+    float2 centeredUV = uv - 0.5;
+    float radius = length(centeredUV);
+    float vignetting = 1 - radius;
+    
+    return gLitScene.Sample(gsamLinear, uv) * pow(vignetting, strength);
 }

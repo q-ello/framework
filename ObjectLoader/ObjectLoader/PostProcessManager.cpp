@@ -9,13 +9,19 @@ void PostProcessManager::Init(int width, int height)
 	//get srv and rtv indices
 	{
 		auto& rtvAllocator = TextureManager::rtvHeapAllocator;
-		auto& srvAllocator = TextureManager::srvHeapAllocator;
+		auto& srvAllocator = TextureManager::srvHeapAllocator;\
+
 		_lightOcclusionMask.otherIndex = rtvAllocator->Allocate();
 		_lightOcclusionMask.SrvIndex = srvAllocator->Allocate();
+
 		_ssrTexture.otherIndex = rtvAllocator->Allocate();
 		_ssrTexture.SrvIndex = srvAllocator->Allocate();
+
 		_chromaticAberrationTexture.otherIndex = rtvAllocator->Allocate();
 		_chromaticAberrationTexture.SrvIndex = srvAllocator->Allocate();
+
+		_vignettingTexture.otherIndex = rtvAllocator->Allocate();
+		_vignettingTexture.SrvIndex = srvAllocator->Allocate();
 	}
 
 	BuildRootSignature();
@@ -126,17 +132,17 @@ void PostProcessManager::DrawSSR(ID3D12GraphicsCommandList* cmdList, FrameResour
 
 void PostProcessManager::DrawChromaticAberration(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource)
 {
+	//just in case
 	_lightingManager->ChangeMiddlewareState(cmdList, D3D12_RESOURCE_STATE_GENERIC_READ);
 
-	cmdList->SetPipelineState(_chromaticAberrationPSO.Get());
-	cmdList->SetGraphicsRootSignature(_chromaticAberrationRootSignature.Get());
+	cmdList->SetPipelineState(_chromaticaAberrationPSO.Get());
+	cmdList->SetGraphicsRootSignature(_chromaticAndVignettingRootSignature.Get());
 
 	cmdList->SetGraphicsRootDescriptorTable(0, _lightingManager->GetFinalTextureSRV());
 
 	auto lightingPassCB = currFrameResource->LightingPassCB->Resource();
 	cmdList->SetGraphicsRootConstantBufferView(1, lightingPassCB->GetGPUVirtualAddress());
 
-	auto ssrCB = currFrameResource->SSRCB->Resource();
 	cmdList->SetGraphicsRoot32BitConstants(2, 1, &ChromaticAberrationStrength, 0);
 
 	cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(_chromaticAberrationTexture.Resource.Get(), D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET));
@@ -147,6 +153,31 @@ void PostProcessManager::DrawChromaticAberration(ID3D12GraphicsCommandList* cmdL
 	cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(_chromaticAberrationTexture.Resource.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ));
 
 	_lightingManager->SetFinalTextureIndex(_chromaticAberrationTexture.SrvIndex);
+}
+
+void PostProcessManager::DrawVignetting(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource)
+{
+	//just in case
+	_lightingManager->ChangeMiddlewareState(cmdList, D3D12_RESOURCE_STATE_GENERIC_READ);
+
+	cmdList->SetPipelineState(_vignettingPSO.Get());
+	cmdList->SetGraphicsRootSignature(_chromaticAndVignettingRootSignature.Get());
+
+	cmdList->SetGraphicsRootDescriptorTable(0, _lightingManager->GetFinalTextureSRV());
+
+	auto lightingPassCB = currFrameResource->LightingPassCB->Resource();
+	cmdList->SetGraphicsRootConstantBufferView(1, lightingPassCB->GetGPUVirtualAddress());
+
+	cmdList->SetGraphicsRoot32BitConstants(2, 1, &VignettingPower, 0);
+
+	cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(_vignettingTexture.Resource.Get(), D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET));
+
+	cmdList->OMSetRenderTargets(1, &TextureManager::rtvHeapAllocator->GetCpuHandle(_vignettingTexture.otherIndex), true, nullptr);
+	cmdList->DrawInstanced(3, 1, 0, 0);
+
+	cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(_vignettingTexture.Resource.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ));
+
+	_lightingManager->SetFinalTextureIndex(_vignettingTexture.SrvIndex);
 }
 
 void PostProcessManager::OnResize(int newWidth, int newHeight)
@@ -307,7 +338,7 @@ void PostProcessManager::BuildRootSignature()
 			0,
 			serializedRootSig->GetBufferPointer(),
 			serializedRootSig->GetBufferSize(),
-			IID_PPV_ARGS(_chromaticAberrationRootSignature.GetAddressOf())));
+			IID_PPV_ARGS(_chromaticAndVignettingRootSignature.GetAddressOf())));
 	}
 }
 
@@ -316,7 +347,8 @@ void PostProcessManager::BuildShaders()
 	_lightOcclusionMaskPS = d3dUtil::CompileShader(L"Shaders\\LightOcclusionMask.hlsl", nullptr, "LightOcclusionPS", "ps_5_1");
 	_godRaysPS = d3dUtil::CompileShader(L"Shaders\\GodRays.hlsl", nullptr, "GodRaysPS", "ps_5_1");
 	_ssrPS = d3dUtil::CompileShader(L"Shaders\\ScreenSpaceReflection.hlsl", nullptr, "PS", "ps_5_1");
-	_chromaticAberrationPS = d3dUtil::CompileShader(L"Shaders\\ChromaticAberration.hlsl", nullptr, "PS", "ps_5_1");
+	_chromaticAberrationPS = d3dUtil::CompileShader(L"Shaders\\ChromaticAndVignetting.hlsl", nullptr, "ChromaticPS", "ps_5_1");
+	_vignettingPS = d3dUtil::CompileShader(L"Shaders\\ChromaticAndVignetting.hlsl", nullptr, "VignettingPS", "ps_5_1");
 }
 
 void PostProcessManager::BuildPSOs()
@@ -384,13 +416,22 @@ void PostProcessManager::BuildPSOs()
 
 	//chromatic aberration
 	D3D12_GRAPHICS_PIPELINE_STATE_DESC chromaticAberrationPSODesc = ssrPSODesc;
-	chromaticAberrationPSODesc.pRootSignature = _chromaticAberrationRootSignature.Get();
+	chromaticAberrationPSODesc.pRootSignature = _chromaticAndVignettingRootSignature.Get();
 	chromaticAberrationPSODesc.PS =
 	{
 		reinterpret_cast<BYTE*>(_chromaticAberrationPS->GetBufferPointer()),
 		_chromaticAberrationPS->GetBufferSize()
 	};
-	ThrowIfFailed(_device->CreateGraphicsPipelineState(&chromaticAberrationPSODesc, IID_PPV_ARGS(&_chromaticAberrationPSO)));
+	ThrowIfFailed(_device->CreateGraphicsPipelineState(&chromaticAberrationPSODesc, IID_PPV_ARGS(&_chromaticaAberrationPSO)));
+
+	//vignetting
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC vignettingPSODesc = chromaticAberrationPSODesc;
+	vignettingPSODesc.PS =
+	{
+		reinterpret_cast<BYTE*>(_vignettingPS->GetBufferPointer()),
+		_vignettingPS->GetBufferSize()
+	};
+	ThrowIfFailed(_device->CreateGraphicsPipelineState(&vignettingPSODesc, IID_PPV_ARGS(&_vignettingPSO)));
 }
 
 void PostProcessManager::BuildTextures()
@@ -444,10 +485,7 @@ void PostProcessManager::BuildTextures()
 	_device->CreateShaderResourceView(_lightOcclusionMask.Resource.Get(), &srvDesc, 
 		TextureManager::srvHeapAllocator->GetCpuHandle(_lightOcclusionMask.SrvIndex));
 
-	//ssr texture
-	CreateSSRTexture();
-
-	//chromatic aberration texture
+	//most textures are kinda identical
 	{
 		D3D12_RESOURCE_DESC texDesc = {};
 		texDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
@@ -473,7 +511,15 @@ void PostProcessManager::BuildTextures()
 
 		ThrowIfFailed(_device->CreateCommittedResource(
 			&heapProps, D3D12_HEAP_FLAG_NONE, &texDesc, D3D12_RESOURCE_STATE_COMMON,
+			&clearValue, IID_PPV_ARGS(&_ssrTexture.Resource)));
+
+		ThrowIfFailed(_device->CreateCommittedResource(
+			&heapProps, D3D12_HEAP_FLAG_NONE, &texDesc, D3D12_RESOURCE_STATE_COMMON,
 			&clearValue, IID_PPV_ARGS(&_chromaticAberrationTexture.Resource)));
+
+		ThrowIfFailed(_device->CreateCommittedResource(
+			&heapProps, D3D12_HEAP_FLAG_NONE, &texDesc, D3D12_RESOURCE_STATE_COMMON,
+			&clearValue, IID_PPV_ARGS(&_vignettingTexture.Resource)));
 
 		// Create RTV
 		D3D12_RENDER_TARGET_VIEW_DESC rtvDesc = {};
@@ -482,7 +528,12 @@ void PostProcessManager::BuildTextures()
 		rtvDesc.Texture2D.PlaneSlice = 0;
 		rtvDesc.Format = _format;
 
-		_device->CreateRenderTargetView(_chromaticAberrationTexture.Resource.Get(), &rtvDesc, TextureManager::rtvHeapAllocator->GetCpuHandle(_chromaticAberrationTexture.otherIndex));
+		_device->CreateRenderTargetView(_ssrTexture.Resource.Get(), &rtvDesc,
+			TextureManager::rtvHeapAllocator->GetCpuHandle(_ssrTexture.otherIndex));
+		_device->CreateRenderTargetView(_chromaticAberrationTexture.Resource.Get(), &rtvDesc,
+			TextureManager::rtvHeapAllocator->GetCpuHandle(_chromaticAberrationTexture.otherIndex));
+		_device->CreateRenderTargetView(_vignettingTexture.Resource.Get(), &rtvDesc,
+			TextureManager::rtvHeapAllocator->GetCpuHandle(_vignettingTexture.otherIndex));
 
 		//create SRV
 		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
@@ -491,57 +542,13 @@ void PostProcessManager::BuildTextures()
 		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
 		srvDesc.Texture2D.MipLevels = 1;
 
+		_device->CreateShaderResourceView(_ssrTexture.Resource.Get(), &srvDesc,
+			TextureManager::srvHeapAllocator->GetCpuHandle(_ssrTexture.SrvIndex));
 		_device->CreateShaderResourceView(_chromaticAberrationTexture.Resource.Get(), &srvDesc,
 			TextureManager::srvHeapAllocator->GetCpuHandle(_chromaticAberrationTexture.SrvIndex));
+		_device->CreateShaderResourceView(_vignettingTexture.Resource.Get(), &srvDesc,
+			TextureManager::srvHeapAllocator->GetCpuHandle(_vignettingTexture.SrvIndex));
 	}
-}
-
-void PostProcessManager::CreateSSRTexture()
-{
-	D3D12_RESOURCE_DESC texDesc = {};
-	texDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-	texDesc.Alignment = 0;
-	texDesc.Width = _width;
-	texDesc.Height = _height;
-	texDesc.DepthOrArraySize = 1;
-	texDesc.MipLevels = 1;
-	texDesc.Format = _format;
-	texDesc.SampleDesc.Count = 1;
-	texDesc.SampleDesc.Quality = 0;
-	texDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
-	texDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
-
-	D3D12_CLEAR_VALUE clearValue = {};
-	clearValue.Format = _format;
-	clearValue.Color[0] = 0.0f;
-	clearValue.Color[1] = 0.0f;
-	clearValue.Color[2] = 0.0f;
-	clearValue.Color[3] = 0.0f;
-
-	CD3DX12_HEAP_PROPERTIES heapProps(D3D12_HEAP_TYPE_DEFAULT);
-
-	ThrowIfFailed(_device->CreateCommittedResource(
-		&heapProps, D3D12_HEAP_FLAG_NONE, &texDesc, D3D12_RESOURCE_STATE_COMMON,
-		&clearValue, IID_PPV_ARGS(&_ssrTexture.Resource)));
-
-	// Create RTV
-	D3D12_RENDER_TARGET_VIEW_DESC rtvDesc = {};
-	rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
-	rtvDesc.Texture2D.MipSlice = 0;
-	rtvDesc.Texture2D.PlaneSlice = 0;
-	rtvDesc.Format = _format;
-
-	_device->CreateRenderTargetView(_ssrTexture.Resource.Get(), &rtvDesc, TextureManager::rtvHeapAllocator->GetCpuHandle(_ssrTexture.otherIndex));
-
-	//create SRV
-	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-	srvDesc.Format = _format;
-	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-	srvDesc.Texture2D.MipLevels = 1;
-
-	_device->CreateShaderResourceView(_ssrTexture.Resource.Get(), &srvDesc,
-		TextureManager::srvHeapAllocator->GetCpuHandle(_ssrTexture.SrvIndex));
 }
 
 void PostProcessManager::SetNewResolutionAndRects(int newWidth, int newHeight)

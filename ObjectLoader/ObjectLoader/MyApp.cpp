@@ -160,13 +160,15 @@ void MyApp::Draw(const GameTimer& gt)
 			_postProcessManager->DrawSSR(mCommandList.Get(), mCurrFrameResource);
 		if (_chromaticAberration)
 			_postProcessManager->DrawChromaticAberration(mCommandList.Get(), mCurrFrameResource);
+		if (_vignetting)
+			_postProcessManager->DrawVignetting(mCommandList.Get(), mCurrFrameResource);
 		FinalPass();
 	}
 
-	//drawing grid
-	_gBuffer->ChangeDSVState(D3D12_RESOURCE_STATE_DEPTH_WRITE);
-	mCommandList->OMSetRenderTargets(1, &CurrentBackBufferView(), true, &_gBuffer->DepthStencilView());
-	_gridManager->Draw(mCommandList.Get(), mCurrFrameResource);
+	////don't wanna draw grid anymore
+	//_gBuffer->ChangeDSVState(D3D12_RESOURCE_STATE_DEPTH_WRITE);
+	//mCommandList->OMSetRenderTargets(1, &CurrentBackBufferView(), true, &_gBuffer->DepthStencilView());
+	//_gridManager->Draw(mCommandList.Get(), mCurrFrameResource);
 
 	//ImGui draw
 	ID3D12DescriptorHeap* descriptorHeaps[] = {_imGuiDescriptorHeap.Get()};
@@ -1272,6 +1274,12 @@ void MyApp::DrawPostProcesses()
 		//no need for dirty flag 'cause we just have one root constant
 		ImGui::Checkbox("Enabled##chromaticaberration", &_chromaticAberration);
 		ImGui::DragFloat("Strength##chromaticaberration", &_postProcessManager->ChromaticAberrationStrength, 0.01f, 0.0f, 0.1f);
+	}
+
+	if (ImGui::CollapsingHeader("Vignetting"))
+	{
+		ImGui::Checkbox("Enabled##vignetting", &_vignetting);
+		ImGui::DragFloat("Vignetting Power##vignetting", &_postProcessManager->VignettingPower, 0.1f, 1.f, 2.0f);
 	}
 }
 
