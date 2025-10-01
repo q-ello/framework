@@ -40,6 +40,8 @@ float4 VignettingPS(VertexOut pin) : SV_Target
     float2 uv = coords.xy / gRTSize;
     
     float2 centeredUV = uv - 0.5;
+    centeredUV.x *= gRTSize.x / gRTSize.y;
+    
     float radius = length(centeredUV);
     float vignetting = 1 - radius;
     
