@@ -102,7 +102,7 @@ void UnlitObjectManager::AddObjectToResource(Microsoft::WRL::ComPtr<ID3D12Device
 {
 }
 
-int UnlitObjectManager::AddRenderItem(ID3D12Device* device, ModelData&& modelData)
+int UnlitObjectManager::AddRenderItem(ModelData&& modelData)
 {
 	auto renderItem = std::make_unique<UnlitRenderItem>();
 	renderItem->uid = FrameResource::staticObjectCount++;
@@ -116,7 +116,7 @@ int UnlitObjectManager::AddRenderItem(ID3D12Device* device, ModelData&& modelDat
 
 	for (int i = 0; i < FrameResource::frameResources().size(); ++i)
 	{
-		AddObjectToResource(device, FrameResource::frameResources()[i].get());
+		AddObjectToResource(_device.Get(), FrameResource::frameResources()[i].get());
 	}
 
 	_objects.push_back(std::move(renderItem));

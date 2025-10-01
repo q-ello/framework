@@ -34,9 +34,10 @@ bool MyApp::Initialize()
 	BuildRootSignatures();
 	BuildDescriptorHeaps();
 	BuildShadersAndInputLayout();
-	_gridManager->AddRenderItem(_device.Get(), { "grid" });
+	_gridManager->AddRenderItem({ "grid" });
 	BuildFrameResources();
 	BuildPSOs();
+	_objectsManager->InitSpheresInfo();
 
 	// Execute the initialization commands.
 	ThrowIfFailed(mCommandList->Close());
@@ -1374,7 +1375,7 @@ void MyApp::DrawImportModal()
 			//merge meshes into one file
 			ModelData data = std::move(GeometryManager::BuildModelGeometry(_modelManager->ParseAsOneObject().get()));
 			_selectedModels.clear();
-			_selectedModels.insert(_objectsManager->AddRenderItem(_device.Get(), std::move(data)));
+			_selectedModels.insert(_objectsManager->AddRenderItem(std::move(data)));
 			ImGui::CloseCurrentPopup();
 		}
 
@@ -1432,7 +1433,7 @@ void MyApp::AddModel()
 			//generating it as one mesh
 			ModelData data = GeometryManager::BuildModelGeometry(model.get());
 			_selectedModels.clear();
-			_selectedModels.insert(_objectsManager->AddRenderItem(_device.Get(), std::move(data)));
+			_selectedModels.insert(_objectsManager->AddRenderItem(std::move(data)));
 		}
 		else if (modelCount >= 20)
 		{
@@ -1451,7 +1452,7 @@ void MyApp::AddMultipleModels()
 		ModelData data = std::move(GeometryManager::BuildModelGeometry(model.get()));
 		if (data.lodsData.empty())
 			continue;
-		_selectedModels.insert(_objectsManager->AddRenderItem(_device.Get(), std::move(data)));
+		_selectedModels.insert(_objectsManager->AddRenderItem(std::move(data)));
 	}
 }
 
@@ -1553,6 +1554,7 @@ void MyApp::GBufferPass()
 	mCommandList->OMSetRenderTargets(_gBuffer->InfoCount(), _gBuffer->RTVs().data(),
 		false, &_gBuffer->DepthStencilView());
 	_objectsManager->Draw(mCommandList.Get(), mCurrFrameResource, (float)mClientHeight, _isWireframe, _fixedLOD);
+	_objectsManager->DrawSpheres(mCommandList.Get(), mCurrFrameResource);
 }
 
 void MyApp::LightingPass()

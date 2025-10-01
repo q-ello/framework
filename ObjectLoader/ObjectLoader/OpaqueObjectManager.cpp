@@ -120,6 +120,13 @@ void EditableObjectManager::BuildInputLayout()
 		{ "TANGENT", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 32, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
 		{ "BINORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 44, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0}
 	};
+
+	_sphereInputLayout =
+	{
+		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+		{ "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+		{ "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 28, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+	};
 }
 
 void EditableObjectManager::BuildRootSignature()
@@ -143,7 +150,7 @@ void EditableObjectManager::BuildRootSignature()
 	CD3DX12_DESCRIPTOR_RANGE ARMTexTable;
 	ARMTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 7);
 
-	const int rootParamCount = 11;
+	const int rootParamCount = 12;
 
 	// Root parameter can be a table, root descriptor or root constants.
 	CD3DX12_ROOT_PARAMETER slotRootParameter[rootParamCount];
@@ -160,6 +167,7 @@ void EditableObjectManager::BuildRootSignature()
 	slotRootParameter[8].InitAsConstantBufferView(0);
 	slotRootParameter[9].InitAsConstantBufferView(1);
 	slotRootParameter[10].InitAsConstantBufferView(2);
+	slotRootParameter[11].InitAsShaderResourceView(0, 1);
 
 	auto staticSamplers = TextureManager::GetStaticSamplers();
 
@@ -219,6 +227,21 @@ void EditableObjectManager::BuildPSO()
 	PSODesc.DSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
 	ThrowIfFailed(_device->CreateGraphicsPipelineState(&PSODesc, IID_PPV_ARGS(&_pso)));
 
+	//sphere
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC spherePSODesc = PSODesc;
+	spherePSODesc.InputLayout = { _sphereInputLayout.data(), (UINT)_sphereInputLayout.size() };
+	spherePSODesc.VS =
+	{
+		reinterpret_cast<BYTE*>(_sphereVSShader->GetBufferPointer()),
+		_sphereVSShader->GetBufferSize()
+	};
+	spherePSODesc.PS =
+	{
+		reinterpret_cast<BYTE*>(_spherePSShader->GetBufferPointer()),
+		_spherePSShader->GetBufferSize()
+	};
+	ThrowIfFailed(_device->CreateGraphicsPipelineState(&spherePSODesc, IID_PPV_ARGS(&_spherePSO)));
+
 	//wireframe untesselated
 	D3D12_GRAPHICS_PIPELINE_STATE_DESC wireframePSODesc = PSODesc;
 	wireframePSODesc.RasterizerState.FillMode = D3D12_FILL_MODE_WIREFRAME;
@@ -269,6 +292,8 @@ void EditableObjectManager::BuildShaders()
 	_tessHSShader = d3dUtil::CompileShader(L"Shaders\\GBuffer.hlsl", nullptr, "TessHS", "hs_5_1");
 	_tessDSShader = d3dUtil::CompileShader(L"Shaders\\GBuffer.hlsl", nullptr, "TessDS", "ds_5_1");
 	_wireframePSShader = d3dUtil::CompileShader(L"Shaders\\GBuffer.hlsl", nullptr, "WireframePS", "ps_5_1");
+	_sphereVSShader = d3dUtil::CompileShader(L"Shaders\\Sphere.hlsl", nullptr, "GBufferVS", "vs_5_1");
+	_spherePSShader = d3dUtil::CompileShader(L"Shaders\\Sphere.hlsl", nullptr, "GBufferPS", "ps_5_1");
 }
 
 void EditableObjectManager::CountLODOffsets(LODData* lod)
@@ -324,13 +349,33 @@ float EditableObjectManager::ComputeScreenSize(XMVECTOR& center, float radius, f
 	return projectedSize; // in pixels (height of sphere on screen)
 }
 
+void EditableObjectManager::InitSpheresInfo()
+{
+	int id = 0;
+	for (int i = 0; i <= 10; i++)
+	{
+		for (int j = 0; j <= 10; j++)
+		{
+			SphereConstants sphere;
+			XMStoreFloat4x4(&sphere.World, XMMatrixTranspose(XMMatrixTranslation(i - 5.f, j, 0.f)));
+			sphere.metallic = i * 0.1f;
+			sphere.roughness = j * 0.1f;
+			for (int k = 0; k < FrameResource::frameResources().size(); k++)
+			{
+				FrameResource::frameResources()[k]->SphereObjCB->CopyData(id, sphere);
+			}
+			id++;
+		}
+	}
+}
+
 void EditableObjectManager::AddObjectToResource(Microsoft::WRL::ComPtr<ID3D12Device> device, FrameResource* currFrameResource)
 {
 	for (auto& obj : _objects)
 		currFrameResource->addOpaqueObjectBuffer(device.Get(), obj->uid, (int)obj->lodsData.begin()->meshes.size(), (int)obj->materials.size());
 }
 
-int EditableObjectManager::AddRenderItem(ID3D12Device* device, ModelData&& modelData)
+int EditableObjectManager::AddRenderItem(ModelData&& modelData)
 {
 	const std::string& itemName = modelData.croppedName;
 	std::string name(itemName.begin(), itemName.end());
@@ -369,7 +414,7 @@ int EditableObjectManager::AddRenderItem(ID3D12Device* device, ModelData&& model
 
 	for (int i = 0; i < FrameResource::frameResources().size(); ++i)
 	{
-		FrameResource::frameResources()[i]->addOpaqueObjectBuffer(device, modelRitem->uid, modelRitem->lodsData.begin()->meshes.size() + 1, modelRitem->materials.size());
+		FrameResource::frameResources()[i]->addOpaqueObjectBuffer(_device.Get(), modelRitem->uid, modelRitem->lodsData.begin()->meshes.size() + 1, modelRitem->materials.size());
 	}
 
 	if (isTesselated)
@@ -514,6 +559,7 @@ void EditableObjectManager::Draw(ID3D12GraphicsCommandList* cmdList, FrameResour
 	cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
 	DrawObjects(cmdList, currFrameResource, _visibleUntesselatedObjects, _untesselatedObjects, screenHeight, fixedLOD);
+	DrawSpheres(cmdList, currFrameResource);
 
 	//draw with tesselation
 	cmdList->SetPipelineState(isWireframe ? _wireframeTesselatedPSO.Get() : _tesselatedPSO.Get());
@@ -576,6 +622,21 @@ void EditableObjectManager::DrawObjects(ID3D12GraphicsCommandList* cmdList, Fram
 			cmdList->DrawIndexedInstanced(meshData.indexCount, 1, meshData.indexStart, meshData.vertexStart, 0);
 		}
 	}
+}
+
+void EditableObjectManager::DrawSpheres(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource)
+{
+	auto& sphereGeo = GeometryManager::geometries()["shapeGeo"].begin();
+	cmdList->IASetVertexBuffers(0, 1, &sphereGeo->get()->VertexBufferView());
+	cmdList->IASetIndexBuffer(&sphereGeo->get()->IndexBufferView());
+	cmdList->SetPipelineState(_spherePSO.Get());
+
+	auto& sphereMesh = sphereGeo->get()->DrawArgs["sphere"];
+
+	auto& sphereCB = currFrameResource->SphereObjCB;
+	cmdList->SetGraphicsRootShaderResourceView(11, sphereCB->Resource()->GetGPUVirtualAddress());
+
+	cmdList->DrawIndexedInstanced(sphereMesh.IndexCount, 121, sphereMesh.StartIndexLocation, sphereMesh.BaseVertexLocation, 0);
 }
 
 void EditableObjectManager::DrawAABBs(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource)

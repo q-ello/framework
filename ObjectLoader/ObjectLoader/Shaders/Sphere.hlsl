@@ -72,10 +72,8 @@ cbuffer cbPass : register(b2)
 struct VertexIn
 {
     float3 PosL : POSITION;
+    float4 Color : COLOR;
     float3 NormalL : NORMAL;
-    float2 TexC : TEXCOORD;
-    float3 TangentL : TANGENT;
-    float3 BinormalL : BINORMAL;
 };
 
 struct VertexOut
@@ -83,9 +81,6 @@ struct VertexOut
     float4 PosH : SV_POSITION;
     float3 PosW : POSITION;
     float3 NormalW : NORMAL;
-    float2 TexC : TEXCOORD0;
-    float3 TangentW : TANGENT;
-    float3 BiNormalW : BINORMAL;
     int id : TEXCOORD1;
 };
 
@@ -94,24 +89,13 @@ VertexOut GBufferVS(VertexIn vin, uint id : SV_InstanceID)
     VertexOut vout = (VertexOut) 0.0f;
 	
     // Transform to world space.
-    float4 posW = mul(float4(vin.PosL, 1.0f), gWorld);
+    float4 posW = mul(float4(vin.PosL, 1.0f), spheres[id].World);
     vout.PosW = posW.xyz;
 
     // Transform to homogeneous clip space.
     vout.PosH = mul(posW, gViewProj);
     
-    vout.TexC = vin.TexC;
-    
-    if (useNormalMap)
-    {
-        vout.NormalW = normalize(mul(vin.NormalL, (float3x3) gWorld));
-        vout.TangentW = normalize(mul(vin.TangentL, (float3x3) gWorld));
-        vout.BiNormalW = normalize(mul(vin.BinormalL, (float3x3) gWorld));
-    }
-    else
-    {
-        vout.NormalW = normalize(mul(vin.NormalL, (float3x3) gWorldInvTranspose));
-    }
+    vout.NormalW = normalize(mul(vin.NormalL, (float3x3) spheres[id].World));
     
     vout.id = id;
     
@@ -229,25 +213,13 @@ VertexOut TessDS(PatchTess patchTess,
     
     float3 normalL = tri[0].NormalL * uvw.x + tri[1].NormalL * uvw.y + tri[2].NormalL * uvw.z;
     
-    vout.TexC = tri[0].TexC * uvw.x + tri[1].TexC * uvw.y + tri[2].TexC * uvw.z;
-    
     if (useNormalMap)
     {
-        float3 tangentL = tri[0].TangentL * uvw.x + tri[1].TangentL * uvw.y + tri[2].TangentL * uvw.z;
-        float3 binormalL = tri[0].BinormalL * uvw.x + tri[1].BinormalL * uvw.y + tri[2].BinormalL * uvw.z;
         vout.NormalW = normalize(mul(normalL, (float3x3) gWorld));
-        vout.TangentW = normalize(mul(tangentL, (float3x3) gWorld));
-        vout.BiNormalW = normalize(mul(binormalL, (float3x3) gWorld));
     }
     else
     {
         vout.NormalW = normalize(mul(normalL, (float3x3) gWorldInvTranspose));
-    }
-    
-    if (useDisplacementMap)
-    {
-	    // Displacement mapping
-        posW += float4(vout.NormalW, 0) * gDisplacementMap.SampleLevel(gsamLinearMirror, vout.TexC, 0).r * displacementScale;
     }
     
     vout.PosW = posW.xyz;
@@ -268,38 +240,16 @@ GBufferInfo GBufferPS(VertexOut pin)
 {
     GBufferInfo res;
     
-    if (useNormalMap)
-    {
-        float3x3 tbnMat =
-        {
-            normalize(pin.TangentW),
-            normalize(pin.BiNormalW),
-            normalize(pin.NormalW)
-        };
-        
-        pin.NormalW = gNormalMap.Sample(gsamPointWrap, pin.TexC).xyz * 2.0f - 1.0f;
-        pin.NormalW = mul(pin.NormalW, tbnMat);
-    }
+    res.BaseColor = float4(1.f, 1.f, 1.f, 1.f);
     
-    res.BaseColor = useBaseColorMap ? gBaseColorMap.Sample(gsamLinearClamp, pin.TexC) : float4(baseColor, 1);
     res.Normal = float4(normalize(pin.NormalW), 1);
-    if (useARMMap)
-    {
-        res.ORM = saturate(gARMMap.Sample(gsamPointClamp, pin.TexC));
-        if (ARMLayout == 1)
-        {
-            res.ORM.rgb = res.ORM.gbr;
-        }
-    }
-    else
-    {
-        res.ORM.r = useAOMap ? saturate(gAOMap.Sample(gsamPointClamp, pin.TexC).r) : 0.3f;
-        res.ORM.g = useRoughnessMap ? saturate(gRoughnessMap.Sample(gsamPointClamp, pin.TexC).g) : roughness;
-        res.ORM.b = useMetallicMap ? saturate(gMetallicMap.Sample(gsamPointClamp, pin.TexC).b) : metallic;
-        res.ORM.a = 1.f;
-    }
-    res.Emissive.xyz = useEmissiveMap ? gEmissiveMap.Sample(gsamPointClamp, pin.TexC).xyz : emissive;
+    res.ORM.a = 1.f;
     res.Emissive.a = emissiveIntensity;
+    
+    Sphere sphereInfo = spheres[pin.id];
+    
+    res.ORM.g = sphereInfo.roughness;
+    res.ORM.b = sphereInfo.metallic;
     
     return res;
 }
