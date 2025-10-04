@@ -311,12 +311,13 @@ void LightingManager::DrawDirLight(ID3D12GraphicsCommandList* cmdList, FrameReso
 	cmdList->SetGraphicsRootShaderResourceView(4, currFrameResource->LightsContainingFrustum.get()->Resource()->GetGPUVirtualAddress());
 	cmdList->SetGraphicsRootDescriptorTable(5, srvAllocator->GetGpuHandle(_cascadeShadowTextureArray.SRV));
 	cmdList->SetGraphicsRootDescriptorTable(6, srvAllocator->GetGpuHandle(_localLightsShadowTextureArray.SRV));
-	cmdList->SetGraphicsRootDescriptorTable(7, _cubeMapManager->GetCubeMapGPUHandle());
+	cmdList->SetGraphicsRootDescriptorTable(7, _cubeMapManager->GetIBLMapsGPUHandle());
 	
 	int shadowMaskSrvIndex = _shadowMasks.empty() ? 0 : _shadowMasks[_selectedShadowMask].index;
 	cmdList->SetGraphicsRootDescriptorTable(8, srvAllocator->GetGpuHandle(shadowMaskSrvIndex));
 
-	cmdList->SetGraphicsRoot32BitConstants(9, 1, &shadowMaskUVScale, 0);
+	float shadowMaskIntensity = 0.0f;
+	cmdList->SetGraphicsRoot32BitConstants(9, 1, _shadowMasks.empty() ? &shadowMaskIntensity : &shadowMaskUVScale, 0);
 
 	cmdList->SetPipelineState(_dirLightPSO.Get());
 	cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -531,12 +532,12 @@ void LightingManager::BuildRootSignature()
 	//shadow map
 	CD3DX12_DESCRIPTOR_RANGE shadowTexTable;
 	shadowTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, srvAmount++);
-	//sky
-	CD3DX12_DESCRIPTOR_RANGE skyTexTable;
-	skyTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, srvAmount++);
 	//shadow mask
 	CD3DX12_DESCRIPTOR_RANGE shadowMaskTexTable;
 	shadowMaskTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, srvAmount++);
+	//sky
+	CD3DX12_DESCRIPTOR_RANGE skyTexTable;
+	skyTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 3, 0, 2);
 
 	const int rootParameterCount = 10;
 

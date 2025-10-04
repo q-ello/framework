@@ -7,6 +7,15 @@
 #include "FrameResource.h"
 #include "GeometryManager.h"
 
+enum class CubeMap
+{
+	Skybox = 0,
+	Irradiance,
+	Prefiltered,
+	BRDF,
+	Count
+};
+
 class CubeMapManager
 {
 public:
@@ -17,30 +26,15 @@ public:
 	void AddObjectToResource(FrameResource* currFrameResource);
 	void Draw(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource);
 
-	size_t EnvironmentsCount() const
+	std::string EnvironmentName(CubeMap type) const
 	{
-		return _environments.size();
+		return _maps[(int)type].name;
 	}
 
-	int SelectedEnvironment() const
-	{
-		return _selected;
-	}
-
-	std::string EnvironmentName(int i) const
-	{
-		return _environments[i].name;
-	}
-
-	void SetSelected(int i)
-	{
-		_selected = i;
-	}
-
-	void AddEnvironment(TextureHandle handle);
-	void DeleteEnvironment(int i);
+	void AddMap(CubeMap type, TextureHandle handle);
 
 	D3D12_GPU_DESCRIPTOR_HANDLE GetCubeMapGPUHandle();
+	D3D12_GPU_DESCRIPTOR_HANDLE GetIBLMapsGPUHandle();
 
 private:
 	ID3D12Device* _device = nullptr;
@@ -52,9 +46,7 @@ private:
 	std::vector<D3D12_INPUT_ELEMENT_DESC> _inputLayout;
 	std::unique_ptr<EditableRenderItem> _skyRItem;
 	UINT _cbSize = d3dUtil::CalcConstantBufferByteSize(sizeof(StaticObjectConstants));
-
-	std::vector<TextureHandle> _environments;
-	int _selected = -1;
+	std::vector<TextureHandle> _maps;
 
 	D3D12_VIEWPORT _viewport{ 0, 0, 0, 0, 0, 1 };
 	D3D12_RECT _scissorsRect{ 0, 0, 0, 0 };

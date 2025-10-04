@@ -371,7 +371,6 @@ void MyApp::DrawInterface()
 	if (ImGui::BeginTabItem("Main Data"))
 	{
 		DrawObjectsList(buttonId);
-		DrawEnvironmentsList(buttonId);
 		DrawShadowMasksList(buttonId);
 		ImGui::EndTabItem();
 	}
@@ -518,54 +517,6 @@ void MyApp::DrawObjectsList(int& btnId)
 		}
 
 		ImGui::EndChild();
-	}
-}
-
-void MyApp::DrawEnvironmentsList(int& btnId)
-{
-	if (ImGui::CollapsingHeader("Environment cube maps"))
-	{
-		ImGui::PushID(btnId++);
-		if (ImGui::Button("Add New"))
-		{
-			AddEnvironment();
-		}
-		ImGui::PopID();
-
-		ImGui::Spacing();
-
-		int selectedEnvironment = _cubeMapManager->SelectedEnvironment();
-
-		for (int i = 0; i < _cubeMapManager->EnvironmentsCount(); i++)
-		{
-			ImGui::PushID(btnId++);
-
-			bool isSelected = i == selectedEnvironment;
-
-			ImGui::PushStyleColor(ImGuiCol_Button, isSelected ? ImVec4(0.2f, 0.6f, 1.0f, 1.0f) : ImVec4(0.2f, 0.2f, 0.2f, 1.0f));
-
-			std::string name = BasicUtil::trimName(_cubeMapManager->EnvironmentName(i), 15);
-			if (ImGui::Button(name.c_str()))
-			{
-				_cubeMapManager->SetSelected(i);
-			}
-			ImGui::PopStyleColor();
-			ImGui::PopID();
-
-			if (ImGui::BeginPopupContextItem())
-			{
-				ImGui::PushID(btnId++);
-				if (ImGui::Button("delete"))
-				{
-					_cubeMapManager->DeleteEnvironment(i);
-				}
-				ImGui::PopID();
-				ImGui::EndPopup();
-			}
-
-		}
-
-		
 	}
 }
 
@@ -1523,24 +1474,6 @@ void MyApp::AddLOD()
 			AddToast("Your LOD was added as LOD" + std::to_string(LODIdx) + "!");
 		}
 		CoTaskMemFree(pszFilePath);
-	}
-}
-
-void MyApp::AddEnvironment()
-{
-	WCHAR* texturePath;
-	if (BasicUtil::TryToOpenFile(L"Image Files", L"*.dds", texturePath))
-	{
-		TextureHandle cubeMapHandle;
-		if (TextureManager::LoadCubeTexture(texturePath, cubeMapHandle))
-		{
-			_cubeMapManager->AddEnvironment(cubeMapHandle);
-		}
-		else
-		{
-			AddToast("The chosen file is not a cubemap texture", 7.0f);
-		}
-		CoTaskMemFree(texturePath);
 	}
 }
 

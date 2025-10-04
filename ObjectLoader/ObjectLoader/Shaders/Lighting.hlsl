@@ -8,8 +8,11 @@ Texture2D gTexCoord : register(t4);
 Texture2D gDepth : register(t5);
 Texture2DArray gCascadesShadowMap : register(t6);
 Texture2DArray gShadowMap : register(t7);
-TextureCube gSky : register(t8);
-Texture2D gShadowMask : register(t9);
+Texture2D gShadowMask : register(t8);
+
+TextureCube gSkyIrradiance : register(t0, space2);
+TextureCube gSkyPrefiltered : register(t1, space2);
+Texture2D gSkyBRDF : register(t2, space2);
 
 cbuffer shadowMaskUVScale : register(b2)
 {
@@ -17,40 +20,31 @@ cbuffer shadowMaskUVScale : register(b2)
 };
 
 //pbr stuff
-float DistributionGGX(float3 N, float3 H, float roughness)
+float3 ImportanceSampleGGX(float2 Xi, float3 N, float roughness)
 {
     float a = roughness * roughness;
-    float a2 = a * a;
-    float NdotH = max(dot(N, H), 0.0);
-    float NdotH2 = NdotH * NdotH;
-
-    float denom = NdotH2 * (a2 - 1.0) + 1.0;
-    return a2 / (PI * denom * denom);
+    float phi = 2.f * PI * Xi.x;
+    float cosTheta = sqrt((1.0f - Xi.y) / (1.0f + (a * a - 1.0f) * Xi.y));
+    float sinTheta = sqrt(1.0f - cosTheta * cosTheta);
+// from spherical coordinates to cartesian coordinates - halfway vector
+    float3 H;
+    H.x = cos(phi) * sinTheta;
+    H.y = sin(phi) * sinTheta;
+    H.z = cosTheta;
+// from tangent-space H vector to world-space sample vector
+    float3 up = abs(N.z) < 0.999f ? float3(0.0f, 0.0f, 1.0f) : float3(1.0f, 0.0f, 0.0f);
+    float3 tangent = normalize(cross(up, N));
+    float3 bitangent = cross(N, tangent);
+    float3 sampleVec = tangent * H.x + bitangent * H.y + N * H.z;
+    return normalize(sampleVec);
 }
 
-float GeometrySchlickGGX(float NdotV, float roughness)
+float3 FresnelSchlickRoughness(float cosTheta, float3 F0, float roughness)
 {
-    float r = roughness + 1.0;
-    float k = (r * r) / 8.0;
-
-    return NdotV / (NdotV * (1.0 - k) + k);
+    return F0 + (max(float3(1.0f - roughness, 1.0f - roughness, 1.0f - roughness), F0) - F0) * pow(clamp(1.0f - cosTheta, 0.0f, 1.0f), 5.0f);
 }
 
-float GeometrySmith(float3 N, float3 V, float3 L, float roughness)
-{
-    float NdotV = max(dot(N, V), 0.0);
-    float NdotL = max(dot(N, L), 0.0);
-    float ggx1 = GeometrySchlickGGX(NdotV, roughness);
-    float ggx2 = GeometrySchlickGGX(NdotL, roughness);
-    return ggx1 * ggx2;
-}
-
-float3 FresnelSchlick(float cosTheta, float3 F0)
-{
-    return F0 + (1.0 - F0) * pow(1.0 - cosTheta, 5.0);
-}
-
-float3 PBRShading(float3 coords, float3 lightDir, float3 lightColor, float3 worldPos, float shadowFactor)
+float3 PBRShading(float3 coords, float3 lightDir, float3 lightColor, float3 worldPos, float shadowFactor, float lightIntensity)
 {
     float3 N = normalize(gNormal.Load(coords).xyz);
     float3 V = normalize(gEyePosW - worldPos);
@@ -63,29 +57,25 @@ float3 PBRShading(float3 coords, float3 lightDir, float3 lightColor, float3 worl
     float roughness = orm.g;
     float metallic = orm.b;
 
-    float3 F0 = float3(0.04, 0.04, 0.04); // default for dielectrics
+    float3 F0 = float3(0.04f, 0.04f, 0.04f); // default for dielectrics
     F0 = lerp(F0, albedo, metallic); // metals use albedo as F0
 
-    // cook-torrance BRDF
-    float D = DistributionGGX(N, H, roughness);
-    float G = GeometrySmith(N, V, L, roughness);
-    float3 F = FresnelSchlick(saturate(dot(H, V)), F0);
-
-    float3 numerator = D * G * F;
-    float denominator = 4 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.001;
-    float3 specular = numerator / denominator;
-
+    float3 F = FresnelSchlickRoughness(max(dot(N, V), 0.0), F0, roughness);
     float3 kS = F;
-    float3 kD = 1.0 - kS;
-    kD *= 1.0 - metallic;
+    float3 kD = 1.f - kS;
+    kD *= 1.f - metallic;
+    float3 irradiance = gSkyIrradiance.Sample(gsamLinear, N).rgb;
+    float3 diffuse = irradiance * albedo;
+    float3 R = reflect(-V, N);
+    const float MAX_REFLECTION_LOD = 7.0f;
+    float3 prefilteredColor = gSkyPrefiltered.SampleLevel(gsamLinear, R, roughness * MAX_REFLECTION_LOD).rgb;
+    float2 brdf = gSkyBRDF.Sample(gsamLinear, float2(max(dot(N, V), 0.0f), roughness)).rg;
+    float3 specular = prefilteredColor * (F * brdf.x + brdf.y);
+    float3 ambient = (kD * diffuse + specular) * ao;
+    
+    float NdotL = max(dot(N, L), 0.0f);
 
-    float NdotL = max(dot(N, L), 0.0);
-
-    float3 diffuse = kD * albedo / PI;
-
-    float3 ambient = 0.1 * ao * albedo;
-
-    float3 color = (diffuse + specular) * lightColor * NdotL * shadowFactor;
+    float3 color = (diffuse + specular) * lightColor * NdotL * shadowFactor * lightIntensity;
 
     return ambient + color;
 }
@@ -118,7 +108,7 @@ float4 ComputeLocalLighting(int lightIndex, float3 posW, float3 coords)
     
     float finalIntensity = attenuation * spotFactor * light.intensity;
     
-    float3 finalColor = PBRShading(coords, -normalizedLightDir, light.color, posW, 1.f) * finalIntensity;
+    float3 finalColor = PBRShading(coords, -normalizedLightDir, light.color, posW, 1.f, finalIntensity);
 
     return float4(finalColor, albedo.a);
 }
@@ -151,7 +141,7 @@ float4 DirLightingPS(VertexOut pin) : SV_Target
         shadowFactor = ShadowFactor(posOffseted, cascades[cascadeIdx].viewProj, cascadeIdx, gCascadesShadowMap);
         shadowFactor += gShadowMask.Sample(gsamLinearWrap, gTexCoord.Load(coords).xy).a * scale;
         
-        finalColor.xyz = PBRShading(coords, -mainLightDirection, mainLightColor, posW, saturate(shadowFactor));
+        finalColor.xyz = PBRShading(coords, -mainLightDirection, mainLightColor, posW, saturate(shadowFactor), 1.f);
         //finalColor.xyz *= lerp(shadowFactor, 1.0f, gShadowMask.Sample(gsamLinearWrap, gTexCoord.Load(coords).xy * scale).a);
     }
     
@@ -177,7 +167,7 @@ float4 DirLightingPS(VertexOut pin) : SV_Target
     
                 float finalIntensity = mainSpotlight.intensity * attenuation * spotFactor;
     
-                finalColor.xyz += PBRShading(coords, -normalizedCurrDir, mainSpotlight.color, posW, 1.f) * finalIntensity;
+                finalColor.xyz += PBRShading(coords, -normalizedCurrDir, mainSpotlight.color, posW, 1.f, finalIntensity);
             }
         }
     }
@@ -187,20 +177,6 @@ float4 DirLightingPS(VertexOut pin) : SV_Target
     {
         finalColor.xyz += ComputeLocalLighting(lightIndices[i].index, posW, coords).xyz;
     }
-    
-    //reflection
-    float3 N = normalize(gNormal.Load(coords).xyz);
-    float3 V = normalize(gEyePosW - posW);
-    float3 R = reflect(-V, N);
-
-    float3 orm = gORM.Load(coords).xyz;
-    float metallic = orm.b;
-
-    float3 F0 = lerp(float3(0.04, 0.04, 0.04), albedo.rgb, metallic);
-    float3 F = FresnelSchlick(saturate(dot(N, V)), F0);
-
-    float3 envReflection = gSky.Sample(gsamLinearWrap, R).rgb;
-    finalColor.xyz += F * envReflection;
     
     return finalColor;
 }

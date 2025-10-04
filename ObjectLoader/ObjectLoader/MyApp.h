@@ -77,7 +77,6 @@ private:
 	//imgui staff
 	void DrawInterface();
 	void DrawObjectsList(int& btnId);
-	void DrawEnvironmentsList(int& btnId);
 	void DrawShadowMasksList(int& btnId);
 
 	void DrawHandSpotlight(int& buttonId);
@@ -111,7 +110,6 @@ private:
 	void AddModel();
 	void AddMultipleModels();
 	void AddLOD();
-	void AddEnvironment();
 	void AddShadowMask();
 
 	void InitManagers();

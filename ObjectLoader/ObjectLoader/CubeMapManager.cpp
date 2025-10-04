@@ -16,6 +16,29 @@ void CubeMapManager::Init()
 	BuildShaders();
 	BuildPSO();
 	BuildRenderItem();
+
+	auto& allocator = TextureManager::srvHeapAllocator;
+
+	std::vector<std::wstring> filenames = {
+		L"Sky/skybox.dds",
+		L"Sky/irradiance.dds",
+		L"Sky/prefiltered.dds",
+		L"Sky/brdfLUT.dds"
+	};
+	//preallocate indices for maps
+	for (int i = 0; i < (int)CubeMap::Count; i++)
+	{
+		TextureHandle texHandle;
+		if (i == (int)CubeMap::BRDF)
+		{
+			texHandle = TextureManager::LoadTexture(filenames[i].c_str(), 0, 1);
+		}
+		else
+		{
+			TextureManager::LoadCubeTexture(filenames[i].c_str(), texHandle);
+		}
+		_maps.push_back(texHandle);
+	}
 }
 
 void CubeMapManager::AddObjectToResource(FrameResource* currFrameResource)
@@ -28,7 +51,7 @@ void CubeMapManager::AddObjectToResource(FrameResource* currFrameResource)
 
 void CubeMapManager::Draw(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource)
 {
-	if (_environments.empty() || _selected == -1)
+	if (_maps[(int)CubeMap::Skybox].useTexture == false)
 		return;
 
 	cmdList->SetGraphicsRootSignature(_rootSignature.Get());
@@ -36,7 +59,7 @@ void CubeMapManager::Draw(ID3D12GraphicsCommandList* cmdList, FrameResource* cur
 	auto passCB = currFrameResource->GBufferPassCB->Resource();
 	cmdList->SetGraphicsRootConstantBufferView(1, passCB->GetGPUVirtualAddress());
 
-	cmdList->SetGraphicsRootDescriptorTable(0, TextureManager::srvHeapAllocator->GetGpuHandle(_environments[_selected].index));
+	cmdList->SetGraphicsRootDescriptorTable(0, GetCubeMapGPUHandle());
 
 	cmdList->SetPipelineState(_pso.Get());
 
@@ -57,31 +80,19 @@ void CubeMapManager::Draw(ID3D12GraphicsCommandList* cmdList, FrameResource* cur
 	cmdList->DrawIndexedInstanced(mesh.IndexCount, 1, mesh.StartIndexLocation, mesh.BaseVertexLocation, 0);
 }
 
-void CubeMapManager::AddEnvironment(TextureHandle handle)
+void CubeMapManager::AddMap(CubeMap type, TextureHandle handle)
 {
-	_selected = _environments.size();
-	_environments.push_back(handle);
-}
-
-void CubeMapManager::DeleteEnvironment(int i)
-{
-	const std::string texName = _environments[i].name;
-	TextureManager::deleteTexture(std::wstring(texName.begin(), texName.end()), 1);
-	_environments.erase(_environments.begin() + i);
-	if (_selected >= _environments.size())
-	{
-		_selected = _environments.size() - 1;
-	}
+	_maps[(int)type] = handle;
 }
 
 D3D12_GPU_DESCRIPTOR_HANDLE CubeMapManager::GetCubeMapGPUHandle()
 {
-	//if there are no environments yet than get the first just to get something...
-	if (_environments.empty())
-	{
-		return TextureManager::srvHeapAllocator->GetGpuHandle(0);
-	}
-	return TextureManager::srvHeapAllocator->GetGpuHandle(_environments[_selected].index);
+	return TextureManager::srvHeapAllocator->GetGpuHandle(_maps[(int)CubeMap::Skybox].index);
+}
+
+D3D12_GPU_DESCRIPTOR_HANDLE CubeMapManager::GetIBLMapsGPUHandle()
+{
+	return TextureManager::srvHeapAllocator->GetGpuHandle(_maps[(int)CubeMap::Irradiance].index);
 }
 
 void CubeMapManager::BuildInputLayout()
