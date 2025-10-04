@@ -351,13 +351,14 @@ float EditableObjectManager::ComputeScreenSize(XMVECTOR& center, float radius, f
 
 void EditableObjectManager::InitSpheresInfo()
 {
+	float scale = 5.f;
 	int id = 0;
 	for (int i = 0; i <= 10; i++)
 	{
 		for (int j = 0; j <= 10; j++)
 		{
 			SphereConstants sphere;
-			XMStoreFloat4x4(&sphere.World, XMMatrixTranspose(XMMatrixTranslation(i - 5.f, j, 0.f)));
+			XMStoreFloat4x4(&sphere.World, XMMatrixTranspose(XMMatrixScaling(scale, scale, scale) * XMMatrixTranslation((i - 5.f) * scale , j * scale, 0.f)));
 			sphere.metallic = i * 0.1f;
 			sphere.roughness = j * 0.1f;
 			for (int k = 0; k < FrameResource::frameResources().size(); k++)
@@ -630,6 +631,7 @@ void EditableObjectManager::DrawSpheres(ID3D12GraphicsCommandList* cmdList, Fram
 	cmdList->IASetVertexBuffers(0, 1, &sphereGeo->get()->VertexBufferView());
 	cmdList->IASetIndexBuffer(&sphereGeo->get()->IndexBufferView());
 	cmdList->SetPipelineState(_spherePSO.Get());
+	cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
 	auto& sphereMesh = sphereGeo->get()->DrawArgs["sphere"];
 
