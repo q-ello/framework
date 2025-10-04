@@ -101,7 +101,6 @@ VertexOut GBufferVS(VertexIn vin, uint id : SV_InstanceID)
     
     return vout;
 }
-
 struct GBufferInfo
 {
     float4 BaseColor : SV_Target0;
