@@ -135,6 +135,7 @@ public:
     std::unique_ptr<UploadBuffer<Light>> LocalLightCB = nullptr;
     std::unique_ptr<UploadBuffer<LightIndex>> LightsInsideFrustum = nullptr;
     std::unique_ptr<UploadBuffer<LightIndex>> LightsContainingFrustum = nullptr;
+    std::unique_ptr<UploadBuffer<OpaqueObjectConstants>> ObjCB = nullptr;
 
     std::unordered_map<std::uint32_t, std::unique_ptr<UploadBuffer<OpaqueObjectConstants>>> OpaqueObjCB = {};
     std::unordered_map<std::uint32_t, std::unique_ptr<UploadBuffer<MaterialConstants>>> MaterialCB = {};

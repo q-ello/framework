@@ -1,8 +1,6 @@
 #pragma once
 #include "OpaqueObjectManager.h"
 
-
-
 void EditableObjectManager::UpdateObjectCBs(FrameResource* currFrameResource)
 {
 	auto& currObjectsCB = currFrameResource->OpaqueObjCB;
@@ -14,6 +12,10 @@ void EditableObjectManager::UpdateObjectCBs(FrameResource* currFrameResource)
 
 	XMMATRIX view = _camera->GetView();
 	XMMATRIX invView = XMMatrixInverse(&XMMatrixDeterminant(view), view);
+
+	_visibleInstances = 0;
+	_fullyVisibleOctreesCount = 0;
+	_partiallyVisibleOctreesCount = 0;
 
 	for (int i = 0; i < _objects.size(); i++)
 	{
@@ -85,31 +87,44 @@ void EditableObjectManager::UpdateObjectCBs(FrameResource* currFrameResource)
 				material->numFramesDirty--;
 			}
 		}
-
-		//frustum culling
-		XMMATRIX invWorld = XMMatrixInverse(&XMMatrixDeterminant(world), world);
-
-		XMMATRIX viewToLocal = XMMatrixMultiply(invView, invWorld);
-
-		BoundingFrustum localSpaceFrustum;
-		_camera->CameraFrustum().Transform(localSpaceFrustum, viewToLocal);
-		if ((localSpaceFrustum.Contains(ri->Bounds) != DirectX::DISJOINT))
-		{
-			if (_tesselatedObjects.find(ri->uid) != _tesselatedObjects.end())
-			{
-				_visibleTesselatedObjects.push_back(ri->uid);
-			}
-			else
-			{
-				_visibleUntesselatedObjects.push_back(ri->uid);
-			}
-		}
 	}
+
+	int id = 0;
+	FrustumCulling(_rootOctTree.get(), id, currFrameResource);
 }
 
 void EditableObjectManager::SetCamera(Camera* camera)
 {
 	_camera = camera;
+}
+
+void EditableObjectManager::InitObjectsInfo()
+{
+	BoundingBox mainBoundingBox;
+	for (int i = 0; i < 5; i++)
+	{
+		for (int j = 0; j < 5; j++)
+		{
+			for (int k = 0; k < 5; k++)
+			{
+				InstanceData instance;
+				XMMATRIX world = XMMatrixTranslation((i - 5.f) * 10.f, k * 10.f, j * 10.f);
+				XMStoreFloat4x4(&instance.data.World, XMMatrixTranspose(world));
+				XMStoreFloat4x4(&instance.data.WorldInvTranspose, XMMatrixTranspose(XMMatrixInverse(nullptr, world)));
+				_objects.begin()->get()->Bounds.Transform(instance.AABB, world);
+				_rootOctTree->objects.push_back((int)_instances.size());
+				_instances.push_back(instance);
+				BoundingBox::CreateMerged(mainBoundingBox, mainBoundingBox, instance.AABB);
+			}
+
+		}
+	}
+	_rootOctTree->aabb = mainBoundingBox;
+}
+
+void EditableObjectManager::InitTrees()
+{
+	EvaluateNode(_rootOctTree.get());
 }
 
 void EditableObjectManager::BuildInputLayout()
@@ -145,7 +160,7 @@ void EditableObjectManager::BuildRootSignature()
 	CD3DX12_DESCRIPTOR_RANGE ARMTexTable;
 	ARMTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 7);
 
-	const int rootParamCount = 11;
+	const int rootParamCount = 12;
 
 	// Root parameter can be a table, root descriptor or root constants.
 	CD3DX12_ROOT_PARAMETER slotRootParameter[rootParamCount];
@@ -162,6 +177,7 @@ void EditableObjectManager::BuildRootSignature()
 	slotRootParameter[8].InitAsConstantBufferView(0);
 	slotRootParameter[9].InitAsConstantBufferView(1);
 	slotRootParameter[10].InitAsConstantBufferView(2);
+	slotRootParameter[11].InitAsShaderResourceView(0, 1);
 
 	auto staticSamplers = TextureManager::GetStaticSamplers();
 
@@ -308,7 +324,7 @@ void EditableObjectManager::CountLODIndex(EditableRenderItem* ri, float screenHe
 	else if (size > 30.0f)  preferableLOD = 4;
 	else preferableLOD = 5;
 
-	int maxIndex = ri->lodsData.size() - 1;
+	int maxIndex = (int)ri->lodsData.size() - 1;
 
 	ri->currentLODIdx = std::min(preferableLOD, maxIndex);
 }
@@ -324,6 +340,120 @@ float EditableObjectManager::ComputeScreenSize(XMVECTOR& center, float radius, f
 	float projectedSize = (radius / dist) * (screenHeight / (2.0f * tanf(_camera->GetFovY() * 0.5f)));
 
 	return projectedSize; // in pixels (height of sphere on screen)
+}
+
+void EditableObjectManager::EvaluateNode(OctreeNode* node)
+{
+	const int MAX_OBJECTS = 8;
+	const int MAX_DEPTH = 6;
+
+	// If under capacity or at max depth ? stop
+	if ((int)node->objects.size() <= MAX_OBJECTS)
+		return;
+
+	BoundingBox parent = node->aabb;
+	XMFLOAT3 center = (parent.Center);
+	XMFLOAT3 extents;
+	extents.x = parent.Extents.x * 0.5f; // half size for children
+	extents.y = parent.Extents.y * 0.5f; 
+	extents.z = parent.Extents.z * 0.5f; 
+
+	for (int i = 0; i < 8; i++)
+	{
+		node->children[i] = std::make_unique<OctreeNode>();
+
+		XMFLOAT3 childCenter = {
+			center.x + ((i & 1) ? extents.x : -extents.x),
+			center.y + ((i & 2) ? extents.y : -extents.y),
+			center.z + ((i & 4) ? extents.z : -extents.z)
+		};
+
+		node->children[i]->aabb.Center = childCenter;
+		node->children[i]->aabb.Extents = extents;
+	}
+
+	std::vector<int> indicesToLeave{};
+
+	for (int objIndex : node->objects)
+	{
+		const BoundingBox& objBox = _instances[objIndex].AABB;
+		XMVECTOR objCenter = XMLoadFloat3(&objBox.Center);
+
+		for (int i = 0; i < 8; i++)
+		{
+			auto intersection = node->children[i]->aabb.Contains(objBox);
+			if (intersection == DirectX::CONTAINS)
+			{
+				node->children[i]->objects.push_back(objIndex);
+				break;
+			}
+			else if (intersection == DirectX::INTERSECTS)
+			{
+				indicesToLeave.push_back(objIndex);
+				break;
+			}
+		}
+	}
+
+	// Clear parent’s list, it now only delegates
+	node->objects = indicesToLeave;
+
+	// Recursively evaluate children
+	for (int i = 0; i < 8; i++)
+	{
+		if (!node->children[i]->objects.empty())
+			EvaluateNode(node->children[i].get());
+	}
+}
+
+void EditableObjectManager::FrustumCulling(OctreeNode* node, int& id, FrameResource* currFrameResource)
+{
+	//inv world is matrix identity so view to local is just inv view
+	if (node == nullptr)
+		return;
+
+	XMMATRIX invView = _camera->GetInvView();
+	BoundingFrustum localSpaceFrustum;
+	_camera->CameraFrustum().Transform(localSpaceFrustum, invView);
+
+	auto intersection = localSpaceFrustum.Contains(node->aabb);
+
+	if ((intersection == DirectX::INTERSECTS))
+	{
+		for (auto& instanceIdx : node->objects)
+		{
+			auto& instance = _instances[instanceIdx];
+			if (localSpaceFrustum.Contains(instance.AABB) != DirectX::DISJOINT)
+			{
+				currFrameResource->ObjCB->CopyData(id++, instance.data);
+				_visibleInstances++;
+			}
+		}
+		for (auto& childNode : node->children)
+			FrustumCulling(childNode.get(), id, currFrameResource);
+
+		_partiallyVisibleOctreesCount++;
+	}
+	else if (intersection == DirectX::CONTAINS)
+	{
+		AddNodeToVisible(node, id, currFrameResource);
+	}
+}
+
+void EditableObjectManager::AddNodeToVisible(OctreeNode* node, int& id, FrameResource* currFrameResource)
+{
+	if (node == nullptr)
+		return;
+	for (auto& instanceIdx : node->objects)
+	{
+		auto& instance = _instances[instanceIdx];
+		currFrameResource->ObjCB->CopyData(id++, instance.data);
+		_visibleInstances++;
+	}
+	for (auto& childNode : node->children)
+		AddNodeToVisible(childNode.get(), id, currFrameResource);
+
+	_fullyVisibleOctreesCount++;
 }
 
 void EditableObjectManager::AddObjectToResource(Microsoft::WRL::ComPtr<ID3D12Device> device, FrameResource* currFrameResource)
@@ -371,7 +501,7 @@ int EditableObjectManager::AddRenderItem(ID3D12Device* device, ModelData&& model
 
 	for (int i = 0; i < FrameResource::frameResources().size(); ++i)
 	{
-		FrameResource::frameResources()[i]->addOpaqueObjectBuffer(device, modelRitem->uid, modelRitem->lodsData.begin()->meshes.size() + 1, modelRitem->materials.size());
+		FrameResource::frameResources()[i]->addOpaqueObjectBuffer(device, modelRitem->uid, (int)modelRitem->lodsData.begin()->meshes.size() + 1, modelRitem->materials.size());
 	}
 
 	if (isTesselated)
@@ -409,17 +539,6 @@ void EditableObjectManager::DeleteLOD(EditableRenderItem* ri, int index)
 	ri->lodsData.erase(ri->lodsData.begin() + index);
 	ri->currentLODIdx = std::min(ri->currentLODIdx, (int)ri->lodsData.size() - 1);
 	GeometryManager::DeleteLODGeometry(ri->Name, index);
-}
-
-void EditableObjectManager::GenerateInstanceTransformsArray(int amount)
-{
-	BoundingBox objectAABB = _objects.begin()->get()->Bounds;
-	float range = 100;
-	for (int i = 0; i < amount; i++)
-	{
-		BoundingBox instanceAABB = objectAABB;
-		instanceAABB.Center = XMFLOAT3(-range * instanceAABB.Extents.x + );
-	}
 }
 
 bool EditableObjectManager::DeleteObject(int selectedObject)
@@ -496,6 +615,21 @@ int EditableObjectManager::ObjectsCount()
 	return (int)_objects.size();
 }
 
+int EditableObjectManager::InstancesCount()
+{
+	return (int)_instances.size();
+}
+
+int EditableObjectManager::FullyVisibleOctreesCount()
+{
+	return _fullyVisibleOctreesCount;
+}
+
+int EditableObjectManager::PartiallyVisibleOctreesCount()
+{
+	return _partiallyVisibleOctreesCount;
+}
+
 std::string EditableObjectManager::objectName(int i)
 {
 	return _objects[i]->Name +
@@ -526,7 +660,8 @@ void EditableObjectManager::Draw(ID3D12GraphicsCommandList* cmdList, FrameResour
 	cmdList->SetGraphicsRootConstantBufferView(10, passCB->GetGPUVirtualAddress());
 	cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-	DrawObjects(cmdList, currFrameResource, _visibleUntesselatedObjects, _untesselatedObjects, screenHeight, fixedLOD);
+	//DrawObjects(cmdList, currFrameResource, _visibleUntesselatedObjects, _untesselatedObjects, screenHeight, fixedLOD);
+	DrawInstances(cmdList, currFrameResource);
 
 	//draw with tesselation
 	cmdList->SetPipelineState(isWireframe ? _wireframeTesselatedPSO.Get() : _tesselatedPSO.Get());
@@ -586,7 +721,7 @@ void EditableObjectManager::DrawObjects(ID3D12GraphicsCommandList* cmdList, Fram
 				cmdList->SetGraphicsRootDescriptorTable(offset + i, tex);
 			}
 
-			cmdList->DrawIndexedInstanced(meshData.indexCount, 1, meshData.indexStart, meshData.vertexStart, 0);
+			cmdList->DrawIndexedInstanced(meshData.indexCount, 1, (UINT)meshData.indexStart, (UINT)meshData.vertexStart, 0);
 		}
 	}
 }
@@ -610,5 +745,49 @@ void EditableObjectManager::DrawAABBs(ID3D12GraphicsCommandList* cmdList, FrameR
 
 		cmdList->DrawIndexedInstanced(mesh.IndexCount, 1, mesh.StartIndexLocation,
 			mesh.BaseVertexLocation, 0);
+	}
+}
+
+void EditableObjectManager::DrawInstances(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource)
+{
+	auto ri = _objects.begin()->get();
+	auto objectCB = currFrameResource->OpaqueObjCB[ri->uid]->Resource();
+	int curLODIdx = 0;
+	MeshGeometry* curLODGeo = ri->Geo->at(curLODIdx).get();
+	cmdList->IASetVertexBuffers(0, 1, &curLODGeo->VertexBufferView());
+	cmdList->IASetIndexBuffer(&curLODGeo->IndexBufferView());
+	auto materialCB = currFrameResource->MaterialCB[ri->uid]->Resource();
+
+	auto currentLOD = ri->lodsData[curLODIdx];
+
+	auto objCB = currFrameResource->ObjCB->Resource();
+	cmdList->SetGraphicsRootShaderResourceView(11, objCB->GetGPUVirtualAddress());
+
+	for (size_t i = 0; i < currentLOD.meshes.size(); i++)
+	{
+		auto& meshData = currentLOD.meshes.at(i);
+		D3D12_GPU_VIRTUAL_ADDRESS meshCBAddress = objectCB->GetGPUVirtualAddress() + meshData.cbOffset;
+
+		cmdList->SetGraphicsRootConstantBufferView(8, meshCBAddress);
+
+		D3D12_GPU_VIRTUAL_ADDRESS materialCBAddress = materialCB->GetGPUVirtualAddress() + meshData.matOffset;
+		cmdList->SetGraphicsRootConstantBufferView(9, materialCBAddress);
+
+		auto heapAlloc = TextureManager::srvHeapAllocator.get();
+		auto material = ri->materials[meshData.materialIndex].get();
+		constexpr size_t offset = BasicUtil::EnumIndex(MatProp::Count) - 1;
+		for (int i = 0; i < offset; i++)
+		{
+			if (i == BasicUtil::EnumIndex(MatProp::Opacity)) i++;
+			CD3DX12_GPU_DESCRIPTOR_HANDLE tex(heapAlloc->GetGpuHandle(material->properties[i].texture.index));
+			cmdList->SetGraphicsRootDescriptorTable(i, tex);
+		}
+		for (int i = 0; i < BasicUtil::EnumIndex(MatTex::Count); i++)
+		{
+			CD3DX12_GPU_DESCRIPTOR_HANDLE tex(heapAlloc->GetGpuHandle(material->textures[i].index));
+			cmdList->SetGraphicsRootDescriptorTable(offset + i, tex);
+		}
+
+		cmdList->DrawIndexedInstanced(meshData.indexCount, _visibleInstances, (UINT)meshData.indexStart, (UINT)meshData.vertexStart, 0);
 	}
 }

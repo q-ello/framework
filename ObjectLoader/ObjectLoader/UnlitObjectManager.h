@@ -23,7 +23,7 @@ private:
 	bool DeleteObject(int selectedObject) override;
 	
 	int ObjectsCount() override;
-	int VisibleObjectsCount() override { return ObjectsCount(); };
+	int VisibleInstancesCount() override { return ObjectsCount(); };
 	std::string objectName(int i) override;
 	EditableRenderItem* object(int i) override { return nullptr; };
 	

@@ -21,7 +21,7 @@ public:
 	virtual void AddObjectToResource(Microsoft::WRL::ComPtr<ID3D12Device> device, FrameResource* currFrameResource) = 0;
 
 	virtual int ObjectsCount() = 0;
-	virtual int VisibleObjectsCount() = 0;
+	virtual int VisibleInstancesCount() = 0;
 	virtual EditableRenderItem* object(int i) = 0;
 	virtual std::string objectName(int i) = 0;
 

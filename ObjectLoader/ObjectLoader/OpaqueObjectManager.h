@@ -5,13 +5,13 @@
 
 struct OctreeNode {
 	BoundingBox aabb;
-	std::vector<int> objects;
-	OctreeNode* children[8] = { nullptr }; 
+	std::vector<int> objects{};
+	std::unique_ptr<OctreeNode> children[8] = { nullptr }; 
 };
 
 struct InstanceData
 {
-	DirectX::XMFLOAT4X4 World;
+	OpaqueObjectConstants data;
 	BoundingBox AABB;
 };
 
@@ -29,10 +29,11 @@ public:
 	int AddLOD(ID3D12Device* device, LODData lod, EditableRenderItem* ri);
 	void DeleteLOD(EditableRenderItem* ri, int index);
 
-	void GenerateInstanceTransformsArray(int amount);
-
-	int VisibleObjectsCount() override { return int(_visibleTesselatedObjects.size() + _visibleUntesselatedObjects.size()); };
+	int VisibleInstancesCount() override { return _visibleInstances; };
 	int ObjectsCount() override;
+	int InstancesCount();
+	int FullyVisibleOctreesCount();
+	int PartiallyVisibleOctreesCount();
 
 	std::string objectName(int i) override;
 	EditableRenderItem* object(int i);
@@ -40,6 +41,7 @@ public:
 	void DrawObjects(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, std::vector<uint32_t> indices, std::unordered_map<uint32_t, EditableRenderItem*> objects, float screenHeight,
 		bool fixedLOD);
 	void DrawAABBs(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource);
+	void DrawInstances(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource);
 
 	std::vector< D3D12_INPUT_ELEMENT_DESC > InputLayout() const
 	{
@@ -50,6 +52,9 @@ public:
 	{
 		return _objects;
 	}
+
+	void InitObjectsInfo();
+	void InitTrees();
 
 private:
 	std::vector<std::shared_ptr<EditableRenderItem>> _objects;
@@ -83,6 +88,13 @@ private:
 
 	Camera* _camera;
 
-	OctreeNode* _rootOctTree;
+	std::unique_ptr<OctreeNode> _rootOctTree = std::make_unique<OctreeNode>();
 	std::vector<InstanceData> _instances;
+	int _visibleInstances = 0;
+	int _fullyVisibleOctreesCount = 0;
+	int _partiallyVisibleOctreesCount = 0;
+
+	void EvaluateNode(OctreeNode* node);
+	void FrustumCulling(OctreeNode* node, int& id, FrameResource* currFrameResource);
+	void AddNodeToVisible(OctreeNode* node, int& id, FrameResource* currFrameResource);
 };

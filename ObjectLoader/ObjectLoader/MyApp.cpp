@@ -36,13 +36,6 @@ bool MyApp::Initialize()
 	GeometryManager::BuildNecessaryGeometry();
 	_gridManager->AddRenderItem(md3dDevice.Get(), { "grid" });
 
-	//octree task
-	_modelManager->ImportObject(L"D:\Graphics Projects\Framework\objects data\85 - handpainted_pirate\Handpainted_pirate\Pirate.obj");
-	auto model = _modelManager->ParseAsOneObject();
-	ModelData data = GeometryManager::BuildModelGeometry(model.get());
-	_selectedModels.clear();
-	_selectedModels.insert(_objectsManager->AddRenderItem(md3dDevice.Get(), std::move(data)));
-
 	BuildFrameResources();
 	BuildPSOs();
 
@@ -393,12 +386,18 @@ void MyApp::DrawInterface()
 
 	//debug info
 	ImGui::Begin("Debug info");
-	auto visObjectsCnt = _objectsManager->VisibleObjectsCount();
-	auto objectsCnt = _objectsManager->ObjectsCount();
-	ImGui::Text(("Objects drawn: " + std::to_string(visObjectsCnt) + "/" + std::to_string(objectsCnt)).c_str());
+	auto visObjectsCnt = _objectsManager->VisibleInstancesCount();
+	auto objectsCnt = _objectsManager->InstancesCount();
+	ImGui::Text(("Instances drawn: " + std::to_string(visObjectsCnt) + "/" + std::to_string(objectsCnt)).c_str());
 	auto visLights = _lightingManager->LightsInsideFrustum();
 	auto lightsCnt = _lightingManager->LightsCount();
 	ImGui::Text(("Lights drawn: " + std::to_string(visLights) + "/" + std::to_string(lightsCnt)).c_str());
+	auto octreesPartial = _objectsManager->PartiallyVisibleOctreesCount();
+	ImGui::Text(("Partially visible octrees: " + std::to_string(octreesPartial)).c_str());
+
+	auto octreesFull = _objectsManager->FullyVisibleOctreesCount();
+	ImGui::Text(("Fully visible octrees: " + std::to_string(octreesFull)).c_str());
+
 	ImGui::End();
 
 	DrawToasts();
@@ -1397,6 +1396,11 @@ void MyApp::InitManagers()
 	_objectsManager = std::make_unique<EditableObjectManager>(md3dDevice.Get());
 	_objectsManager->Init();
 	_objectsManager->SetCamera(&_camera);
+	_modelManager->ImportObject(L"Pirate.obj");
+	_objectsManager->AddRenderItem(md3dDevice.Get(), GeometryManager::BuildModelGeometry(_modelManager->ParseAsOneObject().get()));
+	_objectsManager->InitObjectsInfo();
+	_objectsManager->InitTrees();
+
 	_gridManager = std::make_unique<UnlitObjectManager>(md3dDevice.Get());
 	_gridManager->Init();
 	
@@ -1414,7 +1418,7 @@ void MyApp::GBufferPass()
 	_gBuffer->ClearInfo(Colors::Transparent);
 	mCommandList->OMSetRenderTargets(_gBuffer->InfoCount(), _gBuffer->RTVs().data(),
 		false, &_gBuffer->DepthStencilView());
-	_objectsManager->Draw(mCommandList.Get(), mCurrFrameResource, mClientHeight, _isWireframe, _fixedLOD);
+	_objectsManager->Draw(mCommandList.Get(), mCurrFrameResource, (float)mClientHeight, _isWireframe, _fixedLOD);
 }
 
 void MyApp::LightingPass()
@@ -1454,7 +1458,7 @@ void MyApp::WireframePass()
 	mCommandList->ClearRenderTargetView(CurrentBackBufferView(), Colors::LightSteelBlue, 0, nullptr);
 	mCommandList->OMSetRenderTargets(1, &CurrentBackBufferView(), true, &_gBuffer->DepthStencilView());
 
-	_objectsManager->Draw(mCommandList.Get(), mCurrFrameResource, mClientHeight, _isWireframe);
+	_objectsManager->Draw(mCommandList.Get(), mCurrFrameResource, (float)mClientHeight, _isWireframe);
 }
 
 //some wndproc stuff

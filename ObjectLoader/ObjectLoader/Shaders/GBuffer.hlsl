@@ -16,6 +16,12 @@ SamplerState gsamAnisotropicWrap : register(s5);
 SamplerState gsamAnisotropicClamp : register(s6);
 SamplerState gsamLinearMirror : register(s7);
 
+struct perObject
+{
+    float4x4 gWorld;
+    float4x4 gWorldInvTranspose;
+};
+
 // Constant data that varies per frame.
 cbuffer cbPerObject : register(b0)
 {
@@ -58,6 +64,7 @@ cbuffer cbPass : register(b2)
     float2 gScreenSize;
 };
 
+StructuredBuffer<perObject> instances : register(t0, space1);
 
 struct VertexIn
 {
@@ -78,12 +85,12 @@ struct VertexOut
     float3 BiNormalW : BINORMAL;
 };
 
-VertexOut GBufferVS(VertexIn vin)
+VertexOut GBufferVS(VertexIn vin, uint id : SV_InstanceID)
 {
     VertexOut vout = (VertexOut) 0.0f;
 	
     // Transform to world space.
-    float4 posW = mul(float4(vin.PosL, 1.0f), gWorld);
+    float4 posW = mul(float4(vin.PosL, 1.0f), instances[id].gWorld);
     vout.PosW = posW.xyz;
 
     // Transform to homogeneous clip space.
@@ -93,13 +100,13 @@ VertexOut GBufferVS(VertexIn vin)
     
     if (useNormalMap)
     {
-        vout.NormalW = normalize(mul(vin.NormalL, (float3x3) gWorld));
-        vout.TangentW = normalize(mul(vin.TangentL, (float3x3) gWorld));
-        vout.BiNormalW = normalize(mul(vin.BinormalL, (float3x3) gWorld));
+        vout.NormalW = normalize(mul(vin.NormalL, (float3x3) instances[id].gWorld));
+        vout.TangentW = normalize(mul(vin.TangentL, (float3x3) instances[id].gWorld));
+        vout.BiNormalW = normalize(mul(vin.BinormalL, (float3x3) instances[id].gWorld));
     }
     else
     {
-        vout.NormalW = normalize(mul(vin.NormalL, (float3x3) gWorldInvTranspose));
+        vout.NormalW = normalize(mul(vin.NormalL, (float3x3) instances[id].gWorldInvTranspose));
     }
     
     return vout;

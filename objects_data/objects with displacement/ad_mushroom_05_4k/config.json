@@ -1,0 +1,111 @@
+{
+    "latinName": "",
+    "commonNameEN": [
+        "Mushroom"
+    ],
+    "commonNameCN": [
+        "蘑菇",
+        "真菌子实体"
+    ],
+    "productName": "AD_Mushroom_05",
+    "rawPath": "//work/Anydrafts_3DScan/Product/4TRAW01/3D_Models/Food/Mushroom蘑菇/AD_Mushroom_05",
+    "productPathA": [
+        "//work/Anydrafts_3DScan/Product/Anydrafts202211/3D_Models/Food/Mushroom/AD_Mushroom_05"
+    ],
+    "productPathM": [
+        ""
+    ],
+    "colorEN": [
+        "brown"
+    ],
+    "colorCN": [
+        "棕色"
+    ],
+    "sizeEN": [
+        "big"
+    ],
+    "sizeCN": [
+        "大"
+    ],
+    "envEN": [
+        "forest",
+        "grassland",
+        "wild",
+        "rainforest",
+        "rural",
+        "taiga",
+        "tropical jungle",
+        "woodland",
+        "hill",
+        "valley",
+        "garden",
+        "kitchen"
+    ],
+    "envCN": [
+        "森林",
+        "草地",
+        "野外",
+        "雨林",
+        "农村",
+        "针叶林",
+        "丛林",
+        "林地",
+        "丘陵",
+        "河谷",
+        "园林",
+        "厨房"
+    ],
+    "seasonEN": [
+        "summer"
+    ],
+    "seasonCN": [
+        "夏"
+    ],
+    "stateEN": [
+        "middle",
+        "atlas",
+        "old",
+        "clean",
+        "dirt",
+        "damage"
+    ],
+    "stateCN": [
+        "中年的",
+        "整体",
+        "旧",
+        "干净",
+        "污垢",
+        "坏"
+    ],
+    "tagsEN": [
+        "mushroom",
+        "food",
+        "agaric",
+        "fungus",
+        "forest",
+        "rural",
+        "woodland",
+        "outdoor"
+    ],
+    "tagsCN": [
+        "蘑菇",
+        "食物",
+        "伞菌",
+        "真菌",
+        "森林",
+        "农村",
+        "林地",
+        "户外的"
+    ],
+    "productCategories": {
+        "3D_Models": {
+            "Food": {
+                "Mushroom": {}
+            }
+        },
+        "ZFree":{}
+    },
+    "physicalSize": "6.5*6.5*12.9cm",
+    "points": 0,
+    "isnew": 2
+}

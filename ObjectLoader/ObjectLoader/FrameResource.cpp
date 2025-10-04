@@ -14,6 +14,7 @@ FrameResource::FrameResource(ID3D12Device* device, UINT passCount)
     LocalLightCB = std::make_unique<UploadBuffer<Light>>(device, 512, false);
     LightsContainingFrustum = std::make_unique<UploadBuffer<LightIndex>>(device, 512, false);
     LightsInsideFrustum = std::make_unique<UploadBuffer<LightIndex>>(device, 512, false);
+    ObjCB = std::make_unique<UploadBuffer<OpaqueObjectConstants>>(device, 125, false);
 }
 
 FrameResource::~FrameResource()
