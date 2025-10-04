@@ -44,6 +44,34 @@ float3 FresnelSchlickRoughness(float cosTheta, float3 F0, float roughness)
     return F0 + (max(float3(1.0f - roughness, 1.0f - roughness, 1.0f - roughness), F0) - F0) * pow(clamp(1.0f - cosTheta, 0.0f, 1.0f), 5.0f);
 }
 
+float GeometrySchlickGGX(float NdotV, float roughness)
+{
+    float r = roughness + 1.0;
+    float k = (r * r) / 8.0;
+
+    return NdotV / (NdotV * (1.0 - k) + k);
+}
+
+float GeometrySmith(float3 N, float3 V, float3 L, float roughness)
+{
+    float NdotV = max(dot(N, V), 0.0);
+    float NdotL = max(dot(N, L), 0.0);
+    float ggx1 = GeometrySchlickGGX(NdotV, roughness);
+    float ggx2 = GeometrySchlickGGX(NdotL, roughness);
+    return ggx1 * ggx2;
+}
+
+float DistributionGGX(float3 N, float3 H, float roughness)
+{
+    float a = roughness * roughness;
+    float a2 = a * a;
+    float NdotH = max(dot(N, H), 0.0);
+    float NdotH2 = NdotH * NdotH;
+
+    float denom = NdotH2 * (a2 - 1.0) + 1.0;
+    return a2 / (PI * denom * denom);
+}
+
 float3 PBRShading(float3 coords, float3 lightDir, float3 lightColor, float3 worldPos, float shadowFactor, float lightIntensity)
 {
     float3 N = normalize(gNormal.Load(coords).xyz);
@@ -60,7 +88,15 @@ float3 PBRShading(float3 coords, float3 lightDir, float3 lightColor, float3 worl
     float3 F0 = float3(0.04f, 0.04f, 0.04f); // default for dielectrics
     F0 = lerp(F0, albedo, metallic); // metals use albedo as F0
 
+    // cook-torrance BRDF
+    float D = DistributionGGX(N, H, roughness);
     float3 F = FresnelSchlickRoughness(max(dot(N, V), 0.0), F0, roughness);
+    float G = GeometrySmith(N, V, L, roughness);
+
+    float3 numerator = D * G * F;
+    float denominator = 4 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.001;
+    float3 specular = numerator / denominator;
+    
     float3 kS = F;
     float3 kD = 1.f - kS;
     kD *= 1.f - metallic;
@@ -70,7 +106,8 @@ float3 PBRShading(float3 coords, float3 lightDir, float3 lightColor, float3 worl
     const float MAX_REFLECTION_LOD = 7.0f;
     float3 prefilteredColor = gSkyPrefiltered.SampleLevel(gsamLinear, R, roughness * MAX_REFLECTION_LOD).rgb;
     float2 brdf = gSkyBRDF.Sample(gsamLinear, float2(max(dot(N, V), 0.0f), roughness)).rg;
-    float3 specular = prefilteredColor * (F * brdf.x + brdf.y);
+    
+    specular += prefilteredColor * (F * brdf.x + brdf.y);
     float3 ambient = (kD * diffuse + specular) * ao;
     
     float NdotL = max(dot(N, L), 0.0f);
