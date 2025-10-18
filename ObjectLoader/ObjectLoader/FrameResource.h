@@ -139,6 +139,23 @@ struct SSRConstants
     float pad = 0.0f;
 };
 
+struct GridInfo
+{
+    DirectX::XMMATRIX world = DirectX::XMMatrixIdentity();
+    int texelXStart = 0;
+    int texelYStart = 0;
+    int texelStride = 1;
+    int pad = 0;
+};
+
+struct TerrainConstants
+{
+	DirectX::XMFLOAT2 heightmapSize = { 0.0f, 0.0f };
+    float maxHeight = 1.0f;
+    float pad = 0.0f;
+};
+
+
 // Stores the resources needed for the CPU to build the command lists
 // for a frame.  
 struct FrameResource

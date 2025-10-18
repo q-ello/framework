@@ -21,6 +21,7 @@
 #include "UnlitObjectManager.h"
 #include "PostProcessManager.h"
 #include "CubeMapManager.h"
+#include "TerrainManager.h"
 
 struct Toast {
 	std::string message;
@@ -78,6 +79,7 @@ private:
 	void DrawInterface();
 	void DrawObjectsList(int& btnId);
 	void DrawShadowMasksList(int& btnId);
+	void DrawTerrain(int& btnId);
 
 	void DrawHandSpotlight(int& buttonId);
 	void DrawLightData(int& btnId);
@@ -134,6 +136,7 @@ private:
 	std::unique_ptr<LightingManager> _lightingManager = nullptr;
 	std::unique_ptr<CubeMapManager> _cubeMapManager = nullptr;
 	std::unique_ptr<PostProcessManager> _postProcessManager = nullptr;
+	std::unique_ptr<TerrainManager> _terrainManager = nullptr;
 
 	GBufferPassConstants _GBufferCB;
 	LightingPassConstants _lightingCB;

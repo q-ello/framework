@@ -372,6 +372,7 @@ void MyApp::DrawInterface()
 	{
 		DrawObjectsList(buttonId);
 		DrawShadowMasksList(buttonId);
+		DrawTerrain(buttonId);
 		ImGui::EndTabItem();
 	}
 
@@ -567,6 +568,53 @@ void MyApp::DrawShadowMasksList(int& btnId)
 		}
 
 
+	}
+}
+
+void MyApp::DrawTerrain(int& btnId)
+{
+	if (ImGui::CollapsingHeader("Terrain"))
+	{
+		{
+			TextureHandle& heightTexHandle = _terrainManager->HeightmapTexture();
+
+			ImGui::PushID(btnId++);
+			ImGui::Text("Heightmap Texture:");
+			ImGui::PopID();
+			ImGui::PushID(btnId++);
+			if (ImGui::Button(heightTexHandle.name.c_str()))
+			{
+				WCHAR* texturePath;
+				if (BasicUtil::TryToOpenFile(L"Image Files", L"*.dds;*.png;*.jpg;*.jpeg;*.tga;*.bmp", texturePath))
+				{
+					TextureManager::LoadTexture(texturePath, heightTexHandle);
+					_terrainManager->InitTerrain();
+					_terrainManager->UpdateTerrainCB(mCurrFrameResource);
+					CoTaskMemFree(texturePath);
+				}
+			}
+			ImGui::PopID();
+		}
+
+		{
+			TextureHandle& diffTexHandle = _terrainManager->DiffuseTexture();
+
+			ImGui::PushID(btnId++);
+			ImGui::Text("Diffuse Texture:");
+			ImGui::PopID();
+			ImGui::PushID(btnId++);
+			if (ImGui::Button(diffTexHandle.name.c_str()))
+			{
+				WCHAR* texturePath;
+				if (BasicUtil::TryToOpenFile(L"Image Files", L"*.dds;*.png;*.jpg;*.jpeg;*.tga;*.bmp", texturePath))
+				{
+					TextureManager::LoadTexture(texturePath, diffTexHandle);
+					CoTaskMemFree(texturePath);
+				}
+			}
+			ImGui::PopID();
+		}
+		
 	}
 }
 
@@ -1530,6 +1578,10 @@ void MyApp::InitManagers()
 	_postProcessManager = std::make_unique<PostProcessManager>(_device.Get());
 	_postProcessManager->BindToManagers(_gBuffer.get(), _lightingManager.get(), &_camera);
 	_postProcessManager->Init(mClientWidth, mClientHeight);
+
+	_terrainManager = std::make_unique<TerrainManager>(_device.Get());
+	_terrainManager->BindToOtherData(&_camera);
+	_terrainManager->Init();
 }
 
 void MyApp::GBufferPass()
