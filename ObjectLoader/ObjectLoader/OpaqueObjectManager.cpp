@@ -306,7 +306,7 @@ void EditableObjectManager::CountLODIndex(EditableRenderItem* ri, float screenHe
 	else if (size > 30.0f)  preferableLOD = 4;
 	else preferableLOD = 5;
 
-	int maxIndex = ri->lodsData.size() - 1;
+	int maxIndex = (int)ri->lodsData.size() - 1;
 
 	ri->currentLODIdx = std::min(preferableLOD, maxIndex);
 }
@@ -369,7 +369,7 @@ int EditableObjectManager::AddRenderItem(ID3D12Device* device, ModelData&& model
 
 	for (int i = 0; i < FrameResource::frameResources().size(); ++i)
 	{
-		FrameResource::frameResources()[i]->addOpaqueObjectBuffer(device, modelRitem->uid, modelRitem->lodsData.begin()->meshes.size() + 1, modelRitem->materials.size());
+		FrameResource::frameResources()[i]->addOpaqueObjectBuffer(device, modelRitem->uid, (int)modelRitem->lodsData.begin()->meshes.size() + 1, modelRitem->materials.size());
 	}
 
 	if (isTesselated)
@@ -496,14 +496,6 @@ EditableRenderItem* EditableObjectManager::object(int i)
 
 void EditableObjectManager::Draw(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, float screenHeight, bool isWireframe, bool fixedLOD)
 {
-	if (_objects.size() == 0)
-	{
-		int tes = (int)_tesselatedObjects.size();
-		int untes = (int)_untesselatedObjects.size();
-	}
-
-	ID3D12DescriptorHeap* descriptorHeaps[] = { TextureManager::srvDescriptorHeap.Get() };
-	cmdList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
 	cmdList->SetGraphicsRootSignature(_rootSignature.Get());
 
 	//draw without tesselation
@@ -573,7 +565,7 @@ void EditableObjectManager::DrawObjects(ID3D12GraphicsCommandList* cmdList, Fram
 				cmdList->SetGraphicsRootDescriptorTable(offset + i, tex);
 			}
 
-			cmdList->DrawIndexedInstanced(meshData.indexCount, 1, meshData.indexStart, meshData.vertexStart, 0);
+			cmdList->DrawIndexedInstanced((UINT)meshData.indexCount, 1, (UINT)meshData.indexStart, (UINT)meshData.vertexStart, 0);
 		}
 	}
 }

@@ -150,9 +150,9 @@ struct GridInfo
 
 struct TerrainConstants
 {
-	DirectX::XMFLOAT2 heightmapSize = { 0.0f, 0.0f };
+	DirectX::XMINT2 heightmapSize = { 0, 0 };
     float maxHeight = 1.0f;
-    float pad = 0.0f;
+    int gridSize = 33;
 };
 
 
@@ -191,6 +191,9 @@ public:
     
     std::unique_ptr<UploadBuffer<GodRaysConstants>> GodRaysCB = nullptr;
     std::unique_ptr<UploadBuffer<SSRConstants>> SSRCB = nullptr;
+
+	std::unique_ptr<UploadBuffer<TerrainConstants>> TerrainCB = nullptr;
+	std::unique_ptr<UploadBuffer<GridInfo>> GridInfoCB = nullptr;
 
     std::unordered_map<std::uint32_t, std::unique_ptr<UploadBuffer<OpaqueObjectConstants>>> OpaqueObjCB = {};
     std::unordered_map<std::uint32_t, std::unique_ptr<UploadBuffer<MaterialConstants>>> MaterialCB = {};

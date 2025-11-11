@@ -73,7 +73,6 @@ private:
 	void BuildShadersAndInputLayout();
 	void BuildPSOs();
 	void BuildFrameResources();
-	void ClearData();
 
 	//imgui staff
 	void DrawInterface();

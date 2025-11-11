@@ -152,6 +152,131 @@ GeometryGenerator::MeshData GeometryGenerator::CreateGrid(float width, float hei
 	return meshData;
 }
 
+GeometryGenerator::MeshData GeometryGenerator::CreateTerrainGrid(int width, int height)
+{
+	MeshData meshData;
+	std::vector<Vertex> vertices;
+	std::vector<uint32_t> indices;
+
+	const float halfW = 0.5f * (width - 1);
+	const float halfH = 0.5f * (height - 1);
+
+	// ---- Top surface ----
+	for (int z = 0; z < height; ++z)
+	{
+		for (int x = 0; x < width; ++x)
+		{
+			Vertex v;
+			v.Position = { (float)x - halfW, 0.0f, (float)z - halfH };
+			v.Normal = { 0.0f, 1.0f, 0.0f };
+			v.TexC = { (float)x / (width - 1), (float)z / (height - 1) };
+			vertices.push_back(v);
+		}
+	}
+
+	// ---- Top surface indices ----
+	for (int z = 0; z < height - 1; ++z)
+	{
+		for (int x = 0; x < width - 1; ++x)
+		{
+			uint32_t i0 = z * width + x;
+			uint32_t i1 = z * width + x + 1;
+			uint32_t i2 = (z + 1) * width + x;
+			uint32_t i3 = (z + 1) * width + x + 1;
+
+			indices.push_back(i0);
+			indices.push_back(i2);
+			indices.push_back(i1);
+
+			indices.push_back(i2);
+			indices.push_back(i3);
+			indices.push_back(i1);
+		}
+	}
+
+	auto addSkirt = [&](std::vector<int> topEdgeIndices, bool flip)
+		{
+			int count = (int)topEdgeIndices.size();
+			std::vector<uint32_t> dupTopEdgeIndices(count);
+			std::vector<uint32_t> bottomEdgeIndices(count);
+
+			// duplicate with lowered Y
+			for (int i = 0; i < count; ++i)
+			{
+				Vertex v = vertices[topEdgeIndices[i]];
+				dupTopEdgeIndices[i] = (uint32_t)vertices.size();
+				vertices.push_back(v);
+			}
+			for (int i = 0; i < count; ++i)
+			{
+				Vertex v = vertices[topEdgeIndices[i]];
+				v.Position.y -= 1.0f;
+				bottomEdgeIndices[i] = (uint32_t)vertices.size();
+				vertices.push_back(v);
+			}
+
+			// connect quads
+			for (int i = 0; i < count - 1; ++i)
+			{
+				uint32_t t0 = dupTopEdgeIndices[i];
+				uint32_t t1 = dupTopEdgeIndices[i + 1];
+				uint32_t b0 = bottomEdgeIndices[i];
+				uint32_t b1 = bottomEdgeIndices[i + 1];
+
+				if (!flip)
+				{
+					indices.push_back(t0);
+					indices.push_back(t1);
+					indices.push_back(b0);
+
+					indices.push_back(b0);
+					indices.push_back(t1);
+					indices.push_back(b1);
+				}
+				else // flip winding for opposite edges
+				{
+					indices.push_back(t0);
+					indices.push_back(b0);
+					indices.push_back(t1);
+
+					indices.push_back(t1);
+					indices.push_back(b0);
+					indices.push_back(b1);
+				}
+			}
+		};
+
+	// ---- Collect edge vertices ----
+	std::vector<int> north, south, west, east;
+	north.reserve(width);
+	south.reserve(width);
+	west.reserve(height);
+	east.reserve(height);
+
+	// North edge (z = 0)
+	for (int x = 0; x < width; ++x)
+		north.push_back(x);
+	// South edge (z = height-1)
+	for (int x = 0; x < width; ++x)
+		south.push_back((height - 1) * width + x);
+	// West edge (x = 0)
+	for (int z = 0; z < height; ++z)
+		west.push_back(z * width);
+	// East edge (x = width-1)
+	for (int z = 0; z < height; ++z)
+		east.push_back(z * width + (width - 1));
+
+	// ---- Add skirts with correct winding ----
+	addSkirt(north, false); // front
+	addSkirt(south, true);  // back
+	addSkirt(west, true);   // left
+	addSkirt(east, false);  // right
+
+	meshData.Vertices = std::move(vertices);
+	meshData.Indices32 = std::move(indices);
+	return meshData;
+}
+
 GeometryGenerator::MeshData GeometryGenerator::CreateSphere(float radius, uint32 sliceCount, uint32 stackCount)
 {
     MeshData meshData;

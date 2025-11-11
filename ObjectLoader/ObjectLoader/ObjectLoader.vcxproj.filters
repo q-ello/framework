@@ -308,9 +308,6 @@
     <ClCompile Include="DirectXTex\DirectXTexWIC.cpp">
       <Filter>Source Files\directxtex</Filter>
     </ClCompile>
-    <ClCompile Include="Camera.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="PostProcessManager.cpp">
       <Filter>Source Files\Deferred</Filter>
     </ClCompile>
@@ -318,7 +315,10 @@
       <Filter>Source Files\Deferred</Filter>
     </ClCompile>
     <ClCompile Include="TerrainManager.cpp">
-      <Filter>Source Files</Filter>
+      <Filter>Source Files\DataManagers</Filter>
+    </ClCompile>
+    <ClCompile Include="Camera.cpp">
+      <Filter>Source Files\DataManagers</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

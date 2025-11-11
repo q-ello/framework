@@ -254,7 +254,7 @@ bool Model::LoadMatPropTexture(aiMaterial* material, Material* newMaterial, aiTe
 		}
 
 		std::wstring textureFileNameW = std::wstring(textureFilename.begin(), textureFilename.end());
-		newMaterial->properties[BasicUtil::EnumIndex(property)].texture = TextureManager::LoadTexture((_fileLocation + textureFileNameW).c_str());
+		newMaterial->properties[BasicUtil::EnumIndex(property)].texture = TextureManager::LoadTexture((_fileLocation + textureFileNameW).c_str(), 0, 1);
 		return true;
 	}
 	return false;
@@ -278,7 +278,7 @@ bool Model::LoadMatTexture(aiMaterial* material, Material* newMaterial, aiTextur
 		}
 
 		std::wstring textureFileNameW = std::wstring(textureFilename.begin(), textureFilename.end());
-		newMaterial->textures[BasicUtil::EnumIndex(property)] = TextureManager::LoadTexture((_fileLocation + textureFileNameW).c_str());
+		newMaterial->textures[BasicUtil::EnumIndex(property)] = TextureManager::LoadTexture((_fileLocation + textureFileNameW).c_str(), 0, 1);
 		return true;
 	}
 	return false;

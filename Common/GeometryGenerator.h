@@ -105,6 +105,7 @@ public:
     MeshData CreateSphere(float radius, uint32 sliceCount, uint32 stackCount);
 
 	MeshData CreateGrid(float width, float height, float division);
+	MeshData CreateTerrainGrid(int width, int height);
 
 	///<summary>
 	/// Creates a geosphere centered at the origin with the given radius.  The

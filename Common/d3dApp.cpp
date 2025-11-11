@@ -163,6 +163,7 @@ void D3DApp::OnResize()
 		ThrowIfFailed(mSwapChain->GetBuffer(i, IID_PPV_ARGS(&mSwapChainBuffer[i])));
 		_device->CreateRenderTargetView(mSwapChainBuffer[i].Get(), nullptr, rtvHeapHandle);
 		rtvHeapHandle.Offset(1, mRtvDescriptorSize);
+		_backBufferStates[i] = D3D12_RESOURCE_STATE_PRESENT;
 	}
 	
     // Execute the resize commands.

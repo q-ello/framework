@@ -20,6 +20,7 @@ void GeometryManager::BuildNecessaryGeometry()
 	GeometryGenerator::MeshData grid = geoGen.CreateGrid(1000.f, 1000.f, 10.f);
 	GeometryGenerator::MeshData box = geoGen.CreateBox(1.0f, 1.0f, 1.0f, 0);
 	GeometryGenerator::MeshData sphere = geoGen.CreateSphere(0.5f, 20, 20);
+	GeometryGenerator::MeshData terrainGrid = geoGen.CreateTerrainGrid(33, 33);
 
 	SubmeshGeometry gridSubmesh;
 	gridSubmesh.IndexCount = (UINT)grid.Indices32.size();
@@ -36,14 +37,18 @@ void GeometryManager::BuildNecessaryGeometry()
 	sphereSubmesh.StartIndexLocation = boxSubmesh.StartIndexLocation + boxSubmesh.IndexCount;
 	sphereSubmesh.BaseVertexLocation = boxSubmesh.BaseVertexLocation + (UINT)box.Vertices.size();
 
+	SubmeshGeometry terrainGridSubmesh;
+	terrainGridSubmesh.IndexCount = (UINT)terrainGrid.Indices32.size();
+	terrainGridSubmesh.StartIndexLocation = sphereSubmesh.StartIndexLocation + sphereSubmesh.IndexCount;
+	terrainGridSubmesh.BaseVertexLocation = sphereSubmesh.BaseVertexLocation + (UINT)sphere.Vertices.size();
+
 	const size_t gridVerticesCount = grid.Vertices.size();
 
-	std::vector<LightVertex> vertices(gridVerticesCount + box.Vertices.size() + sphere.Vertices.size());
+	std::vector<LightVertex> vertices(gridVerticesCount + box.Vertices.size() + sphere.Vertices.size() + terrainGrid.Vertices.size());
 
 	for (size_t i = 0; i < gridVerticesCount; ++i)
 	{
 		vertices[i].Pos = grid.Vertices[i].Position;
-		vertices[i].Color = grid.Vertices[i].Color;
 	}
 
 	for (size_t i = 0; i < box.Vertices.size(); ++i)
@@ -56,9 +61,15 @@ void GeometryManager::BuildNecessaryGeometry()
 		vertices[sphereSubmesh.BaseVertexLocation + i].Pos = sphere.Vertices[i].Position;
 	}
 
+	for (size_t i = 0; i < terrainGrid.Vertices.size(); i++)
+	{
+		vertices[terrainGridSubmesh.BaseVertexLocation + i].Pos = terrainGrid.Vertices[i].Position;
+	}
+
 	std::vector<std::uint16_t> indices = grid.GetIndices16();
 	indices.insert(indices.end(), box.GetIndices16().begin(), box.GetIndices16().end());
 	indices.insert(indices.end(), sphere.GetIndices16().begin(), sphere.GetIndices16().end());
+	indices.insert(indices.end(), terrainGrid.GetIndices16().begin(), terrainGrid.GetIndices16().end());
 
 	const UINT vbByteSize = (UINT)vertices.size() * sizeof(LightVertex);
 	const UINT ibByteSize = (UINT)indices.size() * sizeof(std::uint16_t);
@@ -86,6 +97,7 @@ void GeometryManager::BuildNecessaryGeometry()
 	geo->DrawArgs["grid"] = gridSubmesh;
 	geo->DrawArgs["box"] = boxSubmesh;
 	geo->DrawArgs["sphere"] = sphereSubmesh;
+	geo->DrawArgs["terrainGrid"] = terrainGridSubmesh;
 
 	geometries().emplace(
 		geo->Name,

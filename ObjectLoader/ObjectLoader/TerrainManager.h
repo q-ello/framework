@@ -2,6 +2,8 @@
 #include "TextureManager.h"
 #include "FrameResource.h"
 #include "Camera.h"
+#include "GeometryManager.h"
+#include "../../Common/GBuffer.h"
 
 struct GridQuadNode
 {
@@ -18,14 +20,10 @@ public:
 
 	void Init();
 	void BindToOtherData(Camera* camera);
+	void Draw(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource);
 
 	void InitTerrain();
 	void UpdateTerrainCB(FrameResource* currFrameResource);
-
-	float& TerrainMaxHeight()
-	{
-		return _constants.maxHeight;
-	}
 
 	TextureHandle& HeightmapTexture()
 	{
@@ -37,12 +35,15 @@ public:
 		return _diffuseTexture;
 	}
 
+	float maxTerrainHeight = 10.0f;
+
 private:
 	std::vector<std::unique_ptr<GridQuadNode>> _grids;
 	TextureHandle _heightmapTexture;
 	TextureHandle _diffuseTexture;
 	int _visibleGrids;
-	TerrainConstants _constants;
+	int _heightmapTextureWidth = 0;
+	int _heightmapTextureHeight = 0;
 
 	ID3D12Device* _device = nullptr;
 	Camera* _camera = nullptr;
@@ -54,12 +55,17 @@ private:
 	std::vector<D3D12_INPUT_ELEMENT_DESC> _inputLayout;
 
 	DXGI_FORMAT _format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	int _gridSize = 33;
+
 private:
 	void BuildInputLayout();
 	void BuildRootSignature();
 	void BuildShaders();
 	void BuildPSO();
-	void BuildDescriptors();
+	
+	std::unique_ptr<GridQuadNode> CreateQuadNode(int xTexelStart, int yTexelStart, float worldOffsetX, float worldOffsetY, int stride);
 
-	std::vector<int> FrustumCulling();
+	void FrustumCulling(FrameResource* currFrameResource);
+	void CullQuad(GridQuadNode* grid, BoundingFrustum& localFrustum, FrameResource* currFrameResource);
+	void AddQuadToVisible(GridQuadNode* grid, FrameResource* currFrameResource);
 };

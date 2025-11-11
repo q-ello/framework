@@ -58,7 +58,6 @@ cbuffer cbPass : register(b2)
     float2 gScreenSize;
 };
 
-
 struct VertexIn
 {
     float3 PosL : POSITION;

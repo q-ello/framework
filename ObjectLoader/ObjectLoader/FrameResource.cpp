@@ -11,14 +11,20 @@ FrameResource::FrameResource(ID3D12Device* device, UINT passCount)
     GBufferPassCB = std::make_unique<UploadBuffer<GBufferPassConstants>>(device, passCount, true);
     LightingPassCB = std::make_unique < UploadBuffer <LightingPassConstants>> (device, passCount, true);
     DirLightCB = std::make_unique<UploadBuffer<DirectionalLightConstants>>(device, passCount, true);
+    
     ShadowDirLightCB = std::make_unique<UploadBuffer<ShadowLightConstants>>(device, gCascadesCount, true);
     ShadowLocalLightCB = std::make_unique<UploadBuffer<ShadowLightConstants>>(device, 512, false);
     LocalLightCB = std::make_unique<UploadBuffer<Light>>(device, 512, false);
+
     LightsContainingFrustum = std::make_unique<UploadBuffer<LightIndex>>(device, 512, false);
     LightsInsideFrustum = std::make_unique<UploadBuffer<LightIndex>>(device, 512, false);
-	GodRaysCB = std::make_unique<UploadBuffer<GodRaysConstants>>(device, passCount, true);
+
+    GodRaysCB = std::make_unique<UploadBuffer<GodRaysConstants>>(device, passCount, true);
     StaticObjCB = std::make_unique < UploadBuffer<StaticObjectConstants>>(device, 512, true);
     SSRCB = std::make_unique<UploadBuffer<SSRConstants>>(device, passCount, true);
+
+	TerrainCB = std::make_unique<UploadBuffer<TerrainConstants>>(device, passCount, true);
+	GridInfoCB = std::make_unique<UploadBuffer<GridInfo>>(device, 8192, false);
 }
 
 FrameResource::~FrameResource()

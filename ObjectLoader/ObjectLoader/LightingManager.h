@@ -124,11 +124,11 @@ public:
 	//shadow mask stuff
 	void AddShadowMask(TextureHandle handle);
 	void DeleteShadowMask(int i);
-	void SetSelectedShadowMask(int i)
+	void SetSelectedShadowMask(size_t i)
 	{
 		_selectedShadowMask = i;
 	}
-	std::string ShadowMaskName(int i) const
+	std::string ShadowMaskName(size_t i) const
 	{
 		return _shadowMasks[i].name;
 	}

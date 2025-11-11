@@ -26,7 +26,7 @@ public:
 	static std::unordered_map<std::wstring, std::unique_ptr<Texture>>& textures();
 
 	static TextureHandle LoadTexture(const WCHAR* filename = L"default.dds", int prevIndex = 0, int texCount = 1);
-	static void LoadTexture(const WCHAR* filename = L"default.dds", TextureHandle& texHandle);
+	static void LoadTexture(const WCHAR* filename, TextureHandle& texHandle);
 	static TextureHandle LoadEmbeddedTexture(const std::wstring& texName, const aiTexture* embeddedTex);
 	static bool LoadCubeTexture(const WCHAR* texturePath, TextureHandle& cubeMapHandle);
 	static void deleteTexture(std::wstring name, int texCount = 1);

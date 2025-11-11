@@ -374,9 +374,6 @@ void LightingManager::DrawEmissive(ID3D12GraphicsCommandList* cmdList, FrameReso
 
 void LightingManager::DrawShadows(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, std::vector<std::shared_ptr<EditableRenderItem>>& objects)
 {
-	if (objects.empty())
-		return;
-
 	cmdList->RSSetViewports(1, &_shadowViewport);
 	cmdList->RSSetScissorRects(1, &_shadowScissorRect);
 

@@ -117,7 +117,7 @@ void CubeMapManager::BuildRootSignature()
 	skySlotRootParameter[1].InitAsConstantBufferView(0);
 	skySlotRootParameter[2].InitAsConstantBufferView(1);
 
-	CD3DX12_ROOT_SIGNATURE_DESC lightingRootSigDesc(rootParameterCount, skySlotRootParameter, TextureManager::GetLinearWrapSampler().size(), TextureManager::GetLinearWrapSampler().data(), D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+	CD3DX12_ROOT_SIGNATURE_DESC lightingRootSigDesc(rootParameterCount, skySlotRootParameter, (UINT)TextureManager::GetLinearWrapSampler().size(), TextureManager::GetLinearWrapSampler().data(), D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 
 	Microsoft::WRL::ComPtr<ID3DBlob> serializedRootSig = nullptr;
 	Microsoft::WRL::ComPtr<ID3DBlob> errorBlob = nullptr;

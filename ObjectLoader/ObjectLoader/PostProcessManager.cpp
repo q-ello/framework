@@ -221,7 +221,7 @@ void PostProcessManager::BuildRootSignature()
 		lightingSlotRootParameter[2].InitAsConstantBufferView(0);
 		lightingSlotRootParameter[3].InitAsConstantBufferView(1);
 
-		CD3DX12_ROOT_SIGNATURE_DESC lightingRootSigDesc(rootParameterCount, lightingSlotRootParameter, TextureManager::GetLinearSamplers().size(), TextureManager::GetLinearSamplers().data(), D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+		CD3DX12_ROOT_SIGNATURE_DESC lightingRootSigDesc(rootParameterCount, lightingSlotRootParameter, (UINT)TextureManager::GetLinearSamplers().size(), TextureManager::GetLinearSamplers().data(), D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 
 		ComPtr<ID3DBlob> serializedRootSig = nullptr;
 		ComPtr<ID3DBlob> errorBlob = nullptr;
@@ -254,7 +254,7 @@ void PostProcessManager::BuildRootSignature()
 		godRaysSlotRootParameter[2].InitAsConstantBufferView(1);
 		godRaysSlotRootParameter[3].InitAsConstantBufferView(2);
 
-		CD3DX12_ROOT_SIGNATURE_DESC godRaysRootSigDesc(GRrootParameterCount, godRaysSlotRootParameter, TextureManager::GetLinearSamplers().size(), TextureManager::GetLinearSamplers().data(), D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+		CD3DX12_ROOT_SIGNATURE_DESC godRaysRootSigDesc(GRrootParameterCount, godRaysSlotRootParameter, (UINT)TextureManager::GetLinearSamplers().size(), TextureManager::GetLinearSamplers().data(), D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 
 		ComPtr<ID3DBlob> serializedRootSig = nullptr;
 		ComPtr<ID3DBlob> errorBlob = nullptr;

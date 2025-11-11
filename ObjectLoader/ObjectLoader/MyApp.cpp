@@ -139,7 +139,8 @@ void MyApp::Draw(const GameTimer& gt)
 
 	// Indicate a state transition on the resource usage.
 	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(CurrentBackBuffer(),
-		D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET));
+		_backBufferStates[mCurrBackBuffer], D3D12_RESOURCE_STATE_RENDER_TARGET));
+	_backBufferStates[mCurrBackBuffer] = D3D12_RESOURCE_STATE_RENDER_TARGET;
 
 	mCommandList->ClearRenderTargetView(CurrentBackBufferView(), Colors::LightSteelBlue, 0, nullptr);
 
@@ -179,7 +180,8 @@ void MyApp::Draw(const GameTimer& gt)
 	ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), mCommandList.Get());
 	// Swap the back and front buffers
 	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(CurrentBackBuffer(),
-		D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
+		_backBufferStates[mCurrBackBuffer], D3D12_RESOURCE_STATE_PRESENT));
+	_backBufferStates[mCurrBackBuffer] = D3D12_RESOURCE_STATE_PRESENT;
 
 	// Done recording commands.
 	ThrowIfFailed(mCommandList->Close());
@@ -496,18 +498,12 @@ void MyApp::DrawObjectsList(int& btnId)
 						//going from the most index to last
 						for (auto it = _selectedModels.rbegin(); it != _selectedModels.rend(); it++)
 						{
-							if (_objectsManager->DeleteObject(*it))
-							{
-								ClearData();
-							}
+							_objectsManager->DeleteObject(*it);
 						}
 					}
 					else
 					{
-						if (_objectsManager->DeleteObject(i))
-						{
-							ClearData();
-						}
+						_objectsManager->DeleteObject(i);
 					}
 					_selectedModels.clear();
 				}
@@ -536,7 +532,7 @@ void MyApp::DrawShadowMasksList(int& btnId)
 
 		ImGui::DragFloat("UV Scale", &_lightingManager->shadowMaskUVScale, 0.05f, 0.1f, 1.0f);
 
-		int selectedShadowMask = _lightingManager->SelectedShadowMask();
+		size_t selectedShadowMask = _lightingManager->SelectedShadowMask();
 
 		for (size_t i = 0; i < _lightingManager->ShadowMaskCount(); i++)
 		{
@@ -589,7 +585,10 @@ void MyApp::DrawTerrain(int& btnId)
 				{
 					TextureManager::LoadTexture(texturePath, heightTexHandle);
 					_terrainManager->InitTerrain();
-					_terrainManager->UpdateTerrainCB(mCurrFrameResource);
+					for (int i = 0; i < gNumFrameResources; i++)
+					{
+						_terrainManager->UpdateTerrainCB(FrameResource::frameResources()[i].get());
+					}
 					CoTaskMemFree(texturePath);
 				}
 			}
@@ -614,7 +613,19 @@ void MyApp::DrawTerrain(int& btnId)
 			}
 			ImGui::PopID();
 		}
-		
+
+		{
+			ImGui::Text("Max height");
+			ImGui::SameLine();
+			ImGui::SetNextItemWidth(50.0f);
+			if (ImGui::DragFloat("height##terrain", &_terrainManager->maxTerrainHeight, 1.0f, 1.0f, 50.0f))
+			{
+				for (int i = 0; i < gNumFrameResources; i++)
+				{
+					_terrainManager->UpdateTerrainCB(FrameResource::frameResources()[i].get());
+				}
+			}
+		}
 	}
 }
 
@@ -1536,30 +1547,6 @@ void MyApp::AddShadowMask()
 	}
 }
 
-void MyApp::ClearData()
-{
-	ThrowIfFailed(mDirectCmdListAlloc->Reset());
-	ThrowIfFailed(mCommandList->Reset(mDirectCmdListAlloc.Get(), nullptr));
-	CD3DX12_RESOURCE_BARRIER barrier = CD3DX12_RESOURCE_BARRIER::Transition(
-		CurrentBackBuffer(),
-		D3D12_RESOURCE_STATE_PRESENT,
-		D3D12_RESOURCE_STATE_RENDER_TARGET);
-	mCommandList->ResourceBarrier(1, &barrier);
-
-	mCommandList->ClearRenderTargetView(CurrentBackBufferView(), Colors::LightSteelBlue, 0, nullptr);
-	_gBuffer->ClearInfo(Colors::Transparent);
-
-	barrier = CD3DX12_RESOURCE_BARRIER::Transition(
-		CurrentBackBuffer(),
-		D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
-	mCommandList->ResourceBarrier(1, &barrier);
-
-	ThrowIfFailed(mCommandList->Close());
-	ID3D12CommandList* cmdsLists[] = { mCommandList.Get() };
-	mCommandQueue->ExecuteCommandLists(_countof(cmdsLists), cmdsLists);
-	FlushCommandQueue();
-}
-
 void MyApp::InitManagers()
 {
 	_objectsManager = std::make_unique<EditableObjectManager>(_device.Get());
@@ -1599,7 +1586,10 @@ void MyApp::GBufferPass()
 	_gBuffer->ClearInfo(Colors::Transparent);
 	mCommandList->OMSetRenderTargets(_gBuffer->InfoCount(), _gBuffer->RTVs().data(),
 		false, &_gBuffer->DepthStencilView());
+
 	_objectsManager->Draw(mCommandList.Get(), mCurrFrameResource, (float)mClientHeight, _isWireframe, _fixedLOD);
+
+	_terrainManager->Draw(mCommandList.Get(), mCurrFrameResource);
 }
 
 void MyApp::LightingPass()
