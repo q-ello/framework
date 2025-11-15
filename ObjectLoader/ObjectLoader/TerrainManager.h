@@ -37,6 +37,16 @@ public:
 
 	float maxTerrainHeight = 10.0f;
 
+	int GridsCount() const
+	{
+		return (int)_grids.size();
+	}
+
+	int VisibleGrids() const
+	{
+		return _visibleGrids;
+	}
+
 private:
 	std::vector<std::unique_ptr<GridQuadNode>> _grids;
 	TextureHandle _heightmapTexture;

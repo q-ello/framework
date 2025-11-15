@@ -412,6 +412,9 @@ void MyApp::DrawInterface()
 	auto visLights = _lightingManager->LightsInsideFrustum();
 	auto lightsCnt = _lightingManager->LightsCount();
 	ImGui::Text(("Lights drawn: " + std::to_string(visLights) + "/" + std::to_string(lightsCnt)).c_str());
+	auto visGrids = _terrainManager->VisibleGrids();
+	auto gridsCnt = _terrainManager->GridsCount();
+	ImGui::Text(("Grids instances drawn: " + std::to_string(visGrids)).c_str());
 	ImGui::End();
 
 	DrawToasts();
