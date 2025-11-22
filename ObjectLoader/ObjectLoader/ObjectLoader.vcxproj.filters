@@ -177,6 +177,9 @@
     <ClInclude Include="TerrainManager.h">
       <Filter>Header Files\DataManagers</Filter>
     </ClInclude>
+    <ClInclude Include="TAAManager.h">
+      <Filter>Header Files\Deferred</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="MyApp.cpp">
@@ -319,6 +322,9 @@
     </ClCompile>
     <ClCompile Include="Camera.cpp">
       <Filter>Source Files\DataManagers</Filter>
+    </ClCompile>
+    <ClCompile Include="TAAManager.cpp">
+      <Filter>Source Files\Deferred</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

@@ -57,6 +57,7 @@ cbuffer cbPass : register(b2)
     float gDeltaTime;
     float2 gScreenSize;
     uint frameIndex;
+    int taaEnabled;
 };
 
 struct VertexIn
@@ -112,7 +113,8 @@ VertexOut GBufferVS(VertexIn vin)
     // Transform to homogeneous clip space.
     vout.PosH = mul(posW, gViewProj);
     
-    vout.PosH += float4(GenerateJitter(frameIndex) * vout.PosH.w / gScreenSize, 0, 0);
+    if (taaEnabled == 1)
+        vout.PosH += float4(GenerateJitter(frameIndex) * vout.PosH.w / gScreenSize, 0, 0);
     
     vout.TexC = vin.TexC;
     

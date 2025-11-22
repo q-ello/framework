@@ -49,7 +49,7 @@ struct GBufferPassConstants
     float DeltaTime = 0.0f;
     DirectX::XMFLOAT2 ScreenSize = { 0.0f, 0.0f };
 	UINT FrameIndex = 0;
-    float pad = { 0.f };
+    int taaEnabled = 0;
 };
 
 struct LightingPassConstants

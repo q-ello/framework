@@ -155,6 +155,7 @@ void MyApp::Draw(const GameTimer& gt)
 		GBufferPass();
 		LightingPass();
 		_cubeMapManager->Draw(mCommandList.Get(), mCurrFrameResource);
+		_taaManager->ApplyTAA(mCommandList.Get(), mCurrFrameResource, _taaEnabled);
 		if (_godRays)
 			_postProcessManager->DrawGodRaysPass(mCommandList.Get(), mCurrFrameResource);
 		if (_ssr)
@@ -308,6 +309,7 @@ void MyApp::UpdateMainPassCBs(const GameTimer& gt)
 	_GBufferCB.EyePosW = _camera.GetPosition3f();
 	_GBufferCB.ScreenSize = { (float)mClientWidth, (float)mClientHeight };
 	_GBufferCB.FrameIndex++;
+	_GBufferCB.taaEnabled = (int)_taaEnabled;
 	auto currGBufferCB = mCurrFrameResource->GBufferPassCB.get();
 	currGBufferCB->CopyData(0, _GBufferCB);
 	
@@ -389,6 +391,7 @@ void MyApp::DrawInterface()
 	{
 		ImGui::Checkbox("Wireframe", &_isWireframe);
 		DrawPostProcesses();
+		ImGui::Checkbox("TAA Enabled", &_taaEnabled);
 		ImGui::EndTabItem();
 	}
 
@@ -1573,6 +1576,10 @@ void MyApp::InitManagers()
 	_terrainManager = std::make_unique<TerrainManager>(_device.Get());
 	_terrainManager->BindToOtherData(&_camera);
 	_terrainManager->Init();
+
+	_taaManager = std::make_unique<TAAManager>(_device.Get());
+	_taaManager->BindToManagers(_lightingManager.get(), _gBuffer.get());
+	_taaManager->Init(mClientWidth, mClientHeight);
 }
 
 void MyApp::GBufferPass()

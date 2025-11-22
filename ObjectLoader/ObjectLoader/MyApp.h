@@ -22,6 +22,7 @@
 #include "PostProcessManager.h"
 #include "CubeMapManager.h"
 #include "TerrainManager.h"
+#include "TAAManager.h"
 
 struct Toast {
 	std::string message;
@@ -136,6 +137,7 @@ private:
 	std::unique_ptr<CubeMapManager> _cubeMapManager = nullptr;
 	std::unique_ptr<PostProcessManager> _postProcessManager = nullptr;
 	std::unique_ptr<TerrainManager> _terrainManager = nullptr;
+	std::unique_ptr<TAAManager> _taaManager = nullptr;
 
 	GBufferPassConstants _GBufferCB;
 	LightingPassConstants _lightingCB;
@@ -160,5 +162,8 @@ private:
 	bool _ssr = false;
 	bool _chromaticAberration = false;
 	bool _vignetting = false;
+
+	//taa
+	bool _taaEnabled = false;
 };
 

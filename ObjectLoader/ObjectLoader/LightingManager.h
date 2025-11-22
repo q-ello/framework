@@ -114,6 +114,11 @@ public:
 		return TextureManager::rtvHeapAllocator->GetCpuHandle(_middlewareTexture.otherIndex);
 	}
 
+	ID3D12Resource* GetMiddlewareTexture() const
+	{
+		return _middlewareTexture.Resource.Get();
+	}
+
 	D3D12_GPU_DESCRIPTOR_HANDLE GetFinalTextureSRV() const
 	{
 		return TextureManager::srvHeapAllocator->GetGpuHandle(_finalTextureSrvIndex);
