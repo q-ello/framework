@@ -307,6 +307,7 @@ void MyApp::UpdateMainPassCBs(const GameTimer& gt)
 	_GBufferCB.DeltaTime = gt.DeltaTime();
 	_GBufferCB.EyePosW = _camera.GetPosition3f();
 	_GBufferCB.ScreenSize = { (float)mClientWidth, (float)mClientHeight };
+	_GBufferCB.FrameIndex++;
 	auto currGBufferCB = mCurrFrameResource->GBufferPassCB.get();
 	currGBufferCB->CopyData(0, _GBufferCB);
 	

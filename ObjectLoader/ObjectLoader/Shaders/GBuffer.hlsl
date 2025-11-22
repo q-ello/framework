@@ -56,6 +56,7 @@ cbuffer cbPass : register(b2)
     float3 gEyePosW;
     float gDeltaTime;
     float2 gScreenSize;
+    uint frameIndex;
 };
 
 struct VertexIn
@@ -77,6 +78,29 @@ struct VertexOut
     float3 BiNormalW : BINORMAL;
 };
 
+float Halton(uint index, uint base)
+{
+    float f = 1.0f;
+    float result = 0.0f;
+    
+    while (index > 0)
+    {
+        f /= (float) base;
+        result += f * (float) (index % base);
+        index = (uint) floor((float) index / (float) base);
+    }
+    
+    return result;
+}
+
+float2 GenerateJitter(int frameIndex)
+{
+    float2 jitter;
+    jitter.x = Halton(frameIndex, 2);
+    jitter.y = Halton(frameIndex, 3);
+    return jitter;
+}
+
 VertexOut GBufferVS(VertexIn vin)
 {
     VertexOut vout = (VertexOut) 0.0f;
@@ -87,6 +111,8 @@ VertexOut GBufferVS(VertexIn vin)
 
     // Transform to homogeneous clip space.
     vout.PosH = mul(posW, gViewProj);
+    
+    vout.PosH += float4(GenerateJitter(frameIndex) * vout.PosH.w / gScreenSize, 0, 0);
     
     vout.TexC = vin.TexC;
     

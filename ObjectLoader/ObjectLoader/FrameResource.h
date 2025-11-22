@@ -48,7 +48,8 @@ struct GBufferPassConstants
     DirectX::XMFLOAT3 EyePosW = { 0.0f, 0.0f, 0.0f };
     float DeltaTime = 0.0f;
     DirectX::XMFLOAT2 ScreenSize = { 0.0f, 0.0f };
-    float pad[2] = { 0.f, 0.f };
+	UINT FrameIndex = 0;
+    float pad = { 0.f };
 };
 
 struct LightingPassConstants
