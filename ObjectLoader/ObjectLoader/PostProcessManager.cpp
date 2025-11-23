@@ -460,7 +460,7 @@ void PostProcessManager::BuildTextures()
 	CD3DX12_HEAP_PROPERTIES heapProps(D3D12_HEAP_TYPE_DEFAULT);
 
 	ThrowIfFailed(_device->CreateCommittedResource(
-		&heapProps, D3D12_HEAP_FLAG_NONE, &texDesc, D3D12_RESOURCE_STATE_COMMON,
+		&heapProps, D3D12_HEAP_FLAG_NONE, &texDesc, D3D12_RESOURCE_STATE_GENERIC_READ,
 		&clearValue, IID_PPV_ARGS(&_lightOcclusionMask.Resource)));
 
 	// Create RTV
@@ -510,15 +510,15 @@ void PostProcessManager::BuildTextures()
 		CD3DX12_HEAP_PROPERTIES heapProps(D3D12_HEAP_TYPE_DEFAULT);
 
 		ThrowIfFailed(_device->CreateCommittedResource(
-			&heapProps, D3D12_HEAP_FLAG_NONE, &texDesc, D3D12_RESOURCE_STATE_COMMON,
+			&heapProps, D3D12_HEAP_FLAG_NONE, &texDesc, D3D12_RESOURCE_STATE_GENERIC_READ,
 			&clearValue, IID_PPV_ARGS(&_ssrTexture.Resource)));
 
 		ThrowIfFailed(_device->CreateCommittedResource(
-			&heapProps, D3D12_HEAP_FLAG_NONE, &texDesc, D3D12_RESOURCE_STATE_COMMON,
+			&heapProps, D3D12_HEAP_FLAG_NONE, &texDesc, D3D12_RESOURCE_STATE_GENERIC_READ,
 			&clearValue, IID_PPV_ARGS(&_chromaticAberrationTexture.Resource)));
 
 		ThrowIfFailed(_device->CreateCommittedResource(
-			&heapProps, D3D12_HEAP_FLAG_NONE, &texDesc, D3D12_RESOURCE_STATE_COMMON,
+			&heapProps, D3D12_HEAP_FLAG_NONE, &texDesc, D3D12_RESOURCE_STATE_GENERIC_READ,
 			&clearValue, IID_PPV_ARGS(&_vignettingTexture.Resource)));
 
 		// Create RTV

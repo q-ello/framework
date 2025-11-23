@@ -12,16 +12,17 @@ public:
 	~TAAManager();
 
 	void Init(int width, int height);
-	void BindToManagers(LightingManager* lightingManager, GBuffer* gBuffer);
+	void BindToManagers(LightingManager* lightingManager, GBuffer* gBuffer, Camera* camera);
 	void ApplyTAA(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, bool taaEnabled);
 	void OnResize(int newWidth, int newHeight);
-	void UpdateTAAParameters(FrameResource* currFrame);
+	void UpdateTAAParameters(FrameResource* currFrame, DirectX::XMFLOAT4X4 PrevViewProj, DirectX::XMFLOAT4X4 CurrInvViewProj);
 
 private:
 	void BuildRootSignature();
 	void BuildShaders();
 	void BuildPSO();
 	void BuildTextures();
+	void ChangeHistoryState(ID3D12GraphicsCommandList* cmdList, int index, D3D12_RESOURCE_STATES newState);
 
 private:
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> _rootSignature;

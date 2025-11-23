@@ -12,7 +12,7 @@ struct RtvSrvTexture
 	Microsoft::WRL::ComPtr<ID3D12Resource> Resource = nullptr;
 	int otherIndex = -1;
 	int SrvIndex = -1;
-	D3D12_RESOURCE_STATES prevState = D3D12_RESOURCE_STATE_COMMON;
+	D3D12_RESOURCE_STATES prevState = D3D12_RESOURCE_STATE_GENERIC_READ;
 
 	void Reset()
 	{

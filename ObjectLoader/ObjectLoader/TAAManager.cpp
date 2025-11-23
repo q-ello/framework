@@ -22,11 +22,12 @@ void TAAManager::Init(int width, int height)
 	BuildTextures();
 }
 
-void TAAManager::BindToManagers(LightingManager* lightingManager, GBuffer* gBuffer)
+void TAAManager::BindToManagers(LightingManager* lightingManager, GBuffer* gBuffer, Camera* camera)
 {
 	_lightingManager = lightingManager;
 	_fullscreenVS = _lightingManager->GetFullScreenVS();
 	_gBuffer = gBuffer;
+	_camera = camera;
 }
 
 
@@ -61,8 +62,14 @@ void TAAManager::OnResize(int newWidth, int newHeight)
 	BuildTextures();
 }
 
-void TAAManager::UpdateTAAParameters(FrameResource* currFrame)
+void TAAManager::UpdateTAAParameters(FrameResource* currFrame, DirectX::XMFLOAT4X4 PrevViewProj, DirectX::XMFLOAT4X4 CurrInvViewProj)
 {
+	//we'll just call this before updating it in lighting pass
+	TAAConstants taaParams;
+	taaParams.PrevViewProj = PrevViewProj;
+	taaParams.CurrInvViewProj = CurrInvViewProj;
+	taaParams.ScreenSize = { (float)_width, (float)_height };
+	currFrame->TAACB->CopyData(0, taaParams);
 }
 
 void TAAManager::BuildRootSignature()
@@ -72,13 +79,17 @@ void TAAManager::BuildRootSignature()
 		litSceneTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
 		CD3DX12_DESCRIPTOR_RANGE historyTexTable;
 		historyTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1);
+		CD3DX12_DESCRIPTOR_RANGE depthTexTable;
+		depthTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 2);
 
-		const int rootParameterCount = 2;
+		const int rootParameterCount = 4;
 
 		CD3DX12_ROOT_PARAMETER slotRootParameter[rootParameterCount];
 
 		slotRootParameter[0].InitAsDescriptorTable(1, &litSceneTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
 		slotRootParameter[1].InitAsDescriptorTable(1, &historyTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
+		slotRootParameter[2].InitAsDescriptorTable(1, &depthTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
+		slotRootParameter[3].InitAsConstantBufferView(0, 1);
 
 		CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(rootParameterCount, slotRootParameter, TextureManager::GetLinearSamplers().size(), TextureManager::GetLinearSamplers().data(), D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 
@@ -144,10 +155,11 @@ void TAAManager::BuildTextures()
 	for (int i = 0; i < 2; i++)
 	{
 		ThrowIfFailed(_device->CreateCommittedResource(
-			&heapProps, D3D12_HEAP_FLAG_NONE, &texDesc, i == 0 ? D3D12_RESOURCE_STATE_COMMON : D3D12_RESOURCE_STATE_RENDER_TARGET,
+			&heapProps, D3D12_HEAP_FLAG_NONE, &texDesc, i == 0 ? D3D12_RESOURCE_STATE_GENERIC_READ : D3D12_RESOURCE_STATE_RENDER_TARGET,
 			&clearValue, IID_PPV_ARGS(&_historyTextures[i].Resource)));
+		_historyTextures[i].prevState = i == 0 ? D3D12_RESOURCE_STATE_GENERIC_READ : D3D12_RESOURCE_STATE_RENDER_TARGET;
 		ThrowIfFailed(_device->CreateCommittedResource(
-			&heapProps, D3D12_HEAP_FLAG_NONE, &texDesc, D3D12_RESOURCE_STATE_COMMON,
+			&heapProps, D3D12_HEAP_FLAG_NONE, &texDesc, D3D12_RESOURCE_STATE_GENERIC_READ,
 			&clearValue, IID_PPV_ARGS(&_historyVelocities[i].Resource)));
 
 		_device->CreateRenderTargetView(_historyTextures[i].Resource.Get(), &rtvDesc,
@@ -160,6 +172,18 @@ void TAAManager::BuildTextures()
 		_device->CreateShaderResourceView(_historyVelocities[i].Resource.Get(), &srvDesc,
 			TextureManager::srvHeapAllocator->GetCpuHandle(_historyVelocities[i].SrvIndex));
 	}
+}
+
+void TAAManager::ChangeHistoryState(ID3D12GraphicsCommandList* cmdList, int index, D3D12_RESOURCE_STATES newState)
+{
+	RtvSrvTexture& texture = _historyTextures[index];
+	if (texture.prevState == newState)
+		return;
+
+	cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(
+		texture.Resource.Get(),
+		texture.prevState, newState));
+	texture.prevState = newState;
 }
 
 
@@ -176,6 +200,8 @@ void TAAManager::ApplyTAA(ID3D12GraphicsCommandList* cmdList, FrameResource* cur
     {
         _historyValid = true;
 
+		ChangeHistoryState(cmdList, _currentHistoryIndex, D3D12_RESOURCE_STATE_COPY_DEST);
+
         D3D12_TEXTURE_COPY_LOCATION destLocation = {};
         destLocation.pResource = _historyTextures[_currentHistoryIndex].Resource.Get();
         destLocation.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
@@ -189,26 +215,28 @@ void TAAManager::ApplyTAA(ID3D12GraphicsCommandList* cmdList, FrameResource* cur
 
 		//copying texture for first frame while we don't have history
         cmdList->CopyTextureRegion(&destLocation, 0, 0, 0, &srcLocation, nullptr);
+
+		ChangeHistoryState(cmdList, _currentHistoryIndex, D3D12_RESOURCE_STATE_GENERIC_READ);
     }
 
 	cmdList->OMSetRenderTargets(1, &TextureManager::rtvHeapAllocator->GetCpuHandle(_historyTextures[1 - _currentHistoryIndex].otherIndex), true, nullptr);
 	cmdList->SetPipelineState(_PSO.Get());
 	cmdList->SetGraphicsRootSignature(_rootSignature.Get());
 
-	//drawing
+	//setting up data and drawing
 	cmdList->SetGraphicsRootDescriptorTable(0, _lightingManager->GetFinalTextureSRV());
-	cmdList->SetGraphicsRootDescriptorTable(1, TextureManager::srvHeapAllocator->GetGpuHandle(_historyTextures[_currentHistoryIndex].SrvIndex));
+	cmdList->SetGraphicsRootDescriptorTable(1, 
+		TextureManager::srvHeapAllocator->GetGpuHandle(_historyTextures[_currentHistoryIndex].SrvIndex));
+	cmdList->SetGraphicsRootDescriptorTable(2, _gBuffer->GetDepthSRV());
+	cmdList->SetGraphicsRootConstantBufferView(3, currFrameResource->TAACB->Resource()->GetGPUVirtualAddress());
+	
 	cmdList->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 	cmdList->DrawInstanced(3, 1, 0, 0);
 
 	//swapping textures
 	_currentHistoryIndex = (_currentHistoryIndex + 1) % 2;
-	cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(
-		_historyTextures[_currentHistoryIndex].Resource.Get(),
-		D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_COMMON));
-	cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(
-		_historyTextures[1 - _currentHistoryIndex].Resource.Get(),
-		D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_RENDER_TARGET));
+	ChangeHistoryState(cmdList, _currentHistoryIndex, D3D12_RESOURCE_STATE_GENERIC_READ);
+	ChangeHistoryState(cmdList, 1 - _currentHistoryIndex, D3D12_RESOURCE_STATE_RENDER_TARGET);
 
 	_lightingManager->SetFinalTextureIndex(_historyTextures[_currentHistoryIndex].SrvIndex);
 }

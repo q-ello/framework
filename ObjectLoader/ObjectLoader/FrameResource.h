@@ -156,6 +156,14 @@ struct TerrainConstants
     int gridSize = 33;
 };
 
+struct TAAConstants
+{
+	DirectX::XMFLOAT4X4 PrevViewProj = MathHelper::Identity4x4();
+	DirectX::XMFLOAT4X4 CurrInvViewProj = MathHelper::Identity4x4();
+	DirectX::XMFLOAT2 ScreenSize = { 0.0f, 0.0f };
+	float pad[2] = {0.0f, 0.0f};
+};
+
 
 // Stores the resources needed for the CPU to build the command lists
 // for a frame.  
@@ -196,9 +204,12 @@ public:
 	std::unique_ptr<UploadBuffer<TerrainConstants>> TerrainCB = nullptr;
 	std::unique_ptr<UploadBuffer<GridInfo>> GridInfoCB = nullptr;
 
+	std::unique_ptr<UploadBuffer<TAAConstants>> TAACB = nullptr;
+
     std::unordered_map<std::uint32_t, std::unique_ptr<UploadBuffer<OpaqueObjectConstants>>> OpaqueObjCB = {};
     std::unordered_map<std::uint32_t, std::unique_ptr<UploadBuffer<MaterialConstants>>> MaterialCB = {};
     static UINT staticObjectCount;
+
     // Fence value to mark commands up to this fence point.  This lets us
     // check if these frame resources are still in use by the GPU.
     UINT64 Fence = 0;

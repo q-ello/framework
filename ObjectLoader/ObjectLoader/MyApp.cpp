@@ -86,6 +86,11 @@ void MyApp::OnResize()
 		_postProcessManager->OnResize(mClientWidth, mClientHeight);
 
 	_camera.SetLens(0.25f * MathHelper::Pi, AspectRatio(), 10.f, 2000.f);
+
+	if (_taaEnabled && _taaManager != nullptr)
+	{
+		_taaManager->OnResize(mClientWidth, mClientHeight);
+	}
 	_camera.UpdateFrustum();
 }
 
@@ -111,7 +116,11 @@ void MyApp::Update(const GameTimer& gt)
 	}
 
 	UpdateObjectCBs(gt);
+
+	//update taa right before updating lighting cb since we need previous frame's viewproj
 	UpdateMainPassCBs(gt);
+	_taaManager->UpdateTAAParameters(mCurrFrameResource, _prevViewProj, _lightingCB.InvViewProj);
+
 	_lightingManager->UpdateLightCBs(mCurrFrameResource);
 	
 	//camera gets changed every frame so we update ssr every frame too
@@ -316,6 +325,10 @@ void MyApp::UpdateMainPassCBs(const GameTimer& gt)
 	//update pass for lighting
 	XMStoreFloat4x4(&_lightingCB.InvViewProj, XMMatrixTranspose(invViewProj));
 	_lightingCB.EyePosW = _camera.GetPosition3f();
+
+	//store for taa
+	_prevViewProj = _lightingCB.ViewProj;
+
 	XMStoreFloat4x4(&_lightingCB.ViewProj, XMMatrixTranspose(viewProj));
 	_lightingCB.RTSize = { (float)mClientWidth, (float)mClientHeight };
 	_lightingCB.mousePosition = {(float)_lastMousePos.x, (float)_lastMousePos.y};
@@ -1578,7 +1591,7 @@ void MyApp::InitManagers()
 	_terrainManager->Init();
 
 	_taaManager = std::make_unique<TAAManager>(_device.Get());
-	_taaManager->BindToManagers(_lightingManager.get(), _gBuffer.get());
+	_taaManager->BindToManagers(_lightingManager.get(), _gBuffer.get(), &_camera);
 	_taaManager->Init(mClientWidth, mClientHeight);
 }
 

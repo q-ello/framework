@@ -141,6 +141,7 @@ private:
 
 	GBufferPassConstants _GBufferCB;
 	LightingPassConstants _lightingCB;
+	DirectX::XMFLOAT4X4 _prevViewProj = MathHelper::Identity4x4();
 
 	float _cameraSpeed = 0.01f;
 	float _mbDown = false;
