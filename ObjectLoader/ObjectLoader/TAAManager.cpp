@@ -13,8 +13,6 @@ void TAAManager::Init(int width, int height)
 	{
 		_historyTextures[i].otherIndex = TextureManager::rtvHeapAllocator->Allocate();
 		_historyTextures[i].SrvIndex = TextureManager::srvHeapAllocator->Allocate();
-		_historyVelocities[i].otherIndex = TextureManager::rtvHeapAllocator->Allocate();
-		_historyVelocities[i].SrvIndex = TextureManager::srvHeapAllocator->Allocate();
 	}
 	BuildRootSignature();
 	BuildShaders();
@@ -34,6 +32,23 @@ void TAAManager::BindToManagers(LightingManager* lightingManager, GBuffer* gBuff
 void TAAManager::BuildShaders()
 {
 	_PS = d3dUtil::CompileShader(L"Shaders\\TAA.hlsl", nullptr, "TAAPS", "ps_5_1");
+
+	ID3D12ShaderReflection* refl = nullptr;
+	D3DReflect(_PS->GetBufferPointer(), _PS->GetBufferSize(),
+		IID_ID3D12ShaderReflection, (void**)&refl);
+
+	D3D12_SHADER_DESC desc;
+	refl->GetDesc(&desc);
+
+	for (UINT i = 0; i < desc.BoundResources; i++) {
+		D3D12_SHADER_INPUT_BIND_DESC bind;
+		refl->GetResourceBindingDesc(i, &bind);
+
+		char buf[256];
+		sprintf(buf, "Resource %s: type=%d, bindPoint=%u, space=%u\n",
+			bind.Name, bind.Type, bind.BindPoint, bind.Space);
+		OutputDebugStringA(buf);
+	}
 }
 
 void TAAManager::BuildPSO()
@@ -112,8 +127,6 @@ void TAAManager::BuildRootSignature()
 	}
 }
 
-
-
 void TAAManager::BuildTextures()
 {
 	D3D12_RESOURCE_DESC texDesc = {};
@@ -158,19 +171,12 @@ void TAAManager::BuildTextures()
 			&heapProps, D3D12_HEAP_FLAG_NONE, &texDesc, i == 0 ? D3D12_RESOURCE_STATE_GENERIC_READ : D3D12_RESOURCE_STATE_RENDER_TARGET,
 			&clearValue, IID_PPV_ARGS(&_historyTextures[i].Resource)));
 		_historyTextures[i].prevState = i == 0 ? D3D12_RESOURCE_STATE_GENERIC_READ : D3D12_RESOURCE_STATE_RENDER_TARGET;
-		ThrowIfFailed(_device->CreateCommittedResource(
-			&heapProps, D3D12_HEAP_FLAG_NONE, &texDesc, D3D12_RESOURCE_STATE_GENERIC_READ,
-			&clearValue, IID_PPV_ARGS(&_historyVelocities[i].Resource)));
 
 		_device->CreateRenderTargetView(_historyTextures[i].Resource.Get(), &rtvDesc,
 			TextureManager::rtvHeapAllocator->GetCpuHandle(_historyTextures[i].otherIndex));
-		_device->CreateRenderTargetView(_historyVelocities[i].Resource.Get(), &rtvDesc,
-			TextureManager::rtvHeapAllocator->GetCpuHandle(_historyVelocities[i].otherIndex));
 
 		_device->CreateShaderResourceView(_historyTextures[i].Resource.Get(), &srvDesc,
 			TextureManager::srvHeapAllocator->GetCpuHandle(_historyTextures[i].SrvIndex));
-		_device->CreateShaderResourceView(_historyVelocities[i].Resource.Get(), &srvDesc,
-			TextureManager::srvHeapAllocator->GetCpuHandle(_historyVelocities[i].SrvIndex));
 	}
 }
 
@@ -185,8 +191,6 @@ void TAAManager::ChangeHistoryState(ID3D12GraphicsCommandList* cmdList, int inde
 		texture.prevState, newState));
 	texture.prevState = newState;
 }
-
-
 	
 void TAAManager::ApplyTAA(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, bool taaEnabled)
 {
@@ -227,7 +231,7 @@ void TAAManager::ApplyTAA(ID3D12GraphicsCommandList* cmdList, FrameResource* cur
 	cmdList->SetGraphicsRootDescriptorTable(0, _lightingManager->GetFinalTextureSRV());
 	cmdList->SetGraphicsRootDescriptorTable(1, 
 		TextureManager::srvHeapAllocator->GetGpuHandle(_historyTextures[_currentHistoryIndex].SrvIndex));
-	cmdList->SetGraphicsRootDescriptorTable(2, _gBuffer->GetDepthSRV());
+	cmdList->SetGraphicsRootDescriptorTable(2, _gBuffer->GetGBufferTextureSRV(GBufferInfo::Depth));
 	cmdList->SetGraphicsRootConstantBufferView(3, currFrameResource->TAACB->Resource()->GetGPUVirtualAddress());
 	
 	cmdList->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);

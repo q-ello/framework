@@ -497,7 +497,7 @@ void LightingManager::AddShadowMask(TextureHandle handle)
 	_shadowMasks.push_back(handle);
 }
 
-void LightingManager::DeleteShadowMask(int i)
+void LightingManager::DeleteShadowMask(size_t i)
 {
 	const std::string texName = _shadowMasks[i].name;
 	TextureManager::deleteTexture(std::wstring(texName.begin(), texName.end()), 1);
@@ -777,8 +777,8 @@ void LightingManager::BuildDescriptors()
 	D3D12_RESOURCE_DESC texDesc = {};
 	texDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
 	texDesc.Alignment = 0;
-	texDesc.Width = _shadowMapResolution;
-	texDesc.Height = _shadowMapResolution;
+	texDesc.Width = (UINT)_shadowMapResolution;
+	texDesc.Height = (UINT)_shadowMapResolution;
 	texDesc.DepthOrArraySize = (UINT16)gCascadesCount; // first cascades
 	texDesc.MipLevels = 1;
 	texDesc.Format = DXGI_FORMAT_R32_TYPELESS; // for depth
@@ -834,8 +834,8 @@ void LightingManager::BuildDescriptors()
 	//rects for shadows should be different
 	_shadowViewport.Height = _shadowMapResolution;
 	_shadowViewport.Width = _shadowMapResolution;
-	_shadowScissorRect.right = _shadowMapResolution;
-	_shadowScissorRect.bottom = _shadowMapResolution;
+	_shadowScissorRect.right = (LONG)_shadowMapResolution;
+	_shadowScissorRect.bottom = (LONG)_shadowMapResolution;
 
 	//allocating indices for middleware texture once
 	_middlewareTexture.SrvIndex = TextureManager::srvHeapAllocator->Allocate();

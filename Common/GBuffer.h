@@ -23,13 +23,14 @@ public:
 
 	void CreateGBufferTexture(int i, D3D12_CPU_DESCRIPTOR_HANDLE otherHeapHandle, D3D12_CPU_DESCRIPTOR_HANDLE srvHeapHandle);
 
-	D3D12_CPU_DESCRIPTOR_HANDLE DepthStencilView();
+	D3D12_CPU_DESCRIPTOR_HANDLE DepthStencilView() const;
 
 	void ClearInfo(const FLOAT* color);
 
 	static int InfoCount(bool forRTVS = true)
 	{
-		return (int)GBufferInfo::Count - (int)forRTVS;
+		//it's -1 if it's rtvs because of depth and it's -2 if it's srvs because of motion vectors
+		return (int)GBufferInfo::Count - (int)(forRTVS);
 	}
 
 	void ChangeRTVsState(D3D12_RESOURCE_STATES stateAfter);
@@ -42,7 +43,7 @@ public:
 	DXGI_FORMAT_R16G16B16A16_FLOAT,		// Normals
 	DXGI_FORMAT_R16G16B16A16_FLOAT,		//Emissive
 	DXGI_FORMAT_R8G8B8A8_UNORM,			//ORM
-	DXGI_FORMAT_R16G16B16A16_FLOAT,		//Tex Coords
+	DXGI_FORMAT_R16G16_FLOAT,			//Tex Coords
 	DXGI_FORMAT_R24G8_TYPELESS,         // Depth
 	};
 
@@ -51,14 +52,9 @@ public:
 		return TextureManager::srvHeapAllocator->GetGpuHandle(_info[0].SrvIndex);
 	}
 
-	D3D12_GPU_DESCRIPTOR_HANDLE GetDepthSRV() const
+	D3D12_GPU_DESCRIPTOR_HANDLE GetGBufferTextureSRV(GBufferInfo type) const
 	{
-		return TextureManager::srvHeapAllocator->GetGpuHandle(_info[(int)GBufferInfo::Depth].SrvIndex);
-	}
-
-	D3D12_GPU_DESCRIPTOR_HANDLE GetNormalSRV() const
-	{
-		return TextureManager::srvHeapAllocator->GetGpuHandle(_info[(int)GBufferInfo::Normals].SrvIndex);
+		return TextureManager::srvHeapAllocator->GetGpuHandle(_info[(int)type].SrvIndex);
 	}
 
 private:

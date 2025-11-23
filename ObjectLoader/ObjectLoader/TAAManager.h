@@ -40,7 +40,6 @@ private:
 	int _height = 0;
 
 	RtvSrvTexture _historyTextures[2];
-	RtvSrvTexture _historyVelocities[2];
 	int _currentHistoryIndex = 0;
 
 	bool _historyValid = false;

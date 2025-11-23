@@ -128,7 +128,7 @@ public:
 
 	//shadow mask stuff
 	void AddShadowMask(TextureHandle handle);
-	void DeleteShadowMask(int i);
+	void DeleteShadowMask(size_t i);
 	void SetSelectedShadowMask(size_t i)
 	{
 		_selectedShadowMask = i;

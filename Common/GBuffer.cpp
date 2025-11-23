@@ -120,7 +120,7 @@ void GBuffer::CreateGBufferTexture(int i, D3D12_CPU_DESCRIPTOR_HANDLE otherHeapH
 	_device->CreateShaderResourceView(_info[i].Resource.Get(), &srvDesc, srvHeapHandle);
 }
 
-D3D12_CPU_DESCRIPTOR_HANDLE GBuffer::DepthStencilView()
+D3D12_CPU_DESCRIPTOR_HANDLE GBuffer::DepthStencilView() const
 {
 	return TextureManager::dsvHeapAllocator->GetCpuHandle(_info[(int)GBufferInfo::Depth].otherIndex);
 }

@@ -63,7 +63,7 @@ void PostProcessManager::OcclusionMaskPass(ID3D12GraphicsCommandList* cmdList, F
 	//light occlusion mask pass
 	cmdList->SetPipelineState(_lightOcclusionMaskPSO.Get());
 	cmdList->SetGraphicsRootSignature(_lightOcclusionMaskRootSignature.Get());
-	cmdList->SetGraphicsRootDescriptorTable(0, _gBuffer->GetDepthSRV());
+	cmdList->SetGraphicsRootDescriptorTable(0, _gBuffer->GetGBufferTextureSRV(GBufferInfo::Depth));
 	cmdList->SetGraphicsRootDescriptorTable(1, _lightingManager->GetCascadeShadowSRV()); //cascades shadow map
 
 	auto lightingPassCB = currFrameResource->LightingPassCB->Resource();
@@ -112,7 +112,7 @@ void PostProcessManager::DrawSSR(ID3D12GraphicsCommandList* cmdList, FrameResour
 	_lightingManager->ChangeMiddlewareState(cmdList, D3D12_RESOURCE_STATE_GENERIC_READ);
 	cmdList->SetGraphicsRootDescriptorTable(0, _lightingManager->GetFinalTextureSRV());
 
-	cmdList->SetGraphicsRootDescriptorTable(1, _gBuffer->GetNormalSRV());
+	cmdList->SetGraphicsRootDescriptorTable(1, _gBuffer->GetGBufferTextureSRV(GBufferInfo::Normals));
 	
 	auto lightingPassCB = currFrameResource->LightingPassCB->Resource();
 	cmdList->SetGraphicsRootConstantBufferView(2, lightingPassCB->GetGPUVirtualAddress());
