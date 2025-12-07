@@ -22,9 +22,9 @@ float4 ChromaticPS(VertexOut pin) : SV_Target
     float2 uvB = 0.5 + centeredUV * (1.0 - aberration);
     
     float3 col;
-    col.r = gLitScene.Sample(gsamLinear, uvR);
-    col.g = gLitScene.Sample(gsamLinear, uvG);
-    col.b = gLitScene.Sample(gsamLinear, uvB);
+    col.r = gLitScene.Sample(gsamLinear, uvR).r;
+    col.g = gLitScene.Sample(gsamLinear, uvG).g;
+    col.b = gLitScene.Sample(gsamLinear, uvB).b;
     
     // fade near screen edges (to avoid hard clamp artifacts)
     float edgeFade = smoothstep(1.0, 0.95, max(abs(centeredUV.x * 2.0), abs(centeredUV.y * 2.0)));

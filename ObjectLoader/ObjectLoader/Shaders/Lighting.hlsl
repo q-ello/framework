@@ -121,33 +121,36 @@ float3 PBRShading(float3 coords, float3 lightDir, float3 lightColor, float3 worl
 float4 ComputeLocalLighting(int lightIndex, float3 posW, float3 coords)
 {
     Light light = lights[lightIndex];
-    
-    if (!IsPixelLit(light, posW))
-        return float4(0, 0, 0, 0);
-    
-    float4 albedo = gBaseColor.Load(coords);
-    
-    float3 normal = gNormal.Load(coords).xyz;
-    
-    float3 lightDir = posW - light.position;
-    float3 normalizedLightDir = normalize(lightDir);
-    
-    float spotFactor = 1.f;
 
-    if (light.type == 1)
+    float4 outputColor = float4(0, 0, 0, 0);
+    
+    if (IsPixelLit(light, posW))
     {
-        float angle = dot(normalizedLightDir, normalize(light.direction));
-        spotFactor = saturate((angle - cos(light.angle)) / (1.0f - cos(light.angle)));
-        spotFactor = pow(spotFactor, 4.f);
-    }
+        float4 albedo = gBaseColor.Load(coords);
     
-    float attenuation = saturate(1.0f - length(lightDir) / light.radius);
+        float3 normal = gNormal.Load(coords).xyz;
     
-    float finalIntensity = attenuation * spotFactor * light.intensity;
+        float3 lightDir = posW - light.position;
+        float3 normalizedLightDir = normalize(lightDir);
     
-    float3 finalColor = PBRShading(coords, -normalizedLightDir, light.color, posW, 1.f, finalIntensity);
+        float spotFactor = 1.f;
 
-    return float4(finalColor, albedo.a);
+        if (light.type == 1)
+        {
+            float angle = dot(normalizedLightDir, normalize(light.direction));
+            spotFactor = saturate((angle - cos(light.angle)) / (1.0f - cos(light.angle)));
+            spotFactor = pow(spotFactor, 4.f);
+        }
+    
+        float attenuation = saturate(1.0f - length(lightDir) / light.radius);
+    
+        float finalIntensity = attenuation * spotFactor * light.intensity;
+    
+        float3 finalColor = PBRShading(coords, -normalizedLightDir, light.color, posW, 1.f, finalIntensity);
+
+        outputColor = float4(finalColor, albedo.a);
+    }
+    return outputColor;
 }
 
 //actually just a full quad pass, not only for directional light

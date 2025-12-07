@@ -153,12 +153,14 @@ float TessEdge(float3 p0, float3 p1, float2 s0, float2 s1)
     
     if (screenTess <= 1.f)
     {
-        return 1.f;
+        screenTess = 1.f;
     }
+    else
+    {
+        float maxTess = 64.0f;
     
-    float maxTess = 64.0f;
-    
-    screenTess = clamp(screenTess, 1.0f, maxTess);
+        screenTess = clamp(screenTess, 1.0f, maxTess);
+    }
     
     return screenTess;
 }

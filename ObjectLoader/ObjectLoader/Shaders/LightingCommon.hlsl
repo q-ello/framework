@@ -58,31 +58,27 @@ struct VertexOut
 
 bool IsPixelLit(Light light, float3 posW)
 {
-    if (light.active == 0)
+    bool output = false;
+    if (light.active != 0)
     {
-        return false;
-    }
+        float3 lightDir = posW - light.position;
+        float3 normalizedLightDir = normalize(lightDir);
     
-    float3 lightDir = posW - light.position;
-    float3 normalizedLightDir = normalize(lightDir);
-    
-    if (length(lightDir) > light.radius)
-    {
-        return false;
-    }
-    
-    float angle = dot(normalizedLightDir, normalize(light.direction));
-
-    if (light.type == 1)
-    {
-        
-        if (angle < cos(light.angle))
+        if (length(lightDir) <= light.radius)
         {
-            return false;
+            float angle = dot(normalizedLightDir, normalize(light.direction));
+
+            if (light.type == 1 && angle >= cos(light.angle))
+            {
+                output = true;
+            }
+            else
+            {
+                output = true;
+            }
         }
     }
-    
-    return true;
+    return output;
 }
 
 //compute shadows
