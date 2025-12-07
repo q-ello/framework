@@ -160,7 +160,8 @@ void MyApp::Draw(const GameTimer& gt)
 		GBufferPass();
 		LightingPass();
 		_cubeMapManager->Draw(mCommandList.Get(), _currFrameResource);
-		_taaManager->ApplyTaa(mCommandList.Get(), _currFrameResource, _taaEnabled);
+		if (_taaEnabled)
+			_taaManager->ApplyTaa(mCommandList.Get(), _currFrameResource);
 		if (_godRays)
 			_postProcessManager->DrawGodRaysPass(mCommandList.Get(), _currFrameResource);
 		if (_ssr)
@@ -199,6 +200,8 @@ void MyApp::Draw(const GameTimer& gt)
 
 	ThrowIfFailed(mSwapChain->Present(0, 0));
 	mCurrBackBuffer = (mCurrBackBuffer + 1) % SwapChainBufferCount;
+
+	GBuffer::ChangeDepthTexture();
 
 	// Advance the fence value to mark commands up to this fence point.
 	_currFrameResource->Fence = ++mCurrentFence;
@@ -329,7 +332,7 @@ void MyApp::UpdateMainPassCBs(const GameTimer& gt)
 	const auto currLightingCb = _currFrameResource->LightingPassCb.get();
 	currLightingCb->CopyData(0, _lightingCb);
 
-	_lightingManager->UpdateDirectionalLightCB(_currFrameResource);
+	_lightingManager->UpdateDirectionalLightCb(_currFrameResource);
 }
 
 void MyApp::BuildDescriptorHeaps()
@@ -532,7 +535,7 @@ void MyApp::DrawShadowMasksList(int& btnId) const
 
 		ImGui::Spacing();
 
-		ImGui::DragFloat("UV Scale", &_lightingManager->shadowMaskUVScale, 0.05f, 0.1f, 1.0f);
+		ImGui::DragFloat("UV Scale", &_lightingManager->ShadowMaskUvScale, 0.05f, 0.1f, 1.0f);
 
 		const size_t selectedShadowMask = _lightingManager->SelectedShadowMask();
 

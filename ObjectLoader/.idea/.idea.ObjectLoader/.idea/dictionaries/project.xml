@@ -5,12 +5,16 @@
       <w>chromatica</w>
       <w>chromaticaberration</w>
       <w>cmds</w>
+      <w>dirlight</w>
       <w>disp</w>
+      <w>dsvs</w>
       <w>emiss</w>
       <w>godrays</w>
       <w>imgui</w>
+      <w>locallights</w>
       <w>lods</w>
       <w>metall</w>
+      <w>projs</w>
       <w>ritem</w>
       <w>rtvs</w>
       <w>srvs</w>

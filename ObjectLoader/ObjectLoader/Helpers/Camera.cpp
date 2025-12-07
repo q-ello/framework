@@ -122,7 +122,8 @@ void Camera::SetLens(const float fovY, const float aspect, const float zn, const
 
 	const XMMATRIX p = XMMatrixPerspectiveFovLH(_fovY, _aspect, _nearZ, _farZ);
 	XMStoreFloat4x4(&_proj, p);
-	XMStoreFloat4x4(&_invProj, XMMatrixInverse(nullptr, p));
+	auto determinant = XMMatrixDeterminant(p);
+	XMStoreFloat4x4(&_invProj, XMMatrixInverse(&determinant, p));
 }
 
 void Camera::LookAt(FXMVECTOR pos, FXMVECTOR target, FXMVECTOR worldUp)
@@ -202,6 +203,40 @@ DirectX::XMFLOAT4X4 Camera::GetInvProj4X4F() const
 {
 	assert(!_viewDirty);
 	return _invProj;
+}
+
+DirectX::XMFLOAT4X4 Camera::GetTransposedMatrix(const XMFLOAT4X4& matrix4X4)
+{
+	const XMMATRIX matrix = XMLoadFloat4x4(&matrix4X4);
+	const auto matrixTransposed = XMMatrixTranspose(matrix);
+	XMFLOAT4X4 matrixTransposed4X4;
+	XMStoreFloat4x4(&matrixTransposed4X4, matrixTransposed);
+	return matrixTransposed4X4;
+}
+
+DirectX::XMFLOAT4X4 Camera::GetPrevView4X4FTransposed() const
+{
+	return GetTransposedMatrix(_prevView);
+}
+
+DirectX::XMFLOAT4X4 Camera::GetPrevProj4X4FTransposed() const
+{
+	return GetTransposedMatrix(_prevProj);
+}
+
+DirectX::XMFLOAT4X4 Camera::GetPrevInvProj4X4FTransposed() const
+{
+	return GetTransposedMatrix(_prevInvProj);
+}
+
+DirectX::XMFLOAT4X4 Camera::GetInvView4X4FTransposed() const
+{
+	return GetTransposedMatrix(_invView);
+}
+
+DirectX::XMFLOAT4X4 Camera::GetInvProj4X4FTransposed() const
+{
+	return GetTransposedMatrix(_invProj);
 }
 
 XMFLOAT4X4 Camera::GetView4X4F()const

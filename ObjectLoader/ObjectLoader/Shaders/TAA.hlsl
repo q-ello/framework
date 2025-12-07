@@ -20,42 +20,49 @@ SamplerComparisonState gsamShadow : register(s0);
 SamplerState gsamLinear : register(s1);
 SamplerState gsamLinearWrap : register(s2);
 
-static const float depthThreshold = 0.2f;
+static const float depthThreshold = 0.5f;
 
 float4 TAAPS(VertexOut pin) : SV_Target
 {
-    float4 currentColor = gLitScene.Load(pin.PosH.xyz);
+    int3 currCoords = int3(pin.PosH.xyz);
+    float4 currentColor = gLitScene.Load(currCoords);
     
     float4 output;
 
     float2 uv = pin.PosH.xy / gScreenSize;
-    float depth = gCurrentDepth.Load(pin.PosH.xyz).r;
+    float depth = gCurrentDepth.Load(currCoords).r;
     
     float4 clipPos = float4(uv.x * 2.0f - 1.0f, 1.0f - uv.y * 2.0f, depth, 1.0f);
     float4 currViewPos = mul(clipPos, gCurrInvProj);
     currViewPos /= currViewPos.w;
-    
-    float4 prevViewPos = mul(currViewPos, mul(gCurrInvView, gPrevView));
+    float4 world = mul(currViewPos, gCurrInvView);
+    float4 prevViewPos = mul(world, gPrevView);
     float4 prevScreenNDC = mul(prevViewPos, gPrevProj);
-    prevScreenNDC /= prevViewPos.w;
+    prevScreenNDC /= prevScreenNDC.w;
     float2 prevUV = float2(prevScreenNDC.x * 0.5f + 0.5f, 0.5f - prevScreenNDC.y * 0.5f);
+
+    if (prevUV.x < 0 || prevUV.x > 1 || prevUV.y < 0 || prevUV.y > 1)
+        return currentColor;
 
     float predictedPrevViewDepth = prevViewPos.z;
 
-    float4 actuaPrevClipPos = float4(prevScreenNDC.x, prevScreenNDC.y, gPreviousDepth.Sample(gsamLinear, prevUV).r, 1.0f);
+    int3 prevCoords = int3(prevUV * gScreenSize, 0);
+
+    float4 actuaPrevClipPos = float4(prevScreenNDC.x, prevScreenNDC.y, gPreviousDepth.Load(prevCoords).r, 1.0f);
     float4 actualPrevViewPos = mul(actuaPrevClipPos, gPrevInvProj);
     actualPrevViewPos /= actualPrevViewPos.w;
 
     float actualPrevViewDepth = actualPrevViewPos.z;
 
-    if (abs(predictedPrevViewDepth - actualPrevViewDepth) > depthThreshold)
-    {
-        return currentColor;
-    }
+    float bias = max(predictedPrevViewDepth * 0.01f, 0.02f);
 
-    float4 historyColor = gHistory.Sample(gsamLinear, prevUV);
+    float d = abs(predictedPrevViewDepth - actualPrevViewDepth);
+    float t = saturate(d / bias); // 0..1
+    float blend = lerp(0.0f, 0.9f, saturate(1.0f - t)); // more depth diff → less history
+
+    float4 historyColor = gHistory.Load(prevCoords);
     
-    output = lerp(currentColor, historyColor, 0.9f);
+    output = lerp(currentColor, historyColor, blend);
     
     return output;
 }

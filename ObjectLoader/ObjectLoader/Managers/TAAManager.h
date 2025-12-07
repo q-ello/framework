@@ -14,8 +14,8 @@ public:
 	explicit TaaManager(ID3D12Device* device) : _device{ device } {}
 
 	void Init(const int width, const int height);
-	void BindToManagers(LightingManager* lightingManager, GBuffer* gBuffer, Camera* camera);
-	void ApplyTaa(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource, bool taaEnabled);
+	void BindToManagers(LightingManager* lightingManager, GBuffer* buffer, Camera* camera);
+	void ApplyTaa(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource);
 	void OnResize(int newWidth, int newHeight);
 	void UpdateTaaParameters(const FrameResource* currFrame) const;
 
@@ -44,8 +44,5 @@ private:
 	int _height = 0;
 
 	RtvSrvTexture _historyTextures[2];
-	RtvSrvTexture _historyDepthTexture;
 	int _currentHistoryIndex = 0;
-
-	bool _historyValid = false;
 };

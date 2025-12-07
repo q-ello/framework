@@ -63,7 +63,7 @@ void PostProcessManager::OcclusionMaskPass(ID3D12GraphicsCommandList* cmdList, c
 	cmdList->SetPipelineState(_lightOcclusionMaskPso.Get());
 	cmdList->SetGraphicsRootSignature(_lightOcclusionMaskRootSignature.Get());
 	cmdList->SetGraphicsRootDescriptorTable(0, _gBuffer->GetGBufferTextureSrv(GBufferInfo::Depth));
-	cmdList->SetGraphicsRootDescriptorTable(1, _lightingManager->GetCascadeShadowSRV()); //cascades shadow map
+	cmdList->SetGraphicsRootDescriptorTable(1, _lightingManager->GetCascadeShadowSrv()); //cascades shadow map
 
 	const auto lightingPassCb = currFrameResource->LightingPassCb->Resource();
 	cmdList->SetGraphicsRootConstantBufferView(2, lightingPassCb->GetGPUVirtualAddress());
@@ -98,7 +98,7 @@ void PostProcessManager::GodRaysPass(ID3D12GraphicsCommandList* cmdList, const F
 	const auto godRaysCb = currFrameResource->GodRaysCb->Resource();
 	cmdList->SetGraphicsRootConstantBufferView(3, godRaysCb->GetGPUVirtualAddress());
 
-	const auto rtDesc = _lightingManager->GetMiddlewareRTV();
+	const auto rtDesc = _lightingManager->GetMiddlewareRtv();
 
 	cmdList->OMSetRenderTargets(1, &rtDesc, true, nullptr);
 	cmdList->DrawInstanced(3, 1, 0, 0);
@@ -110,7 +110,7 @@ void PostProcessManager::DrawSsr(ID3D12GraphicsCommandList* cmdList, const Frame
 	cmdList->SetGraphicsRootSignature(_ssrRootSignature.Get());
 
 	_lightingManager->ChangeMiddlewareState(cmdList, D3D12_RESOURCE_STATE_GENERIC_READ);
-	cmdList->SetGraphicsRootDescriptorTable(0, _lightingManager->GetFinalTextureSRV());
+	cmdList->SetGraphicsRootDescriptorTable(0, _lightingManager->GetFinalTextureSrv());
 
 	cmdList->SetGraphicsRootDescriptorTable(1, _gBuffer->GetGBufferTextureSrv(GBufferInfo::Normals));
 
@@ -140,7 +140,7 @@ void PostProcessManager::DrawChromaticAberration(ID3D12GraphicsCommandList* cmdL
 	cmdList->SetPipelineState(_chromaticAberrationPso.Get());
 	cmdList->SetGraphicsRootSignature(_chromaticAndVignettingRootSignature.Get());
 
-	cmdList->SetGraphicsRootDescriptorTable(0, _lightingManager->GetFinalTextureSRV());
+	cmdList->SetGraphicsRootDescriptorTable(0, _lightingManager->GetFinalTextureSrv());
 
 	const auto lightingPassCb = currFrameResource->LightingPassCb->Resource();
 	cmdList->SetGraphicsRootConstantBufferView(1, lightingPassCb->GetGPUVirtualAddress());
@@ -167,7 +167,7 @@ void PostProcessManager::DrawVignetting(ID3D12GraphicsCommandList* cmdList, cons
 	cmdList->SetPipelineState(_vignettingPso.Get());
 	cmdList->SetGraphicsRootSignature(_chromaticAndVignettingRootSignature.Get());
 
-	cmdList->SetGraphicsRootDescriptorTable(0, _lightingManager->GetFinalTextureSRV());
+	cmdList->SetGraphicsRootDescriptorTable(0, _lightingManager->GetFinalTextureSrv());
 
 	const auto lightingPassCb = currFrameResource->LightingPassCb->Resource();
 	cmdList->SetGraphicsRootConstantBufferView(1, lightingPassCb->GetGPUVirtualAddress());

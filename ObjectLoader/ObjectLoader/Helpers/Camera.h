@@ -66,6 +66,13 @@ public:
 	DirectX::XMFLOAT4X4 GetPrevInvProj4X4F()const;
 	DirectX::XMFLOAT4X4 GetInvView4X4F()const;
 	DirectX::XMFLOAT4X4 GetInvProj4X4F()const;
+	static DirectX::XMFLOAT4X4 GetTransposedMatrix(const DirectX::XMFLOAT4X4& matrix4X4);
+
+    DirectX::XMFLOAT4X4 GetPrevView4X4FTransposed()const;
+    DirectX::XMFLOAT4X4 GetPrevProj4X4FTransposed()const;
+    DirectX::XMFLOAT4X4 GetPrevInvProj4X4FTransposed()const;
+    DirectX::XMFLOAT4X4 GetInvView4X4FTransposed()const;
+    DirectX::XMFLOAT4X4 GetInvProj4X4FTransposed()const;
 
 	// Strafe/Walk the camera a distance d.
 	void Strafe(float d);

@@ -12,7 +12,6 @@ void TaaManager::Init(const int width, const int height)
 		_historyTextures[i].OtherIndex = TextureManager::RtvHeapAllocator->Allocate();
 		_historyTextures[i].SrvIndex = TextureManager::SrvHeapAllocator->Allocate();
 	}
-	_historyDepthTexture.SrvIndex = TextureManager::SrvHeapAllocator->Allocate();
 	
 	BuildRootSignature();
 	BuildShaders();
@@ -20,11 +19,11 @@ void TaaManager::Init(const int width, const int height)
 	BuildTextures();
 }
 
-void TaaManager::BindToManagers(LightingManager* lightingManager, GBuffer* gBuffer, Camera* camera)
+void TaaManager::BindToManagers(LightingManager* lightingManager, GBuffer* buffer, Camera* camera)
 {
 	_lightingManager = lightingManager;
 	_fullscreenVs = _lightingManager->GetFullScreenVS();
-	_gBuffer = gBuffer;
+	_gBuffer = buffer;
 	_camera = camera;
 }
 
@@ -64,11 +63,11 @@ void TaaManager::UpdateTaaParameters(const FrameResource* currFrame) const
 {
 	//we'll just call this before updating it in lighting pass
 	TaaConstants taaParams;
-	taaParams.PrevView = _camera->GetPrevView4X4F();
-	taaParams.PrevProj = _camera->GetPrevProj4X4F();
-	taaParams.PrevInvProj = _camera->GetPrevInvProj4X4F();
-	taaParams.CurrInvView = _camera->GetInvView4X4F();
-	taaParams.CurrInvProj = _camera->GetInvProj4X4F();
+	taaParams.PrevView = _camera->GetPrevView4X4FTransposed();
+	taaParams.PrevProj = _camera->GetPrevProj4X4FTransposed();
+	taaParams.PrevInvProj = _camera->GetPrevInvProj4X4FTransposed();
+	taaParams.CurrInvView = _camera->GetInvView4X4FTransposed();
+	taaParams.CurrInvProj = _camera->GetInvProj4X4FTransposed();
 	taaParams.ScreenSize = { static_cast<float>(_width), static_cast<float>(_height) };
 	currFrame->TaaCb->CopyData(0, taaParams);
 }
@@ -170,22 +169,6 @@ void TaaManager::BuildTextures()
 		_device->CreateShaderResourceView(_historyTextures[i].Resource.Get(), &srvDesc,
 			TextureManager::SrvHeapAllocator->GetCpuHandle(_historyTextures[i].SrvIndex));
 	}
-
-	//depth texture
-	{
-		texDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
-		texDesc.Format = _depthFormat;
-
-		srvDesc.Format = DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
-
-		ThrowIfFailed(_device->CreateCommittedResource(
-				&heapProps, D3D12_HEAP_FLAG_NONE, &texDesc, D3D12_RESOURCE_STATE_GENERIC_READ,
-				nullptr, IID_PPV_ARGS(&_historyDepthTexture.Resource)));
-		_historyDepthTexture.PrevState = D3D12_RESOURCE_STATE_GENERIC_READ;
-
-		_device->CreateShaderResourceView(_historyDepthTexture.Resource.Get(), &srvDesc,
-				TextureManager::SrvHeapAllocator->GetCpuHandle(_historyDepthTexture.SrvIndex));
-	}
 }
 
 void TaaManager::ChangeHistoryState(ID3D12GraphicsCommandList* cmdList, const int index, const D3D12_RESOURCE_STATES newState)
@@ -210,49 +193,22 @@ void TaaManager::ChangeTextureState(ID3D12GraphicsCommandList* cmdList, RtvSrvTe
 	texture.PrevState = newState;
 }
 
-void TaaManager::ApplyTaa(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource, const bool taaEnabled)
+void TaaManager::ApplyTaa(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource)
 {
-	if (!taaEnabled)
-	{
-		_historyValid = false;
-		return;
-	}
-
-    if (!_historyValid)
-    {
-        _historyValid = true;
-
-		ChangeHistoryState(cmdList, _currentHistoryIndex, D3D12_RESOURCE_STATE_COPY_DEST);
-
-        D3D12_TEXTURE_COPY_LOCATION destLocation;
-        destLocation.pResource = _historyTextures[_currentHistoryIndex].Resource.Get();
-        destLocation.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-        destLocation.SubresourceIndex = 0;
-
-		_lightingManager->ChangeMiddlewareState(cmdList, D3D12_RESOURCE_STATE_COPY_SOURCE);
-        D3D12_TEXTURE_COPY_LOCATION srcLocation;
-        srcLocation.pResource = _lightingManager->GetMiddlewareTexture();
-        srcLocation.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-        srcLocation.SubresourceIndex = 0;
-
-		//copying texture for first frame while we don't have history
-        cmdList->CopyTextureRegion(&destLocation, 0, 0, 0, &srcLocation, nullptr);
-
-		ChangeHistoryState(cmdList, _currentHistoryIndex, D3D12_RESOURCE_STATE_GENERIC_READ);
-    }
-
-	D3D12_CPU_DESCRIPTOR_HANDLE destHandle = TextureManager::RtvHeapAllocator->GetCpuHandle(_historyTextures[1 - _currentHistoryIndex].OtherIndex);
+	_gBuffer->ChangeBothDepthState(D3D12_RESOURCE_STATE_GENERIC_READ);
+	
+	const D3D12_CPU_DESCRIPTOR_HANDLE destHandle = TextureManager::RtvHeapAllocator->GetCpuHandle(_historyTextures[1 - _currentHistoryIndex].OtherIndex);
 	cmdList->OMSetRenderTargets(1, &destHandle, true, nullptr);
 	cmdList->SetPipelineState(_pso.Get());
 	cmdList->SetGraphicsRootSignature(_rootSignature.Get());
 
 	//setting up data and drawing
 	const auto& allocator = TextureManager::SrvHeapAllocator;
-	cmdList->SetGraphicsRootDescriptorTable(0, _lightingManager->GetFinalTextureSRV());
+	cmdList->SetGraphicsRootDescriptorTable(0, _lightingManager->GetFinalTextureSrv());
 	cmdList->SetGraphicsRootDescriptorTable(1, 
 		allocator->GetGpuHandle(_historyTextures[_currentHistoryIndex].SrvIndex));
-	cmdList->SetGraphicsRootDescriptorTable(2, _gBuffer->GetGBufferTextureSrv(GBufferInfo::Depth));
-	cmdList->SetGraphicsRootDescriptorTable(3, allocator->GetGpuHandle(_historyDepthTexture.SrvIndex));
+	cmdList->SetGraphicsRootDescriptorTable(2, _gBuffer->GetGBufferDepthSrv(true));
+	cmdList->SetGraphicsRootDescriptorTable(3, _gBuffer->GetGBufferDepthSrv(false));
 	cmdList->SetGraphicsRootConstantBufferView(4, currFrameResource->TaaCb->Resource()->GetGPUVirtualAddress());
 	
 	cmdList->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -264,25 +220,4 @@ void TaaManager::ApplyTaa(ID3D12GraphicsCommandList* cmdList, const FrameResourc
 	ChangeHistoryState(cmdList, 1 - _currentHistoryIndex, D3D12_RESOURCE_STATE_RENDER_TARGET);
 
 	_lightingManager->SetFinalTextureIndex(_historyTextures[_currentHistoryIndex].SrvIndex);
-
-	//saving last depth texture
-	{
-		ChangeTextureState(cmdList, _historyDepthTexture, D3D12_RESOURCE_STATE_COPY_DEST);
-	
-		D3D12_TEXTURE_COPY_LOCATION destLocation;
-		destLocation.pResource = _historyDepthTexture.Resource.Get();
-		destLocation.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-		destLocation.SubresourceIndex = 0;
-
-		_gBuffer->ChangeDsvState(D3D12_RESOURCE_STATE_COPY_SOURCE);
-		D3D12_TEXTURE_COPY_LOCATION srcLocation;
-		srcLocation.pResource = _gBuffer->GetGBufferTexture(GBufferInfo::Depth);
-		srcLocation.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-		srcLocation.SubresourceIndex = 0;
-
-		//copying texture for first frame while we don't have history
-		cmdList->CopyTextureRegion(&destLocation, 0, 0, 0, &srcLocation, nullptr);
-		
-		ChangeTextureState(cmdList, _historyDepthTexture, D3D12_RESOURCE_STATE_GENERIC_READ);
-	}
 }
