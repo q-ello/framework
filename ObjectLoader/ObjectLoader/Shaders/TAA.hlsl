@@ -59,38 +59,23 @@ float4 TAAPS(VertexOut pin) : SV_Target
 
     float4 historyColor = gHistory.Load(prevCoords);
     
-    if (depthFactor == 0.0f)
+    float4 minColor = 9999.0, maxColor = -9999.0;
+    
+    float2 uvOffset = float2(1.f, 1.f) / gScreenSize;
+ 
+    for (int x = -1; x <= 1; ++x)
     {
-        float4 minC = 1e9, maxC = -1e9;
-        float minDepth = -1e9, maxDepth = -1e9;
-        static const int2 offs[4] = {int2(1,0), int2(-1,0), int2(0,1), int2(0,-1)};
-        for(int i=0;i<4;i++){
-            int3 neighbourCoords = int3(currCoords + offs[i], 0);
-            float neighbourDepth = gCurrentDepth.Load(neighbourCoords).r;
-            minDepth = min(minDepth, neighbourDepth);
-            maxDepth = max(maxDepth, neighbourDepth);
-            if (abs(neighbourDepth - depth) > 0.05)
-                continue;
-
-            minC = min(minC, neighbourDepth);
-            maxC = max(maxC, neighbourDepth);
+        for (int y = -1; y <= 1; ++y)
+        {
+            float4 color = gLitScene.Sample(gsamLinear, uv + float2(x, y) * uvOffset); // Sample neighbor
+            minColor = min(minColor, color); // Take min and max
+            maxColor = max(maxColor, color);
         }
-        float depthSlope = maxDepth - minDepth;
-        float tolerance = max(0.002, depthSlope * 2.0);
-
-        bool badHistory = abs(prevDepthNDC - depth) > tolerance;
-
-        if (badHistory)
-            return currentColor;
-
-        depthFactor = 0.9f;
-        historyColor = clamp(historyColor, minC, maxC);
     }
-
-    float histWeight = 0.9f * depthFactor;
-    float3 finalColor = lerp(currentColor, historyColor, histWeight);
-
-    output = float4(finalColor, 1.0f);
+ 
+    float4 historyColorClamped = clamp(historyColor, minColor, maxColor);
+    
+    output = lerp(currentColor, historyColorClamped, 0.9f);
 
     return output;
 }
