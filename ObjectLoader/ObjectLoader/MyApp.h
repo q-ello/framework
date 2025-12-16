@@ -1,41 +1,36 @@
 //***************************************************************************************
 // MyApp.cpp by Frank Luna (C) 2015 All Rights Reserved.
 //***************************************************************************************
+#pragma once
+
+#include <set>
 
 #include "../../Common/d3dApp.h"
-#include "../../Common/MathHelper.h"
 #include "../../Common/UploadBuffer.h"
 #include "../../Common/GeometryGenerator.h"
-#include "BasicUtil.h"
-#include "GeometryManager.h"
-#include "LightingManager.h"
-#include "ModelManager.h"
-#include "Model.h"
-#include <shobjidl.h> 
+#include "../Managers/GeometryManager.h"
+#include "../Managers/LightingManager.h"
+#include "../Managers/ModelManager.h"
 #include <sstream>
-#include <commctrl.h>
-#include "imgui/imgui.h"
 #include "imgui/backends/imgui_impl_dx12.h"
-#include "imgui/backends/imgui_impl_win32.h"
-#include "OpaqueObjectManager.h"
-#include "UnlitObjectManager.h"
-#include "PostProcessManager.h"
-#include "CubeMapManager.h"
-#include "TerrainManager.h"
+#include "../Managers/OpaqueObjectManager.h"
+#include "../Managers/UnlitObjectManager.h"
+#include "../Managers/PostProcessManager.h"
+#include "../Managers/CubeMapManager.h"
+#include "../Managers/TerrainManager.h"
+#include "../Managers/TAAManager.h"
 
 struct Toast {
-	std::string message;
-	float lifetime;     // seconds to live
-	float creationTime; // ImGui::GetTime() when created
+	std::string Message;
+	float Lifetime;     // seconds to live
+	float CreationTime; // ImGui::GetTime() when created
 };
-
-#define DELETE_ID 333
 
 using Microsoft::WRL::ComPtr;
 using namespace DirectX;
 using namespace DirectX::PackedVector;
 
-enum class PSO
+enum class Pso : uint8_t
 {
 	Opaque = 0,
 	//Transparent,
@@ -47,10 +42,12 @@ enum class PSO
 class MyApp : public D3DApp
 {
 public:
-	MyApp(HINSTANCE hInstance);
+	explicit MyApp(HINSTANCE hInstance);
 	MyApp(const MyApp& rhs) = delete;
 	MyApp& operator=(const MyApp& rhs) = delete;
-	~MyApp();
+	MyApp(const MyApp&& rhs) = delete;
+	MyApp& operator=(const MyApp&& rhs) = delete;
+	~MyApp() override;
 
 	virtual bool Initialize()override;
 
@@ -65,36 +62,37 @@ private:
 	virtual void OnMouseWheel(WPARAM btnState) override;
 
 	void OnKeyboardInput(const GameTimer& gt);
-	void UpdateObjectCBs(const GameTimer& gt);
+	void UpdateObjectCBs(const GameTimer& gt) const;
 	void UpdateMainPassCBs(const GameTimer& gt);
 
-	void BuildRootSignatures();
 	void BuildDescriptorHeaps();
-	void BuildShadersAndInputLayout();
-	void BuildPSOs();
-	void BuildFrameResources();
+	void BuildFrameResources() const;
 
 	//imgui staff
 	void DrawInterface();
 	void DrawObjectsList(int& btnId);
-	void DrawShadowMasksList(int& btnId);
-	void DrawTerrain(int& btnId);
+	void DrawShadowMasksList(int& btnId) const;
+	void DrawTerrain(int& btnId) const;
 
-	void DrawHandSpotlight(int& buttonId);
-	void DrawLightData(int& btnId);
-	void DrawLocalLightData(int& btnId, int lightIndex);
+	void DrawHandSpotlight(int& btnId) const;
+	void DrawLightData(int& btnId) const;
+	void DrawLocalLightData(int& btnId, int lightIndex) const;
 
 	void DrawObjectInfo(int& btnId);
-	void DrawMultiObjectTransform(int& btnId);
-	void DrawTransformInput(const std::string& label, int btnId, int transformIndex, float speed);
-	void DrawObjectMaterial(int& btnId, int matIndex);
-	bool DrawIsTransparentCheckbox();
-	bool DrawUseARMTextureCheckbox(Material* material);
-	void DrawMaterials(int& btnId);
-	void DrawMaterialProperty(Material* material, const std::string& label, size_t index, int& btnId, bool isFloat3, bool hasAdditionalInfo = false, const std::string& additionalInfoLabel = "", size_t additionalInfoIndex = -1);
-	void DrawMaterialTexture(Material* material, const std::string& label, size_t index, int& btnId, bool hasAdditionalInfo = false, const std::string& additionalInfoLabel = "", size_t additionalInfoIndex = -1);
-	void DrawMaterialARMTexture(Material* material, const std::string& label, size_t index, int& btnId);
-	void DrawLODs(int& btnId);
+	void DrawMultiObjectTransform(int& btnId) const;
+	void DrawTransformInput(const std::string& label, int btnId, int transformIndex, float speed) const;
+	void DrawObjectMaterial(int& btnId, int matIndex) const;
+	bool DrawIsTransparentCheckbox() const;
+	static bool DrawUseArmTextureCheckbox(Material* material);
+	void DrawMaterials(int& btnId) const;
+	void DrawMaterialProperty(Material* material, const std::string& label, size_t index, int& btnId, bool isFloat3,
+	                          bool hasAdditionalInfo = false, const std::string& additionalInfoLabel = "",
+	                          size_t additionalInfoIndex = -1) const;
+	void DrawMaterialTexture(Material* material, const std::string& label, size_t index, int& btnId,
+	                         bool hasAdditionalInfo = false, const std::string& additionalInfoLabel = "",
+	                         size_t additionalInfoIndex = -1) const;
+	void DrawMaterialArmTexture(Material* material, const std::string& label, size_t index, int& btnId) const;
+	void DrawLoDs(int& btnId);
 	
 	void DrawPostProcesses();
 
@@ -102,7 +100,7 @@ private:
 	void DrawToasts();
 
 	void DrawHeader();
-	void DrawCameraSpeed();
+	void DrawCameraSpeed() const;
 
 	//modals
 	void DrawImportModal();
@@ -110,25 +108,25 @@ private:
 	//loading
 	void AddModel();
 	void AddMultipleModels();
-	void AddLOD();
-	void AddShadowMask();
+	void AddLod();
+	void AddShadowMask() const;
 
 	void InitManagers();
 
 	//drawing
-	void GBufferPass();
-	void LightingPass();
-	void WireframePass();
+	void GBufferPass() const;
+	void LightingPass() const;
+	void WireframePass() const;
 	//presenting middleware texture to backbuffer
-	void FinalPass();
+	void FinalPass() const;
 
-	FrameResource* mCurrFrameResource = nullptr;
-	int mCurrFrameResourceIndex = 0;
+	FrameResource* _currFrameResource = nullptr;
+	int _currFrameResourceIndex = 0;
 
 	ComPtr<ID3D12DescriptorHeap> _imGuiDescriptorHeap = nullptr;
 	std::unique_ptr<ModelManager> _modelManager = std::make_unique<ModelManager>();
 
-	std::unordered_map<std::string, ComPtr<ID3DBlob>> mShaders;
+	std::unordered_map<std::string, ComPtr<ID3DBlob>> _shaders;
 
 	std::unique_ptr<UnlitObjectManager> _gridManager;
 	std::unique_ptr<EditableObjectManager> _objectsManager;
@@ -136,14 +134,15 @@ private:
 	std::unique_ptr<CubeMapManager> _cubeMapManager = nullptr;
 	std::unique_ptr<PostProcessManager> _postProcessManager = nullptr;
 	std::unique_ptr<TerrainManager> _terrainManager = nullptr;
+	std::unique_ptr<TaaManager> _taaManager = nullptr;
 
-	GBufferPassConstants _GBufferCB;
-	LightingPassConstants _lightingCB;
+	GBufferPassConstants _gBufferCb;
+	LightingPassConstants _lightingCb;
 
 	float _cameraSpeed = 0.01f;
-	float _mbDown = false;
+	bool _mbDown = false;
 	bool _isWireframe = false;
-	bool _fixedLOD = false;
+	bool _fixedLod = false;
 
 	POINT _lastMousePos;
 
@@ -160,5 +159,8 @@ private:
 	bool _ssr = false;
 	bool _chromaticAberration = false;
 	bool _vignetting = false;
+
+	//taa
+	bool _taaEnabled = false;
 };
 

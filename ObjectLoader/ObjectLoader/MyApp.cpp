@@ -1,13 +1,11 @@
 #include "MyApp.h"
-
+#include "imgui/backends/imgui_impl_win32.h"
 
 #pragma comment(lib, "ComCtl32.lib")
 
-WNDPROC g_OriginalPanelWndProc;
-
-MyApp::MyApp(HINSTANCE hInstance)
+MyApp::MyApp(const HINSTANCE hInstance)
 	: D3DApp(hInstance)
-	, _lastMousePos {0, 0}
+	  , _lastMousePos {0, 0}
 {
 }
 
@@ -31,12 +29,9 @@ bool MyApp::Initialize()
 
 	GeometryManager::BuildNecessaryGeometry();
 	InitManagers();
-	BuildRootSignatures();
 	BuildDescriptorHeaps();
-	BuildShadersAndInputLayout();
 	_gridManager->AddRenderItem(_device.Get(), { "grid" });
 	BuildFrameResources();
-	BuildPSOs();
 
 	// Execute the initialization commands.
 	ThrowIfFailed(mCommandList->Close());
@@ -86,6 +81,11 @@ void MyApp::OnResize()
 		_postProcessManager->OnResize(mClientWidth, mClientHeight);
 
 	_camera.SetLens(0.25f * MathHelper::Pi, AspectRatio(), 10.f, 2000.f);
+
+	if (_taaEnabled && _taaManager != nullptr)
+	{
+		_taaManager->OnResize(mClientWidth, mClientHeight);
+	}
 	_camera.UpdateFrustum();
 }
 
@@ -94,15 +94,15 @@ void MyApp::Update(const GameTimer& gt)
 	OnKeyboardInput(gt);
 
 	// Cycle through the circular frame resource array.
-	mCurrFrameResourceIndex = (mCurrFrameResourceIndex + 1) % gNumFrameResources;
-	mCurrFrameResource = FrameResource::frameResources()[mCurrFrameResourceIndex].get();
+	_currFrameResourceIndex = (_currFrameResourceIndex + 1) % gNumFrameResources;
+	_currFrameResource = FrameResource::FrameResources()[_currFrameResourceIndex].get();
 
 	// Has the GPU finished processing the commands of the current frame resource?
 	// If not, wait until the GPU has completed commands up to this fence point.
-	if (mCurrFrameResource->Fence != 0 && mFence->GetCompletedValue() < mCurrFrameResource->Fence)
+	if (_currFrameResource->Fence != 0 && mFence->GetCompletedValue() < _currFrameResource->Fence)
 	{
-		HANDLE eventHandle = CreateEventEx(nullptr, false, false, EVENT_ALL_ACCESS);
-		ThrowIfFailed(mFence->SetEventOnCompletion(mCurrFrameResource->Fence, eventHandle));
+		const HANDLE eventHandle = CreateEventEx(nullptr, nullptr, false, EVENT_ALL_ACCESS);
+		ThrowIfFailed(mFence->SetEventOnCompletion(_currFrameResource->Fence, eventHandle));
 		if (eventHandle)
 		{
 			WaitForSingleObject(eventHandle, INFINITE);
@@ -111,11 +111,14 @@ void MyApp::Update(const GameTimer& gt)
 	}
 
 	UpdateObjectCBs(gt);
+
 	UpdateMainPassCBs(gt);
-	_lightingManager->UpdateLightCBs(mCurrFrameResource);
+	_taaManager->UpdateTaaParameters(_currFrameResource);
+
+	_lightingManager->UpdateLightCBs(_currFrameResource);
 	
 	//camera gets changed every frame so we update ssr every frame too
-	_postProcessManager->UpdateSSRParameters(mCurrFrameResource);
+	_postProcessManager->UpdateSsrParameters(_currFrameResource);
 }
 
 void MyApp::Draw(const GameTimer& gt)
@@ -127,7 +130,7 @@ void MyApp::Draw(const GameTimer& gt)
 
 	DrawInterface();
 
-	auto cmdListAlloc = mCurrFrameResource->CmdListAlloc;
+	const auto cmdListAlloc = _currFrameResource->CmdListAlloc;
 
 	// Reuse the memory associated with command recording.
 	// We can only reset when the associated command lists have finished execution on the GPU.
@@ -138,8 +141,9 @@ void MyApp::Draw(const GameTimer& gt)
 	ThrowIfFailed(mCommandList->Reset(cmdListAlloc.Get(), nullptr));
 
 	// Indicate a state transition on the resource usage.
-	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(CurrentBackBuffer(),
-		_backBufferStates[mCurrBackBuffer], D3D12_RESOURCE_STATE_RENDER_TARGET));
+	auto barrier = CD3DX12_RESOURCE_BARRIER::Transition(CurrentBackBuffer(),
+	                                                    _backBufferStates[mCurrBackBuffer], D3D12_RESOURCE_STATE_RENDER_TARGET);
+	mCommandList->ResourceBarrier(1, &barrier);
 	_backBufferStates[mCurrBackBuffer] = D3D12_RESOURCE_STATE_RENDER_TARGET;
 
 	mCommandList->ClearRenderTargetView(CurrentBackBufferView(), Colors::LightSteelBlue, 0, nullptr);
@@ -151,18 +155,21 @@ void MyApp::Draw(const GameTimer& gt)
 	}
 	else
 	{
-		_lightingManager->DrawShadows(mCommandList.Get(), mCurrFrameResource, _objectsManager->Objects());
+		auto objects = _objectsManager->Objects();
+		_lightingManager->DrawShadows(mCommandList.Get(), _currFrameResource, objects);
 		GBufferPass();
 		LightingPass();
-		_cubeMapManager->Draw(mCommandList.Get(), mCurrFrameResource);
+		_cubeMapManager->Draw(mCommandList.Get(), _currFrameResource);
+		if (_taaEnabled)
+			_taaManager->ApplyTaa(mCommandList.Get(), _currFrameResource);
 		if (_godRays)
-			_postProcessManager->DrawGodRaysPass(mCommandList.Get(), mCurrFrameResource);
+			_postProcessManager->DrawGodRaysPass(mCommandList.Get(), _currFrameResource);
 		if (_ssr)
-			_postProcessManager->DrawSSR(mCommandList.Get(), mCurrFrameResource);
+			_postProcessManager->DrawSsr(mCommandList.Get(), _currFrameResource);
 		if (_chromaticAberration)
-			_postProcessManager->DrawChromaticAberration(mCommandList.Get(), mCurrFrameResource);
+			_postProcessManager->DrawChromaticAberration(mCommandList.Get(), _currFrameResource);
 		if (_vignetting)
-			_postProcessManager->DrawVignetting(mCommandList.Get(), mCurrFrameResource);
+			_postProcessManager->DrawVignetting(mCommandList.Get(), _currFrameResource);
 		FinalPass();
 	}
 
@@ -179,8 +186,9 @@ void MyApp::Draw(const GameTimer& gt)
 	ImGui::Render();
 	ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), mCommandList.Get());
 	// Swap the back and front buffers
-	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(CurrentBackBuffer(),
-		_backBufferStates[mCurrBackBuffer], D3D12_RESOURCE_STATE_PRESENT));
+	barrier = CD3DX12_RESOURCE_BARRIER::Transition(CurrentBackBuffer(),
+	                                               _backBufferStates[mCurrBackBuffer], D3D12_RESOURCE_STATE_PRESENT);
+	mCommandList->ResourceBarrier(1, &barrier);
 	_backBufferStates[mCurrBackBuffer] = D3D12_RESOURCE_STATE_PRESENT;
 
 	// Done recording commands.
@@ -193,16 +201,18 @@ void MyApp::Draw(const GameTimer& gt)
 	ThrowIfFailed(mSwapChain->Present(0, 0));
 	mCurrBackBuffer = (mCurrBackBuffer + 1) % SwapChainBufferCount;
 
+	GBuffer::ChangeDepthTexture();
+
 	// Advance the fence value to mark commands up to this fence point.
-	mCurrFrameResource->Fence = ++mCurrentFence;
+	_currFrameResource->Fence = ++mCurrentFence;
 
 	// Add an instruction to the command queue to set a new fence point. 
 	// Because we are on the GPU timeline, the new fence point won't be 
 	// set until the GPU finishes processing all the commands prior to this Signal().
-	mCommandQueue->Signal(mFence.Get(), mCurrentFence);
+	ThrowIfFailed(mCommandQueue->Signal(mFence.Get(), mCurrentFence));
 }
 
-void MyApp::OnMouseDown(WPARAM btnState, int x, int y)
+void MyApp::OnMouseDown(WPARAM btnState, const int x, const int y)
 {
 	_lastMousePos.x = x;
 	_lastMousePos.y = y;
@@ -216,14 +226,14 @@ void MyApp::OnMouseUp(WPARAM btnState, int x, int y)
 	_mbDown = false;
 }
 
-void MyApp::OnMouseMove(WPARAM btnState, int x, int y)
+void MyApp::OnMouseMove(const WPARAM btnState, const int x, const int y)
 {
-	ImGuiIO& io = ImGui::GetIO();
+	const ImGuiIO& io = ImGui::GetIO();
 	if ((btnState & MK_LBUTTON) != 0 && !io.WantCaptureMouse)
 	{
 		// Make each pixel correspond to a quarter of a degree.
-		float dx = 0.001f * static_cast<float>(x - _lastMousePos.x);
-		float dy = _cameraSpeed * static_cast<float>(y - _lastMousePos.y);
+		const float dx = 0.001f * static_cast<float>(x - _lastMousePos.x);
+		const float dy = _cameraSpeed * static_cast<float>(y - _lastMousePos.y);
 
 		_camera.Walk(dy);
 		_camera.RotateY(dx);
@@ -231,8 +241,8 @@ void MyApp::OnMouseMove(WPARAM btnState, int x, int y)
 	else if ((btnState & MK_RBUTTON) != 0 && !io.WantCaptureMouse)
 	{
 		// Make each pixel correspond to 0.2 unit in the scene.
-		float dx = 0.001f * static_cast<float>(x - _lastMousePos.x);
-		float dy = 0.001f * static_cast<float>(y - _lastMousePos.y);
+		const float dx = 0.001f * static_cast<float>(x - _lastMousePos.x);
+		const float dy = 0.001f * static_cast<float>(y - _lastMousePos.y);
 
 		_camera.Pitch(dy);
 		_camera.RotateY(dx);
@@ -242,17 +252,17 @@ void MyApp::OnMouseMove(WPARAM btnState, int x, int y)
 	_lastMousePos.y = y;
 }
 
-void MyApp::OnMouseWheel(WPARAM btnState)
+void MyApp::OnMouseWheel(const WPARAM btnState)
 {
-	ImGuiIO& io = ImGui::GetIO();
+	const ImGuiIO& io = ImGui::GetIO();
 	if (_mbDown)
 	{
-		_cameraSpeed += (float)GET_WHEEL_DELTA_WPARAM(btnState)/(float)WHEEL_DELTA * 0.01f;
+		_cameraSpeed += static_cast<float>(GET_WHEEL_DELTA_WPARAM(btnState))/static_cast<float>(WHEEL_DELTA) * 0.01f;
 		_cameraSpeed = MathHelper::Clamp(_cameraSpeed, 0.f, 25.f);
 	}
 	else if (!io.WantCaptureMouse)
 	{
-		float direction = ((float)GET_WHEEL_DELTA_WPARAM(btnState) > 0) ? 1.f : -1.f;
+		const float direction = (static_cast<float>(GET_WHEEL_DELTA_WPARAM(btnState)) > 0) ? 1.f : -1.f;
 		_camera.Walk(direction);
 	}
 }
@@ -262,10 +272,8 @@ void MyApp::OnKeyboardInput(const GameTimer& gt)
 	if (GetAsyncKeyState('E') & 0x8000)
 	{
 		//since view matrix is transponed I'm taking z-column
-		_lightingManager->SetMainLightDirection(_camera.GetLook3f());
+		_lightingManager->SetMainLightDirection(_camera.GetLook3F());
 	}
-
-	const float dt = gt.DeltaTime();
 
 	//moving camera
 	if (_mbDown && GetAsyncKeyState('W') & 0x8000)
@@ -288,43 +296,43 @@ void MyApp::OnKeyboardInput(const GameTimer& gt)
 	_camera.UpdateViewMatrix();
 }
 
-void MyApp::UpdateObjectCBs(const GameTimer& gt)
+void MyApp::UpdateObjectCBs(const GameTimer& gt) const
 {
-	_gridManager->UpdateObjectCBs(mCurrFrameResource);
-	_objectsManager->UpdateObjectCBs(mCurrFrameResource);
+	_gridManager->UpdateObjectCBs(_currFrameResource);
+	_objectsManager->UpdateObjectCBs(_currFrameResource);
 }
 
 void MyApp::UpdateMainPassCBs(const GameTimer& gt)
 {
 	//update pass for gbuffer
-	XMMATRIX view = _camera.GetView();
-	XMMATRIX proj = _camera.GetProj();
+	const XMMATRIX view = _camera.GetView();
+	const XMMATRIX proj = _camera.GetProj();
 
-	XMMATRIX viewProj = XMMatrixMultiply(view, proj);
-	XMMATRIX invViewProj = XMMatrixInverse(nullptr, viewProj);
+	const XMMATRIX viewProj = XMMatrixMultiply(view, proj);
+	const XMMATRIX invViewProj = XMMatrixInverse(nullptr, viewProj);
 
-	XMStoreFloat4x4(&_GBufferCB.ViewProj, XMMatrixTranspose(viewProj));
-	_GBufferCB.DeltaTime = gt.DeltaTime();
-	_GBufferCB.EyePosW = _camera.GetPosition3f();
-	_GBufferCB.ScreenSize = { (float)mClientWidth, (float)mClientHeight };
-	auto currGBufferCB = mCurrFrameResource->GBufferPassCB.get();
-	currGBufferCB->CopyData(0, _GBufferCB);
+	XMStoreFloat4x4(&_gBufferCb.ViewProj, XMMatrixTranspose(viewProj));
+	_gBufferCb.DeltaTime = gt.DeltaTime();
+	_gBufferCb.EyePosW = _camera.GetPosition3F();
+	_gBufferCb.ScreenSize = { static_cast<float>(mClientWidth), static_cast<float>(mClientHeight) };
+	_gBufferCb.FrameIndex++;
+	_gBufferCb.TaaEnabled = static_cast<int>(_taaEnabled);
+	const auto currGBufferCb = _currFrameResource->GBufferPassCb.get();
+	currGBufferCb->CopyData(0, _gBufferCb);
 	
 	//update pass for lighting
-	XMStoreFloat4x4(&_lightingCB.InvViewProj, XMMatrixTranspose(invViewProj));
-	_lightingCB.EyePosW = _camera.GetPosition3f();
-	XMStoreFloat4x4(&_lightingCB.ViewProj, XMMatrixTranspose(viewProj));
-	_lightingCB.RTSize = { (float)mClientWidth, (float)mClientHeight };
-	_lightingCB.mousePosition = {(float)_lastMousePos.x, (float)_lastMousePos.y};
-	auto currLightingCB = mCurrFrameResource->LightingPassCB.get();
-	currLightingCB->CopyData(0, _lightingCB);
+	XMStoreFloat4x4(&_lightingCb.InvViewProj, XMMatrixTranspose(invViewProj));
+	_lightingCb.EyePosW = _camera.GetPosition3F();
 
-	_lightingManager->UpdateDirectionalLightCB(mCurrFrameResource);
-}
+	//store for taa
 
-void MyApp::BuildRootSignatures()
-{
-	
+	XMStoreFloat4x4(&_lightingCb.ViewProj, XMMatrixTranspose(viewProj));
+	_lightingCb.RtSize = { static_cast<float>(mClientWidth), static_cast<float>(mClientHeight) };
+	_lightingCb.MousePosition = {static_cast<float>(_lastMousePos.x), static_cast<float>(_lastMousePos.y)};
+	const auto currLightingCb = _currFrameResource->LightingPassCb.get();
+	currLightingCb->CopyData(0, _lightingCb);
+
+	_lightingManager->UpdateDirectionalLightCb(_currFrameResource);
 }
 
 void MyApp::BuildDescriptorHeaps()
@@ -338,24 +346,15 @@ void MyApp::BuildDescriptorHeaps()
 	ThrowIfFailed(_device->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(&_imGuiDescriptorHeap)));
 }
 
-void MyApp::BuildShadersAndInputLayout()
-{
-}
-
-void MyApp::BuildPSOs()
-{
-	
-}
-
-void MyApp::BuildFrameResources()
+void MyApp::BuildFrameResources() const
 {
 	for (int i = 0; i < gNumFrameResources; ++i)
 	{
-		FrameResource::frameResources().push_back(std::make_unique<FrameResource>(_device.Get(),
+		FrameResource::FrameResources().push_back(std::make_unique<FrameResource>(_device.Get(),
 			1));
-		_gridManager->AddObjectToResource(_device, FrameResource::frameResources()[i].get());
-		_objectsManager->AddObjectToResource(_device, FrameResource::frameResources()[i].get());
-		_cubeMapManager->AddObjectToResource(FrameResource::frameResources()[i].get());
+		_gridManager->AddObjectToResource(_device, FrameResource::FrameResources()[i].get());
+		_objectsManager->AddObjectToResource(_device, FrameResource::FrameResources()[i].get());
+		_cubeMapManager->AddObjectToResource(FrameResource::FrameResources()[i].get());
 	}
 	_postProcessManager->UpdateGodRaysParameters();
 }
@@ -365,9 +364,9 @@ void MyApp::DrawInterface()
 	int buttonId = 0;
 
 	ImGui::SetNextWindowPos({ 0.f, 0.f }, 0, { 0.f, 0.f });
-	ImGui::SetNextWindowSize({ 250.f, (float)mClientHeight});
+	ImGui::SetNextWindowSize({ 250.f, static_cast<float>(mClientHeight)});
 
-	ImGui::Begin("Data", 0, ImGuiWindowFlags_NoResize);
+	ImGui::Begin("Data", nullptr, ImGuiWindowFlags_NoResize);
 	ImGui::BeginTabBar("#data");
 	
 	if (ImGui::BeginTabItem("Main Data"))
@@ -388,6 +387,7 @@ void MyApp::DrawInterface()
 	{
 		ImGui::Checkbox("Wireframe", &_isWireframe);
 		DrawPostProcesses();
+		ImGui::Checkbox("TAA Enabled", &_taaEnabled);
 		ImGui::EndTabItem();
 	}
 
@@ -406,14 +406,13 @@ void MyApp::DrawInterface()
 
 	//debug info
 	ImGui::Begin("Debug info");
-	auto visObjectsCnt = _objectsManager->VisibleObjectsCount();
-	auto objectsCnt = _objectsManager->ObjectsCount();
+	const auto visObjectsCnt = _objectsManager->VisibleObjectsCount();
+	const auto objectsCnt = _objectsManager->ObjectsCount();
 	ImGui::Text(("Objects drawn: " + std::to_string(visObjectsCnt) + "/" + std::to_string(objectsCnt)).c_str());
-	auto visLights = _lightingManager->LightsInsideFrustum();
-	auto lightsCnt = _lightingManager->LightsCount();
+	const auto visLights = _lightingManager->LightsInsideFrustum();
+	const auto lightsCnt = _lightingManager->LightsCount();
 	ImGui::Text(("Lights drawn: " + std::to_string(visLights) + "/" + std::to_string(lightsCnt)).c_str());
-	auto visGrids = _terrainManager->VisibleGrids();
-	auto gridsCnt = _terrainManager->GridsCount();
+	const auto visGrids = _terrainManager->VisibleGrids();
 	ImGui::Text(("Grids instances drawn: " + std::to_string(visGrids)).c_str());
 	ImGui::End();
 
@@ -422,7 +421,7 @@ void MyApp::DrawInterface()
 
 void MyApp::DrawObjectsList(int& btnId)
 {
-	ImGui::Checkbox("Draw Debug", _objectsManager->drawDebug());
+	ImGui::Checkbox("Draw Debug", _objectsManager->DrawDebug());
 
 	if (ImGui::CollapsingHeader("Objects", ImGuiTreeNodeFlags_DefaultOpen))
 	{
@@ -438,10 +437,13 @@ void MyApp::DrawObjectsList(int& btnId)
 
 		// Begin a scrollable child
 
-		int objectsCount = _objectsManager->ObjectsCount();
-		int maxVisible = 10;
+		const int objectsCount = _objectsManager->ObjectsCount();
+		constexpr int maxVisible = 10;
 
-		ImVec2 listSize = ImVec2(-FLT_MIN, ImGui::GetTextLineHeightWithSpacing() * 1.5f * (maxVisible < objectsCount ? maxVisible : objectsCount) + 1); // Width x Height
+		const auto listSize = ImVec2(
+			-FLT_MIN,
+			ImGui::GetTextLineHeightWithSpacing() * 1.5f * static_cast<float>((maxVisible < objectsCount ? maxVisible : objectsCount) + 1));
+		// Width x Height
 		
 		ImGui::BeginChild("ObjectList", listSize, false /* border */, 0);
 
@@ -453,25 +455,25 @@ void MyApp::DrawObjectsList(int& btnId)
 			ImGui::PushID(btnId++);
 
 			//bool isSelected = _selectedType == PSO::Opaque && i == _selectedObject;
-			bool isSelected = _selectedModels.count(i) > 0;
+			const bool isSelected = _selectedModels.count(i) > 0;
 
 			ImGui::PushStyleColor(ImGuiCol_Button, isSelected ? ImVec4(0.2f, 0.6f, 1.0f, 1.0f) : ImVec4(0.2f, 0.2f, 0.2f, 1.0f));
 
-			std::string name = BasicUtil::trimName(_objectsManager->objectName(i), 15);
+			std::string name = BasicUtil::TrimName(_objectsManager->ObjectName(i), 15);
 			if (ImGui::Button(name.c_str()))
 			{
 				//logic for multiple selecting
 				if (ImGui::GetIO().KeyShift && lastClicked != -1)
 				{
 					_selectedModels.clear();
-					int start = min(lastClicked, i);
-					int end = max(lastClicked, i);
+					const int start = min(lastClicked, i);
+					const int end = max(lastClicked, i);
 					for (int j = start; j <= end; ++j)
 						_selectedModels.insert(j);
 				}
 				else if (ImGui::GetIO().KeyCtrl)
 				{
-					if (isSelected)
+					if (isSelected)  // NOLINT(bugprone-branch-clone)
 					{
 						_selectedModels.erase(i);
 					}
@@ -499,7 +501,7 @@ void MyApp::DrawObjectsList(int& btnId)
 					if (_selectedModels.count(i) > 0)
 					{
 						//going from the most index to last
-						for (auto it = _selectedModels.rbegin(); it != _selectedModels.rend(); it++)
+						for (auto it = _selectedModels.rbegin(); it != _selectedModels.rend(); ++it)
 						{
 							_objectsManager->DeleteObject(*it);
 						}
@@ -520,7 +522,7 @@ void MyApp::DrawObjectsList(int& btnId)
 	}
 }
 
-void MyApp::DrawShadowMasksList(int& btnId)
+void MyApp::DrawShadowMasksList(int& btnId) const
 {
 	if (ImGui::CollapsingHeader("Shadow masks"))
 	{
@@ -533,19 +535,19 @@ void MyApp::DrawShadowMasksList(int& btnId)
 
 		ImGui::Spacing();
 
-		ImGui::DragFloat("UV Scale", &_lightingManager->shadowMaskUVScale, 0.05f, 0.1f, 1.0f);
+		ImGui::DragFloat("UV Scale", &_lightingManager->ShadowMaskUvScale, 0.05f, 0.1f, 1.0f);
 
-		size_t selectedShadowMask = _lightingManager->SelectedShadowMask();
+		const size_t selectedShadowMask = _lightingManager->SelectedShadowMask();
 
 		for (size_t i = 0; i < _lightingManager->ShadowMaskCount(); i++)
 		{
 			ImGui::PushID(btnId++);
 
-			bool isSelected = i == selectedShadowMask;
+			const bool isSelected = i == selectedShadowMask;
 
 			ImGui::PushStyleColor(ImGuiCol_Button, isSelected ? ImVec4(0.2f, 0.6f, 1.0f, 1.0f) : ImVec4(0.2f, 0.2f, 0.2f, 1.0f));
 
-			std::string name = BasicUtil::trimName(_lightingManager->ShadowMaskName(i), 15);
+			std::string name = BasicUtil::TrimName(_lightingManager->ShadowMaskName(i), 15);
 			if (ImGui::Button(name.c_str()))
 			{
 				_lightingManager->SetSelectedShadowMask(i);
@@ -570,7 +572,7 @@ void MyApp::DrawShadowMasksList(int& btnId)
 	}
 }
 
-void MyApp::DrawTerrain(int& btnId)
+void MyApp::DrawTerrain(int& btnId) const
 {
 	if (ImGui::CollapsingHeader("Terrain"))
 	{
@@ -590,7 +592,7 @@ void MyApp::DrawTerrain(int& btnId)
 					_terrainManager->InitTerrain();
 					for (int i = 0; i < gNumFrameResources; i++)
 					{
-						_terrainManager->UpdateTerrainCB(FrameResource::frameResources()[i].get());
+						_terrainManager->UpdateTerrainCb(FrameResource::FrameResources()[i].get());
 					}
 					CoTaskMemFree(texturePath);
 				}
@@ -621,47 +623,47 @@ void MyApp::DrawTerrain(int& btnId)
 			ImGui::Text("Max height");
 			ImGui::SameLine();
 			ImGui::SetNextItemWidth(50.0f);
-			if (ImGui::DragFloat("height##terrain", &_terrainManager->maxTerrainHeight, 1.0f, 1.0f, 50.0f))
+			if (ImGui::DragFloat("height##terrain", &_terrainManager->MaxTerrainHeight, 1.0f, 1.0f, 50.0f))
 			{
 				for (int i = 0; i < gNumFrameResources; i++)
 				{
-					_terrainManager->UpdateTerrainCB(FrameResource::frameResources()[i].get());
+					_terrainManager->UpdateTerrainCb(FrameResource::FrameResources()[i].get());
 				}
 			}
 		}
 	}
 }
 
-void MyApp::DrawHandSpotlight(int& btnId)
+void MyApp::DrawHandSpotlight(int& btnId) const
 {
-	auto light = _lightingManager->MainSpotlight();
+	const auto light = _lightingManager->MainSpotlight();
 
-	bool lightEnabled = light->active == 1;
+	bool lightEnabled = light->Active == 1;
 	ImGui::PushID(btnId++);
 	if (ImGui::Checkbox("Enabled", &lightEnabled))
 	{
-		light->active = (int)lightEnabled;
+		light->Active = static_cast<int>(lightEnabled);
 	}
 	ImGui::PopID();
 
 	ImGui::PushID(btnId++);
-	ImGui::ColorEdit3("Color", &light->color.x);
+	ImGui::ColorEdit3("Color", &light->Color.x);
 	ImGui::PopID();
 
 	ImGui::PushID(btnId++);
-	ImGui::DragFloat("Intensity", &light->intensity, 0.1f, 0.0f, 10.0f);
+	ImGui::DragFloat("Intensity", &light->Intensity, 0.1f, 0.0f, 10.0f);
 	ImGui::PopID();
 
 	ImGui::PushID(btnId++);
-	ImGui::DragFloat("Radius", &light->radius, 0.1f, 0.0f, 100.0f);
+	ImGui::DragFloat("Radius", &light->Radius, 0.1f, 0.0f, 100.0f);
 	ImGui::PopID();
 
 	ImGui::PushID(btnId++);
-	ImGui::SliderAngle("Angle", &light->angle, 1.0f, 89.f);
+	ImGui::SliderAngle("Angle", &light->Angle, 1.0f, 89.f);
 	ImGui::PopID();
 }
 
-void MyApp::DrawLightData(int& btnId)
+void MyApp::DrawLightData(int& btnId) const
 {
 	if (ImGui::CollapsingHeader("Directional Light", ImGuiTreeNodeFlags_DefaultOpen))
 	{
@@ -672,8 +674,6 @@ void MyApp::DrawLightData(int& btnId)
 		ImGui::PushID(btnId++);
 		ImGui::DragFloat3("", _lightingManager->MainLightDirection(), 0.1f);
 		ImGui::PopID();
-
-		ImVec4 color;
 
 		ImGui::Text("Color");
 		ImGui::SameLine();
@@ -700,7 +700,7 @@ void MyApp::DrawLightData(int& btnId)
 	}
 }
 
-void MyApp::DrawLocalLightData(int& btnId, int lightIndex)
+void MyApp::DrawLocalLightData(int& btnId, const int lightIndex) const
 {
 	if (ImGui::CollapsingHeader(("Light " + std::to_string(lightIndex)).c_str()))
 	{
@@ -715,64 +715,64 @@ void MyApp::DrawLocalLightData(int& btnId, int lightIndex)
 			ImGui::EndPopup();
 			return;
 		}
-		auto light = _lightingManager->GetLight(lightIndex);
+		const auto light = _lightingManager->GetLight(lightIndex);
 
 		ImGui::PushID(btnId++);
-		if (ImGui::RadioButton("Point Light", light->LightData.type == 0) && light->LightData.type != 0)
+		if (ImGui::RadioButton("Point Light", light->LightData.Type == 0) && light->LightData.Type != 0)
 		{
-			light->LightData.type = 0;
+			light->LightData.Type = 0;
 			_lightingManager->UpdateWorld(lightIndex);
 		}
 		ImGui::PopID();
 		ImGui::PushID(btnId++);
-		if (ImGui::RadioButton("Spotlight", light->LightData.type == 1) && light->LightData.type != 1)
+		if (ImGui::RadioButton("Spotlight", light->LightData.Type == 1) && light->LightData.Type != 1)
 		{
-			light->LightData.type = 1;
+			light->LightData.Type = 1;
 			_lightingManager->UpdateWorld(lightIndex);
 		}
-		bool lightEnabled = light->LightData.active == 1;
+		bool lightEnabled = light->LightData.Active == 1;
 		ImGui::PopID();
 		ImGui::PushID(btnId++);
 		if (ImGui::Checkbox("Enabled", &lightEnabled))
 		{
-			light->LightData.active = (int)lightEnabled;
+			light->LightData.Active = static_cast<int>(lightEnabled);
 			light->NumFramesDirty = gNumFrameResources;
 		}
 		ImGui::PopID();
 		ImGui::PushID(btnId++);
-		if (ImGui::DragFloat3("Position", &light->LightData.position.x, 0.1f))
+		if (ImGui::DragFloat3("Position", &light->LightData.Position.x, 0.1f))
 		{
 			_lightingManager->UpdateWorld(lightIndex);
 		}
 		ImGui::PopID();
 		ImGui::PushID(btnId++);
-		if (ImGui::ColorEdit3("Color", &light->LightData.color.x))
+		if (ImGui::ColorEdit3("Color", &light->LightData.Color.x))
 		{
 			light->NumFramesDirty = gNumFrameResources;
 		}
 		ImGui::PopID();
 		ImGui::PushID(btnId++);
-		if (ImGui::DragFloat("Intensity", &light->LightData.intensity, 0.1f, 0.0f, 10.0f))
+		if (ImGui::DragFloat("Intensity", &light->LightData.Intensity, 0.1f, 0.0f, 10.0f))
 		{
 			light->NumFramesDirty = gNumFrameResources;
 		}
 		ImGui::PopID();
 		ImGui::PushID(btnId++);
-		if (ImGui::DragFloat("Radius", &light->LightData.radius, 0.1f, 0.0f, 30.0f))
+		if (ImGui::DragFloat("Radius", &light->LightData.Radius, 0.1f, 0.0f, 30.0f))
 		{
 			_lightingManager->UpdateWorld(lightIndex);
 		}
 		ImGui::PopID();
-		if (light->LightData.type == 1)
+		if (light->LightData.Type == 1)
 		{
 			ImGui::PushID(btnId++);
-			if (ImGui::DragFloat3("Direction", &light->LightData.direction.x, 0.1f))
+			if (ImGui::DragFloat3("Direction", &light->LightData.Direction.x, 0.1f))
 			{
 				_lightingManager->UpdateWorld(lightIndex);
 			}
 			ImGui::PopID();
 			ImGui::PushID(btnId++);
-			if (ImGui::SliderAngle("Angle", &light->LightData.angle, 1.0f, 89.f))
+			if (ImGui::SliderAngle("Angle", &light->LightData.Angle, 1.0f, 89.f))
 			{
 				_lightingManager->UpdateWorld(lightIndex);
 			}
@@ -784,13 +784,13 @@ void MyApp::DrawLocalLightData(int& btnId, int lightIndex)
 void MyApp::DrawObjectInfo(int& btnId)
 {
 	ImGui::SetNextWindowPos({ static_cast<float>(mClientWidth), 0.f }, 0, { 1.f, 0.f });
-	ImGui::SetNextWindowSize({ 250.f, (float)mClientHeight }, 0);
+	ImGui::SetNextWindowSize({ 250.f, static_cast<float>(mClientHeight) }, 0);
 
-	std::string title = _selectedModels.size() == 1
-		? _objectsManager->object(*_selectedModels.begin())->Name + " Info"
-		: std::to_string(_selectedModels.size()) + " objects selected";
+	const std::string title = _selectedModels.size() == 1
+		                    ? _objectsManager->Object(*_selectedModels.begin())->Name + " Info"
+		                    : std::to_string(_selectedModels.size()) + " objects selected";
 
-	ImGui::Begin(title.c_str(), 0, ImGuiWindowFlags_NoResize);
+	ImGui::Begin(title.c_str(), nullptr, ImGuiWindowFlags_NoResize);
 
 	if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen))
 	{
@@ -817,32 +817,32 @@ void MyApp::DrawObjectInfo(int& btnId)
 		}
 		else
 		{
-			DrawLODs(btnId);
+			DrawLoDs(btnId);
 		}
 	}
 
 	ImGui::End();
 }
 
-void MyApp::DrawMultiObjectTransform(int& btnId)
+void MyApp::DrawMultiObjectTransform(int& btnId) const
 {
 	DrawTransformInput("Location: ", btnId++, 0, 0.1f);
 	DrawTransformInput("Rotation: ", btnId++, 1, 1.f);
 
-	auto& manager = _objectsManager;
+	const auto& manager = _objectsManager;
 
 	constexpr size_t scaleIndex = BasicUtil::EnumIndex(Transform::Scale);
 
-	XMFLOAT3 firstScale = manager->object(*_selectedModels.begin())->transform[scaleIndex];
-	bool firstScaleLock = manager->object(*_selectedModels.begin())->lockedScale;
+	const XMFLOAT3 firstScale = manager->Object(*_selectedModels.begin())->transform[scaleIndex];
+	const bool firstScaleLock = manager->Object(*_selectedModels.begin())->lockedScale;
 	bool allSamePos = true;
 
-	for (int idx : _selectedModels)
+	for (const int idx : _selectedModels)
 	{
-		if (manager->object(idx)->transform[scaleIndex].x != firstScale.x ||
-			manager->object(idx)->transform[scaleIndex].y != firstScale.y ||
-			manager->object(idx)->transform[scaleIndex].z != firstScale.z ||
-			manager->object(idx)->lockedScale != firstScaleLock)
+		if (manager->Object(idx)->transform[scaleIndex].x != firstScale.x ||
+			manager->Object(idx)->transform[scaleIndex].y != firstScale.y ||
+			manager->Object(idx)->transform[scaleIndex].z != firstScale.z ||
+			manager->Object(idx)->lockedScale != firstScaleLock)
 		{
 			allSamePos = false;
 			break;
@@ -859,28 +859,27 @@ void MyApp::DrawMultiObjectTransform(int& btnId)
 		ImGui::PushID(btnId++);
 		if (ImGui::Checkbox("", &scale))
 		{
-			for (int idx : _selectedModels)
+			for (const int idx : _selectedModels)
 			{
-				manager->object(idx)->lockedScale = scale;
-				manager->object(idx)->NumFramesDirty = gNumFrameResources;
+				manager->Object(idx)->lockedScale = scale;
+				manager->Object(idx)->NumFramesDirty = gNumFrameResources;
 			}
 		}
 		ImGui::SameLine();
 		ImGui::PopID();
 
-		XMFLOAT3 before = firstScale;
+		const XMFLOAT3 before = firstScale;
 		XMFLOAT3 pos = before;
 
 		ImGui::PushID(btnId++);
 
 		if (ImGui::DragFloat3("", &pos.x, 0.1f))
 		{
-			for (int idx : _selectedModels)
+			for (const int idx : _selectedModels)
 			{
 				if (scale)
 				{
 					DirectX::XMFLOAT3 after = pos;
-					float difference = 1.f;
 
 					float ratio = 1.0f;
 					int changedAxis = -1;
@@ -902,8 +901,8 @@ void MyApp::DrawMultiObjectTransform(int& btnId)
 					}
 					pos = after;
 				}
-				manager->object(idx)->transform[scaleIndex] = pos;
-				manager->object(idx)->NumFramesDirty = gNumFrameResources;
+				manager->Object(idx)->transform[scaleIndex] = pos;
+				manager->Object(idx)->NumFramesDirty = gNumFrameResources;
 			}
 		}
 		ImGui::PopID();
@@ -914,14 +913,56 @@ void MyApp::DrawMultiObjectTransform(int& btnId)
 	}
 }
 
-void MyApp::DrawObjectMaterial(int& btnId, int matIndex)
+void MyApp::DrawTransformInput(const std::string& label, const int btnId, const int transformIndex, const float speed) const
 {
-	Material* material = _objectsManager->object(*_selectedModels.begin())->materials[matIndex].get();
-	bool isTransparent = DrawIsTransparentCheckbox();
-	bool useARM = DrawUseARMTextureCheckbox(material);
+	auto& manager = _objectsManager;
+
+	const XMFLOAT3 firstPos = manager->Object(*_selectedModels.begin())->transform[transformIndex];
+	bool allSamePos = true;
+
+	for (const int idx : _selectedModels)
+	{
+		if (manager->Object(idx)->transform[transformIndex].x != firstPos.x ||
+			manager->Object(idx)->transform[transformIndex].y != firstPos.y ||
+			manager->Object(idx)->transform[transformIndex].z != firstPos.z)
+		{
+			allSamePos = false;
+			break;
+		}
+	}
+
+	ImGui::Text(label.c_str());
+	ImGui::SameLine();
+	if (allSamePos)
+	{
+		XMFLOAT3 pos = firstPos;
+		ImGui::PushID(btnId);
+
+		if (ImGui::DragFloat3("", &pos.x, speed))
+		{
+			for (const int idx : _selectedModels)
+			{
+				manager->Object(idx)->transform[transformIndex] = pos;
+				manager->Object(idx)->NumFramesDirty = gNumFrameResources;
+			}
+		}
+		ImGui::PopID();
+	}
+	else
+	{
+		ImGui::TextDisabled("Multiple values");
+	}
+}
+
+void MyApp::DrawObjectMaterial(int& btnId, const int matIndex) const
+{
+	Material* material = _objectsManager->Object(*_selectedModels.begin())->materials[matIndex].get();
+	const bool isTransparent = DrawIsTransparentCheckbox();
+	const bool useArm = DrawUseArmTextureCheckbox(material);
 	DrawMaterialProperty(material, "Base Color", BasicUtil::EnumIndex(MatProp::BaseColor), btnId, true);
-	DrawMaterialProperty(material, "Emissive", BasicUtil::EnumIndex(MatProp::Emissive), btnId, true, true, "Intensity", BasicUtil::EnumIndex(MatAddInfo::Emissive));
-	if (!useARM)
+	DrawMaterialProperty(material, "Emissive", BasicUtil::EnumIndex(MatProp::Emissive), btnId, true, true, "Intensity",
+	                     BasicUtil::EnumIndex(MatAddInfo::Emissive));
+	if (!useArm)
 	{
 		DrawMaterialProperty(material, "Roughness", BasicUtil::EnumIndex(MatProp::Roughness), btnId, false);
 		DrawMaterialProperty(material, "Metallic", BasicUtil::EnumIndex(MatProp::Metallic), btnId, false);
@@ -933,26 +974,51 @@ void MyApp::DrawObjectMaterial(int& btnId, int matIndex)
 
 	DrawMaterialTexture(material, "Normal", BasicUtil::EnumIndex(MatTex::Normal), btnId);
 
-	const auto& ri = _objectsManager->object(*_selectedModels.begin());
+	const auto& ri = _objectsManager->Object(*_selectedModels.begin());
 	if (ri->isTesselated)
 	{
-		DrawMaterialTexture(material, "Displacement", BasicUtil::EnumIndex(MatTex::Displacement), btnId, true, "Displacement Scale", BasicUtil::EnumIndex(MatAddInfo::Displacement));
+		DrawMaterialTexture(material, "Displacement", BasicUtil::EnumIndex(MatTex::Displacement), btnId, true,
+		                    "Displacement Scale", BasicUtil::EnumIndex(MatAddInfo::Displacement));
 	}
 
-	if (!useARM)
+	if (!useArm)
 	{
 		DrawMaterialTexture(material, "Ambient Occlusion", BasicUtil::EnumIndex(MatTex::AmbOcc), btnId);
 	}
 	else
 	{
-		DrawMaterialARMTexture(material, "ARM", BasicUtil::EnumIndex(MatTex::ARM), btnId);
+		DrawMaterialArmTexture(material, "ARM", BasicUtil::EnumIndex(MatTex::ARM), btnId);
 	}
 }
 
-void MyApp::DrawMaterials(int& btnId)
+bool MyApp::DrawIsTransparentCheckbox() const
+{
+	auto& manager = _objectsManager;
+
+	const auto object = manager->Object(*_selectedModels.begin());
+
+	if (ImGui::Checkbox("Is transparent", &object->isTransparent))
+	{
+		object->NumFramesDirty = gNumFrameResources;
+	}
+
+	return object->isTransparent;
+}
+
+bool MyApp::DrawUseArmTextureCheckbox(Material* material)
+{
+	if (ImGui::Checkbox("Use ARM Texture", &material->useARMTexture))
+	{
+		material->numFramesDirty = gNumFrameResources;
+	}
+
+	return material->useARMTexture;
+}
+
+void MyApp::DrawMaterials(int& btnId) const
 {
 	static int selectedMaterial = -1;
-	const auto& ri = _objectsManager->object(*_selectedModels.begin());
+	const auto& ri = _objectsManager->Object(*_selectedModels.begin());
 
 	std::vector<int> visibleMaterialIndices;
 	for (int i = 0; i < ri->materials.size(); i++)
@@ -963,15 +1029,15 @@ void MyApp::DrawMaterials(int& btnId)
 		}
 	}
 
-	int numMaterials = (int)visibleMaterialIndices.size();
-	int maxVisible = 6; // maximum number of items to show without scrolling
-	float lineHeight = ImGui::GetTextLineHeightWithSpacing();
+	const int numMaterials = static_cast<int>(visibleMaterialIndices.size());
+	constexpr int maxVisible = 6; // maximum number of items to show without scrolling
+	const float lineHeight = ImGui::GetTextLineHeightWithSpacing();
 
-	float listHeight = lineHeight * (numMaterials < maxVisible ? numMaterials : maxVisible);
+	const float listHeight = lineHeight * static_cast<float>((numMaterials < maxVisible ? numMaterials : maxVisible));
 
 	if (ImGui::BeginListBox("##materials", ImVec2(-FLT_MIN, listHeight)))
 	{
-		for (int i : visibleMaterialIndices)
+		for (const int i : visibleMaterialIndices)
 		{
 			const bool isSelected = (selectedMaterial == i);
 			if (ImGui::Selectable(ri->materials[i].get()->name.c_str(), isSelected))
@@ -989,12 +1055,14 @@ void MyApp::DrawMaterials(int& btnId)
 	}
 }
 
-void MyApp::DrawMaterialProperty(Material* material, const std::string& label, size_t index, int& btnId, bool isFloat3, bool hasAdditionalInfo, const std::string& additionalInfoLabel, size_t additionalInfoIndex)
+void MyApp::DrawMaterialProperty(Material* material, const std::string& label, const size_t index, int& btnId,
+                                 const bool isFloat3, const bool hasAdditionalInfo, const std::string& additionalInfoLabel,
+                                 const size_t additionalInfoIndex) const
 {
-	auto& manager = _objectsManager;
-	bool textureTabOpen = material->properties[index].texture.useTexture;
+	const bool textureTabOpen = material->properties[index].texture.useTexture;
 
-	static const int propsNum = (int)material->properties.size();
+	// ReSharper disable once CppVariableCanBeMadeConstexpr
+	static const int propsNum = static_cast<int>(material->properties.size());
 	static std::vector<int> selectedTabs;
 	if (selectedTabs.size() == 0)
 	{
@@ -1036,11 +1104,11 @@ void MyApp::DrawMaterialProperty(Material* material, const std::string& label, s
 				ImGui::EndTabItem();
 
 			}
-			if (ImGui::BeginTabItem("Texture", 0, selectedTabs[index] ? ImGuiTabItemFlags_SetSelected : 0))
+			if (ImGui::BeginTabItem("Texture", nullptr, selectedTabs[index] ? ImGuiTabItemFlags_SetSelected : 0))
 			{
 				selectedTabs[index] = 1;
 
-				std::string name = BasicUtil::trimName(material->properties[index].texture.name, 15);
+				const std::string name = BasicUtil::TrimName(material->properties[index].texture.name, 15);
 
 				TextureHandle texHandle = material->properties[index].texture;
 
@@ -1050,7 +1118,7 @@ void MyApp::DrawMaterialProperty(Material* material, const std::string& label, s
 					WCHAR* texturePath;
 					if (BasicUtil::TryToOpenFile(L"Image Files", L"*.dds;*.png;*.jpg;*.jpeg;*.tga;*.bmp", texturePath))
 					{
-						texHandle = TextureManager::LoadTexture(texturePath, material->properties[index].texture.index, (int)_selectedModels.size());
+						texHandle = TextureManager::LoadTexture(texturePath, material->properties[index].texture.index, static_cast<int>(_selectedModels.size()));
 						material->properties[index].texture = texHandle;
 						material->numFramesDirty = gNumFrameResources;
 						CoTaskMemFree(texturePath);
@@ -1063,7 +1131,7 @@ void MyApp::DrawMaterialProperty(Material* material, const std::string& label, s
 					if (ImGui::Button("delete") && texHandle.useTexture == true)
 					{
 						const std::string texName = texHandle.name;
-						TextureManager::deleteTexture(std::wstring(texName.begin(), texName.end()), (int)_selectedModels.size());
+						TextureManager::DeleteTexture(std::wstring(texName.begin(), texName.end()), static_cast<int>(_selectedModels.size()));
 						material->properties[index].texture = TextureHandle();
 						material->properties[index].texture.useTexture = true;
 						material->numFramesDirty = gNumFrameResources;
@@ -1091,7 +1159,7 @@ void MyApp::DrawMaterialProperty(Material* material, const std::string& label, s
 			ImGui::PopID();
 		}
 
-		if (textureTabOpen != bool(selectedTabs[index]))
+		if (textureTabOpen != static_cast<bool>(selectedTabs[index]))
 		{
 			material->properties[index].texture.useTexture = selectedTabs[index];
 			material->numFramesDirty = gNumFrameResources;
@@ -1101,14 +1169,15 @@ void MyApp::DrawMaterialProperty(Material* material, const std::string& label, s
 	}
 }
 
-void MyApp::DrawMaterialTexture(Material* material, const std::string& label, size_t index, int& btnId, bool hasAdditionalInfo, const std::string& additionalInfoLabel, size_t additionalInfoIndex)
+void MyApp::DrawMaterialTexture(Material* material, const std::string& label, const size_t index, int& btnId,
+                                const bool hasAdditionalInfo, const std::string& additionalInfoLabel,
+                                const size_t additionalInfoIndex) const
 {
-	auto& manager = _objectsManager;
 
 	if (ImGui::TreeNode(label.c_str()))
 	{
 		TextureHandle texHandle = material->textures[index];
-		std::string name = BasicUtil::trimName(texHandle.name, 15);
+		const std::string name = BasicUtil::TrimName(texHandle.name, 15);
 
 		ImGui::PushID(btnId++);
 		if (ImGui::Button(name.c_str()))
@@ -1116,7 +1185,7 @@ void MyApp::DrawMaterialTexture(Material* material, const std::string& label, si
 			WCHAR* texturePath;
 			if (BasicUtil::TryToOpenFile(L"Image Files", L"*.dds;*.png;*.jpg;*.jpeg;*.tga;*.bmp", texturePath))
 			{
-				texHandle = TextureManager::LoadTexture(texturePath, material->textures[index].index, (int)_selectedModels.size());
+				texHandle = TextureManager::LoadTexture(texturePath, material->textures[index].index, static_cast<int>(_selectedModels.size()));
 				material->textures[index] = texHandle;
 				material->numFramesDirty = gNumFrameResources;
 				CoTaskMemFree(texturePath);
@@ -1129,7 +1198,7 @@ void MyApp::DrawMaterialTexture(Material* material, const std::string& label, si
 			if (ImGui::Button("delete") && texHandle.useTexture == true)
 			{
 				const std::string texName = texHandle.name;
-				TextureManager::deleteTexture(std::wstring(texName.begin(), texName.end()), (int)_selectedModels.size());
+				TextureManager::DeleteTexture(std::wstring(texName.begin(), texName.end()), static_cast<int>(_selectedModels.size()));
 				material->textures[index] = TextureHandle();
 				material->numFramesDirty = gNumFrameResources;
 			}
@@ -1156,20 +1225,20 @@ void MyApp::DrawMaterialTexture(Material* material, const std::string& label, si
 	}
 }
 
-void MyApp::DrawMaterialARMTexture(Material* material, const std::string& label, size_t index, int& btnId)
+void MyApp::DrawMaterialArmTexture(Material* material, const std::string& label, const size_t index, int& btnId) const
 {
 	if (ImGui::TreeNode(label.c_str()))
 	{
 		static const char* layouts[] = { "AO-Rough-Metal", "Rough-Metal-AO", };
-		int layout = (int)material->armLayout;
+		int layout = static_cast<int>(material->armLayout);
 		if (ImGui::Combo("Layout", &layout, layouts, IM_ARRAYSIZE(layouts)))
 		{
-			material->armLayout = (ARMLayout)layout;
+			material->armLayout = static_cast<ARMLayout>(layout);
 			material->numFramesDirty = gNumFrameResources;
 		}
 
 		TextureHandle texHandle = material->textures[index];
-		std::string name = BasicUtil::trimName(texHandle.name, 15);
+		const std::string name = BasicUtil::TrimName(texHandle.name, 15);
 
 		ImGui::PushID(btnId++);
 		if (ImGui::Button(name.c_str()))
@@ -1177,7 +1246,7 @@ void MyApp::DrawMaterialARMTexture(Material* material, const std::string& label,
 			WCHAR* texturePath;
 			if (BasicUtil::TryToOpenFile(L"Image Files", L"*.dds;*.png;*.jpg;*.jpeg;*.tga;*.bmp", texturePath))
 			{
-				texHandle = TextureManager::LoadTexture(texturePath, material->textures[index].index, (int)_selectedModels.size());
+				texHandle = TextureManager::LoadTexture(texturePath, material->textures[index].index, static_cast<int>(_selectedModels.size()));
 				material->textures[index] = texHandle;
 				material->numFramesDirty = gNumFrameResources;
 				CoTaskMemFree(texturePath);
@@ -1190,7 +1259,7 @@ void MyApp::DrawMaterialARMTexture(Material* material, const std::string& label,
 			if (ImGui::Button("delete") && texHandle.useTexture == true)
 			{
 				const std::string texName = texHandle.name;
-				TextureManager::deleteTexture(std::wstring(texName.begin(), texName.end()), (int)_selectedModels.size());
+				TextureManager::DeleteTexture(std::wstring(texName.begin(), texName.end()), static_cast<int>(_selectedModels.size()));
 				material->textures[index] = TextureHandle();
 				material->numFramesDirty = gNumFrameResources;
 			}
@@ -1202,52 +1271,11 @@ void MyApp::DrawMaterialARMTexture(Material* material, const std::string& label,
 	}
 }
 
-void MyApp::DrawTransformInput(const std::string& label, int btnId, int transformIndex, float speed)
+void MyApp::DrawLoDs(int& btnId)
 {
-	auto& manager = _objectsManager;
+	const auto& ri = _objectsManager->Object(*_selectedModels.begin());
 
-	XMFLOAT3 firstPos = manager->object(*_selectedModels.begin())->transform[transformIndex];
-	bool allSamePos = true;
-
-	for (int idx : _selectedModels)
-	{
-		if (manager->object(idx)->transform[transformIndex].x != firstPos.x ||
-			manager->object(idx)->transform[transformIndex].y != firstPos.y ||
-			manager->object(idx)->transform[transformIndex].z != firstPos.z)
-		{
-			allSamePos = false;
-			break;
-		}
-	}
-
-	ImGui::Text(label.c_str());
-	ImGui::SameLine();
-	if (allSamePos)
-	{
-		XMFLOAT3 pos = firstPos;
-		ImGui::PushID(btnId);
-
-		if (ImGui::DragFloat3("", &pos.x, speed))
-		{
-			for (int idx : _selectedModels)
-			{
-				manager->object(idx)->transform[transformIndex] = pos;
-				manager->object(idx)->NumFramesDirty = gNumFrameResources;
-			}
-		}
-		ImGui::PopID();
-	}
-	else
-	{
-		ImGui::TextDisabled("Multiple values");
-	}
-}
-
-void MyApp::DrawLODs(int& btnId)
-{
-	const auto& ri = _objectsManager->object(*_selectedModels.begin());
-
-	auto& lods = ri->lodsData;
+	const auto& lods = ri->lodsData;
 
 	if (ImGui::BeginListBox("##lods", ImVec2(-FLT_MIN, ImGui::GetTextLineHeightWithSpacing() * lods.size())))
 	{
@@ -1256,7 +1284,7 @@ void MyApp::DrawLODs(int& btnId)
 			const bool isSelected = ri->currentLODIdx == i;
 
 			std::string label = "LOD " + std::to_string(i) + " (" + std::to_string(lods[i].triangleCount) + " triangles)";
-			if (_fixedLOD)
+			if (_fixedLod)
 			{
 				if (ImGui::Selectable(label.c_str(), isSelected))
 				{
@@ -1290,7 +1318,7 @@ void MyApp::DrawLODs(int& btnId)
 								toastMessage = "LODs from " + std::to_string(i + 1) + " to " + std::to_string(lods.size() - 1) + " were shifted up.";
 							AddToast(toastMessage, 5.0f);
 						}
-						_objectsManager->DeleteLOD(ri, i);
+						_objectsManager->DeleteLod(ri, i);
 					}
 					ImGui::PopID();
 					ImGui::EndPopup();
@@ -1304,7 +1332,7 @@ void MyApp::DrawLODs(int& btnId)
 	{
 		if (ImGui::Button("Add LOD"))
 		{
-			AddLOD();
+			AddLod();
 		}
 	}
 }
@@ -1315,11 +1343,11 @@ void MyApp::DrawPostProcesses()
 	{
 		bool isDirty = false;
 		isDirty = ImGui::Checkbox("Enabled##godrays", &_godRays) || isDirty;
-		isDirty = ImGui::DragInt("Samples##godrays", &_postProcessManager->GodRaysParameters.samplesCount, 5, 10, 100) || isDirty;
-		isDirty = ImGui::DragFloat("Decay##godrays", &_postProcessManager->GodRaysParameters.decay, 0.05f, 0.1f, 1.0f) || isDirty;
-		isDirty = ImGui::DragFloat("Exposure##godrays", &_postProcessManager->GodRaysParameters.exposure, 0.05f, 0.1f, 1.0f) || isDirty;
-		isDirty = ImGui::DragFloat("Density##godrays", &_postProcessManager->GodRaysParameters.density, 0.05f, 0.1f, 1.0f) || isDirty;
-		isDirty = ImGui::DragFloat("Weight##godrays", &_postProcessManager->GodRaysParameters.weight, 0.05f, 0.1f, 1.0f) || isDirty;
+		isDirty = ImGui::DragInt("Samples##godrays", &_postProcessManager->GodRaysParameters.SamplesCount, 5, 10, 100) || isDirty;
+		isDirty = ImGui::DragFloat("Decay##godrays", &_postProcessManager->GodRaysParameters.Decay, 0.05f, 0.1f, 1.0f) || isDirty;
+		isDirty = ImGui::DragFloat("Exposure##godrays", &_postProcessManager->GodRaysParameters.Exposure, 0.05f, 0.1f, 1.0f) || isDirty;
+		isDirty = ImGui::DragFloat("Density##godrays", &_postProcessManager->GodRaysParameters.Density, 0.05f, 0.1f, 1.0f) || isDirty;
+		isDirty = ImGui::DragFloat("Weight##godrays", &_postProcessManager->GodRaysParameters.Weight, 0.05f, 0.1f, 1.0f) || isDirty;
 		if (isDirty)
 			_postProcessManager->UpdateGodRaysParameters();
 	}
@@ -1328,9 +1356,9 @@ void MyApp::DrawPostProcesses()
 	{
 		//no need for dirty flag 'cause we update it every frame
 		ImGui::Checkbox("Enabled##ssr", &_ssr);
-		ImGui::DragInt("Step Size##ssr", &_postProcessManager->SSRParameters.StepScale, 1, 1, 20);
-		ImGui::DragInt("Max Screen Distance##ssr", &_postProcessManager->SSRParameters.MaxScreenDistance, 5, 100, 1000);
-		ImGui::DragInt("Max Steps##ssr", &_postProcessManager->SSRParameters.MaxSteps, 5, 100, 500);
+		ImGui::DragInt("Step Size##ssr", &_postProcessManager->SsrParameters.StepScale, 1, 1, 20);
+		ImGui::DragInt("Max Screen Distance##ssr", &_postProcessManager->SsrParameters.MaxScreenDistance, 5, 100, 1000);
+		ImGui::DragInt("Max Steps##ssr", &_postProcessManager->SsrParameters.MaxSteps, 5, 100, 500);
 	}
 
 	if (ImGui::CollapsingHeader("Chromatic Aberration"))
@@ -1347,21 +1375,21 @@ void MyApp::DrawPostProcesses()
 	}
 }
 
-void MyApp::AddToast(const std::string& msg, float lifetime)
+void MyApp::AddToast(const std::string& msg, const float lifetime)
 {
-	_notifications.push_back({ msg, lifetime, (float)ImGui::GetTime() });
+	_notifications.push_back({ msg, lifetime, static_cast<float>(ImGui::GetTime()) });
 }
 
 void MyApp::DrawToasts()
 {
-	const float pad = 10.0f;
-	ImVec2 screen = ImGui::GetIO().DisplaySize;
+	constexpr float pad = 10.0f;
+	const ImVec2 screen = ImGui::GetIO().DisplaySize;
 
-	float y = mClientHeight - pad - 40;
+	float y = static_cast<float>(mClientHeight) - pad - 40.f;
 	for (size_t i = 0; i < _notifications.size(); )
 	{
-		float age = (float)ImGui::GetTime() - _notifications[i].creationTime;
-		float alpha = 1.0f - (age / _notifications[i].lifetime);
+		const float age = static_cast<float>(ImGui::GetTime()) - _notifications[i].CreationTime;
+		const float alpha = 1.0f - (age / _notifications[i].Lifetime);
 
 		if (alpha <= 0.0f) {
 			_notifications.erase(_notifications.begin() + i);
@@ -1372,13 +1400,13 @@ void MyApp::DrawToasts()
 		ImGui::SetNextWindowPos(ImVec2(screen.x - 500 - pad, y), ImGuiCond_Always);
 
 		ImGui::Begin(("##toast" + std::to_string(i)).c_str(), nullptr,
-			ImGuiWindowFlags_NoDecoration |
-			ImGuiWindowFlags_AlwaysAutoResize |
-			ImGuiWindowFlags_NoSavedSettings |
-			ImGuiWindowFlags_NoNav |
-			ImGuiWindowFlags_NoMove);
+		             ImGuiWindowFlags_NoDecoration |
+		             ImGuiWindowFlags_AlwaysAutoResize |
+		             ImGuiWindowFlags_NoSavedSettings |
+		             ImGuiWindowFlags_NoNav |
+		             ImGuiWindowFlags_NoMove);
 
-		ImGui::TextUnformatted(_notifications[i].message.c_str());
+		ImGui::TextUnformatted(_notifications[i].Message.c_str());
 		ImGui::End();
 
 		y -= 40.0f; // stack spacing
@@ -1388,35 +1416,35 @@ void MyApp::DrawToasts()
 
 void MyApp::DrawHeader()
 {
-	ImGui::SetNextWindowPos({ mClientWidth / 2.f, 0.f }, 0, { 0.5f, 0.0f });
+	ImGui::SetNextWindowPos({ static_cast<float>(mClientWidth) / 2.f, 0.f }, 0, { 0.5f, 0.0f });
 	ImGui::SetNextWindowSize({ 300.f, 60.f });
 	ImGui::Begin("##header", nullptr, ImGuiWindowFlags_NoResize);
 	ImGui::Columns(2, "MyColumns", true); // true for borders
 	//fixed lod
-	ImGui::Checkbox("Fixed LOD", &_fixedLOD);
+	ImGui::Checkbox("Fixed LOD", &_fixedLod);
 	ImGui::NextColumn();
 	DrawCameraSpeed();
 	ImGui::End();
 }
 
-void MyApp::DrawCameraSpeed()
+void MyApp::DrawCameraSpeed() const
 {
-	std::string cameraSpeedStr = std::to_string(_cameraSpeed);
+	const std::string cameraSpeedStr = std::to_string(_cameraSpeed);
 	ImGui::Text(("Camera speed: " + cameraSpeedStr.substr(0, cameraSpeedStr.find_last_of('.') + 3)).c_str());
 }
 
 void MyApp::DrawImportModal()
 {
-	ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+	const ImVec2 center = ImGui::GetMainViewport()->GetCenter();
 	ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 
-	if (ImGui::BeginPopupModal("Multiple meshes", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+	if (ImGui::BeginPopupModal("Multiple meshes", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
 	{
 		ImGui::Text(("This file has " + std::to_string(_modelManager->ModelCount()) + " models. How do you want to import it?").c_str());
 		ImGui::Spacing();
 
 		// Begin a scrollable child
-		ImVec2 listSize = ImVec2(400, 300); // Width x Height
+		constexpr auto listSize = ImVec2(400, 300); // Width x Height
 		ImGui::BeginChild("MeshList", listSize, true /* border */, ImGuiWindowFlags_AlwaysVerticalScrollbar);
 
 		for (auto& name : _modelManager->MeshNames())
@@ -1456,43 +1484,19 @@ void MyApp::DrawImportModal()
 	}
 }
 
-bool MyApp::DrawIsTransparentCheckbox()
-{
-	auto& manager = _objectsManager;
-
-	auto object = manager->object(*_selectedModels.begin());
-
-	if (ImGui::Checkbox("Is transparent", &object->isTransparent))
-	{
-		object->NumFramesDirty = gNumFrameResources;
-	}
-
-	return object->isTransparent;
-}
-
-bool MyApp::DrawUseARMTextureCheckbox(Material* material)
-{
-	if (ImGui::Checkbox("Use ARM Texture", &material->useARMTexture))
-	{
-		material->numFramesDirty = gNumFrameResources;
-	}
-
-	return material->useARMTexture;
-}
-
 void MyApp::AddModel()
 {
 	PWSTR pszFilePath;
 	if (BasicUtil::TryToOpenFile(L"3D Object", L"*.obj;*.fbx;*.glb", pszFilePath))
 	{
-		int modelCount = _modelManager->ImportObject(pszFilePath);
+		const int modelCount = _modelManager->ImportObject(pszFilePath);
 		if (modelCount > 1 && modelCount < 20)
 		{
 			ImGui::OpenPopup("Multiple meshes");
 		}
 		else if (modelCount == 1)
 		{
-			auto model = _modelManager->ParseAsOneObject();
+			const auto model = _modelManager->ParseAsOneObject();
 			//generating it as one mesh
 			ModelData data = GeometryManager::BuildModelGeometry(model.get());
 			_selectedModels.clear();
@@ -1513,38 +1517,38 @@ void MyApp::AddMultipleModels()
 	for (auto& model : _modelManager->ParseScene())
 	{
 		ModelData data = std::move(GeometryManager::BuildModelGeometry(model.get()));
-		if (data.lodsData.empty())
+		if (data.LodsData.empty())
 			continue;
 		_selectedModels.insert(_objectsManager->AddRenderItem(_device.Get(), std::move(data)));
 	}
 }
 
-void MyApp::AddLOD()
+void MyApp::AddLod()
 {
 	PWSTR pszFilePath;
 	if (BasicUtil::TryToOpenFile(L"3D Object", L"*.obj;*.fbx;*.glb", pszFilePath))
 	{
-		const auto& ri = _objectsManager->object(*_selectedModels.begin());
+		const auto& ri = _objectsManager->Object(*_selectedModels.begin());
 
-		if (_modelManager->ImportLODObject(pszFilePath, (int)ri->lodsData.begin()->meshes.size()))
+		if (_modelManager->ImportLodObject(pszFilePath, static_cast<int>(ri->lodsData.begin()->meshes.size())))
 		{
-			auto lod = _modelManager->ParseAsLODObject();
-			LODData data = { (int)lod.indices.size() / 3, lod.meshes };
+			const auto lod = _modelManager->ParseAsLodObject();
+			const LODData data = { static_cast<int>(lod.indices.size()) / 3, lod.meshes };
 			//generating it as one mesh
-			int LODIdx = _objectsManager->AddLOD(_device.Get(), data, ri);
-			GeometryManager::AddLODGeometry(ri->Name, LODIdx, lod);
-			AddToast("Your LOD was added as LOD" + std::to_string(LODIdx) + "!");
+			const int lodIdx = _objectsManager->AddLod(_device.Get(), data, ri);
+			GeometryManager::AddLodGeometry(ri->Name, lodIdx, lod);
+			AddToast("Your LOD was added as LOD" + std::to_string(lodIdx) + "!");
 		}
 		CoTaskMemFree(pszFilePath);
 	}
 }
 
-void MyApp::AddShadowMask()
+void MyApp::AddShadowMask() const
 {
 	WCHAR* texturePath;
 	if (BasicUtil::TryToOpenFile(L"Image Files", L"*.dds;*.png;*.jpg;*.jpeg;*.tga;*.bmp", texturePath))
 	{
-		TextureHandle texHandle = TextureManager::LoadTexture(texturePath, -1, 1);
+		const TextureHandle texHandle = TextureManager::LoadTexture(texturePath, -1, 1);
 		_lightingManager->AddShadowMask(texHandle);
 		CoTaskMemFree(texturePath);
 	}
@@ -1572,69 +1576,78 @@ void MyApp::InitManagers()
 	_terrainManager = std::make_unique<TerrainManager>(_device.Get());
 	_terrainManager->BindToOtherData(&_camera);
 	_terrainManager->Init();
+
+	_taaManager = std::make_unique<TaaManager>(_device.Get());
+	_taaManager->BindToManagers(_lightingManager.get(), _gBuffer.get(), &_camera);
+	_taaManager->Init(mClientWidth, mClientHeight);
 }
 
-void MyApp::GBufferPass()
+void MyApp::GBufferPass() const
 {
-	ID3D12DescriptorHeap* descriptorHeaps[] = { TextureManager::srvDescriptorHeap.Get() };
+	ID3D12DescriptorHeap* descriptorHeaps[] = { TextureManager::SrvDescriptorHeap.Get() };
 	mCommandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
 
 	mCommandList->RSSetViewports(1, &mScreenViewport);
 	mCommandList->RSSetScissorRects(1, &mScissorRect);
 
 	//deferred rendering: writing in gbuffer first
-	_gBuffer->ChangeRTVsState(D3D12_RESOURCE_STATE_RENDER_TARGET);
-	_gBuffer->ChangeDSVState(D3D12_RESOURCE_STATE_DEPTH_WRITE);
+	_gBuffer->ChangeRtVsState(D3D12_RESOURCE_STATE_RENDER_TARGET);
+	_gBuffer->ChangeDsvState(D3D12_RESOURCE_STATE_DEPTH_WRITE);
 	
 	_gBuffer->ClearInfo(Colors::Transparent);
-	mCommandList->OMSetRenderTargets(_gBuffer->InfoCount(), _gBuffer->RTVs().data(),
-		false, &_gBuffer->DepthStencilView());
+	const auto dsv = _gBuffer->DepthStencilView();
+	mCommandList->OMSetRenderTargets(_gBuffer->InfoCount(), _gBuffer->RtVs().data(),
+	                                 false, &dsv);
 
-	_objectsManager->Draw(mCommandList.Get(), mCurrFrameResource, (float)mClientHeight, _isWireframe, _fixedLOD);
+	_objectsManager->Draw(mCommandList.Get(), _currFrameResource, static_cast<float>(mClientHeight), _isWireframe, _fixedLod);
 
-	_terrainManager->Draw(mCommandList.Get(), mCurrFrameResource);
+	_terrainManager->Draw(mCommandList.Get(), _currFrameResource);
 }
 
-void MyApp::LightingPass()
+void MyApp::LightingPass() const
 {
-	_gBuffer->ChangeRTVsState(D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-	_gBuffer->ChangeDSVState(D3D12_RESOURCE_STATE_DEPTH_READ);
+	_gBuffer->ChangeRtVsState(D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+	_gBuffer->ChangeDsvState(D3D12_RESOURCE_STATE_DEPTH_READ);
 
-	_lightingManager->DrawDirLight(mCommandList.Get(), mCurrFrameResource);
+	_lightingManager->DrawDirLight(mCommandList.Get(), _currFrameResource);
 
 	if (_lightingManager->LightsCount() > 0)
 	{
-		_gBuffer->ChangeDSVState(D3D12_RESOURCE_STATE_DEPTH_READ);
-		_lightingManager->DrawLocalLights(mCommandList.Get(), mCurrFrameResource);
+		_gBuffer->ChangeDsvState(D3D12_RESOURCE_STATE_DEPTH_READ);
+		_lightingManager->DrawLocalLights(mCommandList.Get(), _currFrameResource);
 
 		if (*_lightingManager->DebugEnabled())
 		{
-			_lightingManager->DrawDebug(mCommandList.Get(), mCurrFrameResource);
+			_lightingManager->DrawDebug(mCommandList.Get(), _currFrameResource);
 		}
 	}
 
-	_lightingManager->DrawEmissive(mCommandList.Get(), mCurrFrameResource);
+	_lightingManager->DrawEmissive(mCommandList.Get(), _currFrameResource);
 }
 
-void MyApp::WireframePass()
+void MyApp::WireframePass() const
 {
-	_gBuffer->ChangeDSVState(D3D12_RESOURCE_STATE_DEPTH_WRITE);
+	_gBuffer->ChangeDsvState(D3D12_RESOURCE_STATE_DEPTH_WRITE);
 	_gBuffer->ClearInfo(Colors::Transparent);
-	mCommandList->OMSetRenderTargets(1, &CurrentBackBufferView(), true, &_gBuffer->DepthStencilView());
+	const auto currentBackBuffer = CurrentBackBufferView();
+	const auto dsv = _gBuffer->DepthStencilView();
+	mCommandList->OMSetRenderTargets(1, &currentBackBuffer, true, &dsv);
 
-	_objectsManager->Draw(mCommandList.Get(), mCurrFrameResource, (float)mClientHeight, _isWireframe);
+	_objectsManager->Draw(mCommandList.Get(), _currFrameResource, static_cast<float>(mClientHeight), _isWireframe);
 }
 
-void MyApp::FinalPass()
+void MyApp::FinalPass() const
 {
-	mCommandList->OMSetRenderTargets(1, &CurrentBackBufferView(), true, nullptr);
-	_lightingManager->DrawIntoBackBuffer(mCommandList.Get(), mCurrFrameResource);
+	const auto currentBackBuffer = CurrentBackBufferView();
+	mCommandList->OMSetRenderTargets(1, &currentBackBuffer, true, nullptr);
+	_lightingManager->DrawIntoBackBuffer(mCommandList.Get(), _currFrameResource);
 }
 
 //some wndproc stuff
+// ReSharper disable once CppInconsistentNaming
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
-bool MyApp::checkForImGui(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
+bool MyApp::checkForImGui(const HWND hwnd, const UINT msg, const WPARAM wParam, const LPARAM lParam)
 {
 	return ImGui_ImplWin32_WndProcHandler(hwnd, msg, wParam, lParam);
 }

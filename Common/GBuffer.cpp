@@ -1,6 +1,8 @@
 #include "GBuffer.h"
 
-GBuffer::GBuffer(ID3D12Device* device, ID3D12GraphicsCommandList* cmdList, int width, int height)
+int GBuffer::CurrentDepth = 0;
+
+GBuffer::GBuffer(ID3D12Device* device, ID3D12GraphicsCommandList* cmdList, const int width, const int height)
 {
 	_device = device;
 	_width = width;
@@ -10,24 +12,24 @@ GBuffer::GBuffer(ID3D12Device* device, ID3D12GraphicsCommandList* cmdList, int w
 	_srvDescriptorSize = _device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 	_dsvDescriptorSize = _device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
 
-	DescriptorHeapAllocator* srvHeapAllocator = TextureManager::srvHeapAllocator.get();
-	DescriptorHeapAllocator* rtvHeapAllocator = TextureManager::rtvHeapAllocator.get();
-	DescriptorHeapAllocator* dsvHeapAllocator = TextureManager::dsvHeapAllocator.get();
+	DescriptorHeapAllocator* srvHeapAllocator = TextureManager::SrvHeapAllocator.get();
+	DescriptorHeapAllocator* rtvHeapAllocator = TextureManager::RtvHeapAllocator.get();
+	DescriptorHeapAllocator* dsvHeapAllocator = TextureManager::DsvHeapAllocator.get();
 
-	for (int i = 0; i < (int)GBufferInfo::Count; i++)
+	for (int i = 0; i < static_cast<int>(GBufferInfo::Count); i++)
 	{
 		_info[i].SrvIndex = srvHeapAllocator->Allocate();
-		_info[i].otherIndex = i == (int)GBufferInfo::Depth ? dsvHeapAllocator->Allocate() : rtvHeapAllocator->Allocate();
+		_info[i].OtherIndex = rtvHeapAllocator->Allocate();
+	}
+
+	for (int i = 0; i < depthsNum; i++)
+	{
+		_depths[i].SrvIndex = srvHeapAllocator->Allocate();
+		_depths[i].OtherIndex = dsvHeapAllocator->Allocate();
 	}
 }
 
-GBuffer::~GBuffer()
-{
-	for (auto& tex : _info)
-		tex.Reset();
-}
-
-void GBuffer::OnResize(int width, int height)
+void GBuffer::OnResize(const int width, const int height)
 {
 	_width = width;
 	_height = height;
@@ -37,23 +39,27 @@ void GBuffer::OnResize(int width, int height)
 	for (auto& tex : _info)
 		tex.Reset();
 
-	DescriptorHeapAllocator* srvHeapAllocator = TextureManager::srvHeapAllocator.get();
-	DescriptorHeapAllocator* rtvHeapAllocator = TextureManager::rtvHeapAllocator.get();
-	DescriptorHeapAllocator* dsvHeapAllocator = TextureManager::dsvHeapAllocator.get();
+	const DescriptorHeapAllocator* srvHeapAllocator = TextureManager::SrvHeapAllocator.get();
+	const DescriptorHeapAllocator* rtvHeapAllocator = TextureManager::RtvHeapAllocator.get();
+	const DescriptorHeapAllocator* dsvHeapAllocator = TextureManager::DsvHeapAllocator.get();
 
-	for (int i = 0; i < (int)GBufferInfo::Count; i++)
+	for (int i = 0; i < static_cast<int>(GBufferInfo::Count); i++)
 	{
-		bool isDsv = i == (int)GBufferInfo::Depth;
 		CreateGBufferTexture(i, 
-			isDsv ? dsvHeapAllocator->GetCpuHandle(_info[i].otherIndex) : rtvHeapAllocator->GetCpuHandle(_info[i].otherIndex), 
-			srvHeapAllocator->GetCpuHandle(_info[i].SrvIndex));
+		                     rtvHeapAllocator->GetCpuHandle(_info[i].OtherIndex), 
+		                     srvHeapAllocator->GetCpuHandle(_info[i].SrvIndex), false);
+	}
+
+	for (int i = 0; i < depthsNum; i++)
+	{
+		CreateGBufferTexture(i, 
+		                     dsvHeapAllocator->GetCpuHandle(_depths[i].OtherIndex), 
+		                     srvHeapAllocator->GetCpuHandle(_depths[i].SrvIndex), true);
 	}
 }
 
-void GBuffer::CreateGBufferTexture(int i, D3D12_CPU_DESCRIPTOR_HANDLE otherHeapHandle, D3D12_CPU_DESCRIPTOR_HANDLE srvHeapHandle)
+void GBuffer::CreateGBufferTexture(int i, D3D12_CPU_DESCRIPTOR_HANDLE otherHeapHandle, D3D12_CPU_DESCRIPTOR_HANDLE srvHeapHandle, const bool isDsv)
 {
-	bool isDSV = i == (int)GBufferInfo::Depth;
-
 	//creating new rtvs
 	D3D12_RESOURCE_DESC texDesc = {};
 	texDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
@@ -62,14 +68,14 @@ void GBuffer::CreateGBufferTexture(int i, D3D12_CPU_DESCRIPTOR_HANDLE otherHeapH
 	texDesc.Height = _height;
 	texDesc.DepthOrArraySize = 1;
 	texDesc.MipLevels = 1;
-	texDesc.Format = infoFormats[i]; // example for normals
+	texDesc.Format = isDsv ? depthFormat : infoFormats[i];
 	texDesc.SampleDesc.Count = 1;
 	texDesc.SampleDesc.Quality = 0;
 	texDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
-	texDesc.Flags = isDSV ? D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL : D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+	texDesc.Flags = isDsv ? D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL : D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
 
 	D3D12_CLEAR_VALUE clearValue = {};
-	if (isDSV)
+	if (isDsv)
 	{
 		clearValue.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
 		clearValue.DepthStencil.Depth = 1.0f;
@@ -87,16 +93,16 @@ void GBuffer::CreateGBufferTexture(int i, D3D12_CPU_DESCRIPTOR_HANDLE otherHeapH
 	CD3DX12_HEAP_PROPERTIES heapProps(D3D12_HEAP_TYPE_DEFAULT);
 
 	ThrowIfFailed(_device->CreateCommittedResource(
-		&heapProps, D3D12_HEAP_FLAG_NONE, &texDesc, D3D12_RESOURCE_STATE_COMMON,
-		&clearValue, IID_PPV_ARGS(&_info[i].Resource)));
+		&heapProps, D3D12_HEAP_FLAG_NONE, &texDesc, D3D12_RESOURCE_STATE_GENERIC_READ,
+		&clearValue, IID_PPV_ARGS(isDsv ? &_depths[i].Resource : &_info[i].Resource)));
 
-	if (isDSV)
+	if (isDsv)
 	{
 		D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc = {};
 		dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
 		dsvDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
 		dsvDesc.Texture2D.MipSlice = 0;
-		_device->CreateDepthStencilView(_info[i].Resource.Get(), &dsvDesc, otherHeapHandle);
+		_device->CreateDepthStencilView(_depths[i].Resource.Get(), &dsvDesc, otherHeapHandle);
 	}
 	else
 	{
@@ -113,74 +119,101 @@ void GBuffer::CreateGBufferTexture(int i, D3D12_CPU_DESCRIPTOR_HANDLE otherHeapH
 	//create SRV
 	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-	srvDesc.Format = isDSV ? DXGI_FORMAT_R24_UNORM_X8_TYPELESS : infoFormats[i];
+	srvDesc.Format = isDsv ? DXGI_FORMAT_R24_UNORM_X8_TYPELESS : infoFormats[i];
 	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
 	srvDesc.Texture2D.MipLevels = 1;
 
-	_device->CreateShaderResourceView(_info[i].Resource.Get(), &srvDesc, srvHeapHandle);
+	_device->CreateShaderResourceView((isDsv ? _depths[i] : _info[i]).Resource.Get(), &srvDesc, srvHeapHandle);
 }
 
-D3D12_CPU_DESCRIPTOR_HANDLE GBuffer::DepthStencilView()
+D3D12_CPU_DESCRIPTOR_HANDLE GBuffer::DepthStencilView() const
 {
-	return TextureManager::dsvHeapAllocator->GetCpuHandle(_info[(int)GBufferInfo::Depth].otherIndex);
+	return TextureManager::DsvHeapAllocator->GetCpuHandle(_depths[CurrentDepth].OtherIndex);
 }
 
 void GBuffer::ClearInfo(const FLOAT* color)
 {
-	ChangeDSVState(D3D12_RESOURCE_STATE_DEPTH_WRITE);
+	ChangeDsvState(D3D12_RESOURCE_STATE_DEPTH_WRITE, CurrentDepth);
 
 	_cmdList->ClearDepthStencilView(DepthStencilView(), D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
 
-	auto prevState = _info[0].prevState;
-	auto rtvHeapAllocator = TextureManager::rtvHeapAllocator.get();
+	const auto prevState = _info[0].PrevState;
+	const auto rtvHeapAllocator = TextureManager::RtvHeapAllocator.get();
 
-	ChangeRTVsState(D3D12_RESOURCE_STATE_RENDER_TARGET);
-	for (int i = 0; i < (int)GBufferInfo::Count; i++)
+	ChangeRtVsState(D3D12_RESOURCE_STATE_RENDER_TARGET);
+	for (int i = 0; i < static_cast<int>(GBufferInfo::Count); i++)
 	{
-		if (i == (int)GBufferInfo::Depth)
+		if (i == static_cast<int>(GBufferInfo::Depth))
 			continue;
-		_cmdList->ClearRenderTargetView(rtvHeapAllocator->GetCpuHandle(_info[i].otherIndex), color, 0, nullptr);
+		_cmdList->ClearRenderTargetView(rtvHeapAllocator->GetCpuHandle(_info[i].OtherIndex), color, 0, nullptr);
 	}
-	ChangeRTVsState(prevState);
+	ChangeRtVsState(prevState);
 }
 
-void GBuffer::ChangeRTVsState(D3D12_RESOURCE_STATES stateAfter)
+void GBuffer::ChangeRtVsState(const D3D12_RESOURCE_STATES stateAfter)
 {
 	std::vector<CD3DX12_RESOURCE_BARRIER> barriers;
-	for (int i = 0; i < (int)GBufferInfo::Count; i++)
+	for (int i = 0; i < static_cast<int>(GBufferInfo::Count); i++)
 	{
-		if (i == (int)GBufferInfo::Depth || _info[i].prevState == stateAfter)
+		if (_info[i].PrevState == stateAfter)
 			continue;
 
-		barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(_info[i].Resource.Get(), _info[i].prevState, stateAfter));
-		_info[i].prevState = stateAfter;
+		barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(_info[i].Resource.Get(), _info[i].PrevState, stateAfter));
+		_info[i].PrevState = stateAfter;
 	}
 	if (barriers.size() == 0)
 	{
 		return;
 	}
-	_cmdList->ResourceBarrier((UINT)barriers.size(), barriers.data());
+	_cmdList->ResourceBarrier(static_cast<UINT>(barriers.size()), barriers.data());
 }
 
-void GBuffer::ChangeDSVState(D3D12_RESOURCE_STATES stateAfter)
+void GBuffer::ChangeDsvState(const D3D12_RESOURCE_STATES stateAfter, const int depthIndex)
 {
-	RtvSrvTexture* depthTex = &_info[(int)GBufferInfo::Depth];
-	if (depthTex->prevState == stateAfter)
+	RtvSrvTexture* depthTex = &_depths[depthIndex];
+	if (depthTex->PrevState == stateAfter)
 		return;
-	_cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(depthTex->Resource.Get(), 
-		depthTex->prevState, stateAfter));
-	depthTex->prevState = stateAfter;
+	const auto barrier = CD3DX12_RESOURCE_BARRIER::Transition(depthTex->Resource.Get(), 
+                         		depthTex->PrevState, stateAfter);
+	_cmdList->ResourceBarrier(1, &barrier);
+	depthTex->PrevState = stateAfter;
 }
 
-std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> GBuffer::RTVs() const
+void GBuffer::ChangeBothDepthState(const D3D12_RESOURCE_STATES stateAfter)
+{
+	for (int i = 0; i < depthsNum; i++)
+	{
+		ChangeDsvState(stateAfter, i);
+	}
+}
+
+std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> GBuffer::RtVs() const
 {
 	std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> rtvs;
-	auto rtvDescriptorAllocator = TextureManager::rtvHeapAllocator.get();
-	for (int i = 0; i < (int)GBufferInfo::Count; i++)
+	const auto rtvDescriptorAllocator = TextureManager::RtvHeapAllocator.get();
+	for (int i = 0; i < static_cast<int>(GBufferInfo::Count); i++)
 	{
-		if (i == (int)GBufferInfo::Depth)
-			continue;
-		rtvs.push_back(rtvDescriptorAllocator->GetCpuHandle(_info[i].otherIndex));
+		rtvs.push_back(rtvDescriptorAllocator->GetCpuHandle(_info[i].OtherIndex));
 	}
 	return rtvs;
+}
+
+D3D12_GPU_DESCRIPTOR_HANDLE GBuffer::SrvGpuHandle() const
+{
+	return TextureManager::SrvHeapAllocator->GetGpuHandle(_info[0].SrvIndex);
+}
+
+D3D12_GPU_DESCRIPTOR_HANDLE GBuffer::GetGBufferTextureSrv(GBufferInfo type) const
+{
+	return TextureManager::SrvHeapAllocator->GetGpuHandle(_info[static_cast<int>(type)].SrvIndex);
+}
+
+D3D12_GPU_DESCRIPTOR_HANDLE GBuffer::GetGBufferDepthSrv(const bool isCurrent) const
+{
+	return TextureManager::SrvHeapAllocator->GetGpuHandle(_depths[isCurrent ? CurrentDepth : (CurrentDepth + 1) % depthsNum].SrvIndex);
+}
+
+void GBuffer::ChangeDepthTexture()
+{
+	CurrentDepth = (CurrentDepth + 1) % depthsNum;
 }

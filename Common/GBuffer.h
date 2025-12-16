@@ -1,74 +1,76 @@
 #pragma once
 #include "d3dUtil.h"
-#include "../ObjectLoader/ObjectLoader/TextureManager.h"
+#include "../ObjectLoader/ObjectLoader/Managers/TextureManager.h"
 
-enum class GBufferInfo
+enum class GBufferInfo : uint8_t
 {
 	BaseColor = 0,
 	Emissive,
 	Normals,
-	ORM,
+	Orm,
 	TexCoord,
+	Count, //depth is separate so count is before that
 	Depth,
-	Count
 };
 
 class GBuffer
 {
 public:
 	GBuffer(ID3D12Device* device, ID3D12GraphicsCommandList* cmdList, int width, int height);
-	~GBuffer();
-	//onresize
+	~GBuffer() = default;
+	GBuffer(GBuffer&) = delete;
+	GBuffer& operator=(GBuffer&) = delete;
+	GBuffer(GBuffer&&) = delete;
+	GBuffer& operator=(GBuffer&&) = delete;
+	
 	void OnResize(int width, int height);
 
-	void CreateGBufferTexture(int i, D3D12_CPU_DESCRIPTOR_HANDLE otherHeapHandle, D3D12_CPU_DESCRIPTOR_HANDLE srvHeapHandle);
+	void CreateGBufferTexture(int i, D3D12_CPU_DESCRIPTOR_HANDLE otherHeapHandle, D3D12_CPU_DESCRIPTOR_HANDLE srvHeapHandle, bool isDsv);
 
-	D3D12_CPU_DESCRIPTOR_HANDLE DepthStencilView();
+	D3D12_CPU_DESCRIPTOR_HANDLE DepthStencilView() const;
 
 	void ClearInfo(const FLOAT* color);
 
-	static int InfoCount(bool forRTVS = true)
+	static int InfoCount()
 	{
-		return (int)GBufferInfo::Count - (int)forRTVS;
+		return static_cast<int>(GBufferInfo::Count);
 	}
 
-	void ChangeRTVsState(D3D12_RESOURCE_STATES stateAfter);
-	void ChangeDSVState(D3D12_RESOURCE_STATES stateAfter);
+	void ChangeRtVsState(D3D12_RESOURCE_STATES stateAfter);
+	void ChangeDsvState(D3D12_RESOURCE_STATES stateAfter, const int depthIndex = CurrentDepth);
+	void ChangeBothDepthState(D3D12_RESOURCE_STATES stateAfter);
 
-	std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> RTVs() const;
+	std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> RtVs() const;
 
-	static constexpr DXGI_FORMAT infoFormats[(int)GBufferInfo::Count] = {
+	static constexpr DXGI_FORMAT infoFormats[static_cast<int>(GBufferInfo::Count)] = {
 	DXGI_FORMAT_R8G8B8A8_UNORM,			// Diffuse
 	DXGI_FORMAT_R16G16B16A16_FLOAT,		// Normals
 	DXGI_FORMAT_R16G16B16A16_FLOAT,		//Emissive
 	DXGI_FORMAT_R8G8B8A8_UNORM,			//ORM
-	DXGI_FORMAT_R16G16B16A16_FLOAT,		//Tex Coords
-	DXGI_FORMAT_R24G8_TYPELESS,         // Depth
+	DXGI_FORMAT_R16G16_FLOAT,			//Tex Coords
 	};
 
-	D3D12_GPU_DESCRIPTOR_HANDLE SRVGPUHandle() const
-	{
-		return TextureManager::srvHeapAllocator->GetGpuHandle(_info[0].SrvIndex);
-	}
+	static constexpr DXGI_FORMAT depthFormat = DXGI_FORMAT_R24G8_TYPELESS;
 
-	D3D12_GPU_DESCRIPTOR_HANDLE GetDepthSRV() const
-	{
-		return TextureManager::srvHeapAllocator->GetGpuHandle(_info[(int)GBufferInfo::Depth].SrvIndex);
-	}
+	static int CurrentDepth;
 
-	D3D12_GPU_DESCRIPTOR_HANDLE GetNormalSRV() const
-	{
-		return TextureManager::srvHeapAllocator->GetGpuHandle(_info[(int)GBufferInfo::Normals].SrvIndex);
-	}
+	D3D12_GPU_DESCRIPTOR_HANDLE SrvGpuHandle() const;
 
+	D3D12_GPU_DESCRIPTOR_HANDLE GetGBufferTextureSrv(GBufferInfo type) const;
+
+	D3D12_GPU_DESCRIPTOR_HANDLE GetGBufferDepthSrv(const bool isCurrent) const;
+
+	static void ChangeDepthTexture();
 private:
 	int _height;
 	int _width;
 	UINT _rtvDescriptorSize;
 	UINT _srvDescriptorSize;
 	UINT _dsvDescriptorSize;
+	static constexpr int depthsNum = 2;
 
-	RtvSrvTexture _info[(int)GBufferInfo::Count];
+	RtvSrvTexture _info[static_cast<int>(GBufferInfo::Count)];
+	RtvSrvTexture _depths[depthsNum];
 
 	Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> _cmdList;
 	Microsoft::WRL::ComPtr<ID3D12Device> _device;

@@ -71,9 +71,9 @@ VertexOut VS(VertexIn vin, uint instanceID : SV_InstanceID, uint vertexID : SV_V
     int texelX = grid.texelXStart + (vertexID % gridSize) * grid.texelStride;
     int texelY = grid.texelYStart + (vertexID / gridSize) * grid.texelStride;
     
-    int planeGridCount = gridSize * gridSize;
+    uint planeGridCount = gridSize * gridSize;
     
-    int edge;
+    uint edge;
     
     if (vertexID >= planeGridCount)
     {
@@ -152,7 +152,7 @@ struct GBufferInfo
     float4 TexCoord : SV_Target4;
 };
 
-GBufferInfo PS(VertexOut pin) : SV_TARGET
+GBufferInfo PS(VertexOut pin)
 {
     GBufferInfo gbuffer;
     gbuffer.BaseColor = diffuseMap.Sample(gsamLinear, pin.uv);

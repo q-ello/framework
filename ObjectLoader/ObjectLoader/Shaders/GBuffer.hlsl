@@ -56,6 +56,8 @@ cbuffer cbPass : register(b2)
     float3 gEyePosW;
     float gDeltaTime;
     float2 gScreenSize;
+    uint frameIndex;
+    int taaEnabled;
 };
 
 struct VertexIn
@@ -77,6 +79,29 @@ struct VertexOut
     float3 BiNormalW : BINORMAL;
 };
 
+float Halton(uint index, uint base)
+{
+    float f = 1.0f;
+    float result = 0.0f;
+    
+    while (index > 0)
+    {
+        f /= (float) base;
+        result += f * (float) (index % base);
+        index = (uint) floor((float) index / (float) base);
+    }
+    
+    return result;
+}
+
+float2 GenerateJitter(int frameIndex)
+{
+    float2 jitter;
+    jitter.x = Halton(frameIndex, 2);
+    jitter.y = Halton(frameIndex, 3);
+    return jitter;
+}
+
 VertexOut GBufferVS(VertexIn vin)
 {
     VertexOut vout = (VertexOut) 0.0f;
@@ -87,6 +112,9 @@ VertexOut GBufferVS(VertexIn vin)
 
     // Transform to homogeneous clip space.
     vout.PosH = mul(posW, gViewProj);
+    
+    if (taaEnabled == 1)
+        vout.PosH += float4(GenerateJitter(frameIndex) * vout.PosH.w / gScreenSize, 0, 0);
     
     vout.TexC = vin.TexC;
     
@@ -125,12 +153,14 @@ float TessEdge(float3 p0, float3 p1, float2 s0, float2 s1)
     
     if (screenTess <= 1.f)
     {
-        return 1.f;
+        screenTess = 1.f;
     }
+    else
+    {
+        float maxTess = 64.0f;
     
-    float maxTess = 64.0f;
-    
-    screenTess = clamp(screenTess, 1.0f, maxTess);
+        screenTess = clamp(screenTess, 1.0f, maxTess);
+    }
     
     return screenTess;
 }
@@ -248,7 +278,7 @@ struct GBufferInfo
     float4 Emissive : SV_Target1;
     float4 Normal : SV_Target2;
     float4 ORM : SV_Target3;
-    float4 TexCoord : SV_Target4;
+    float2 TexCoord : SV_Target4;
 };
 
 GBufferInfo GBufferPS(VertexOut pin)
@@ -287,7 +317,7 @@ GBufferInfo GBufferPS(VertexOut pin)
     }
     res.Emissive.xyz = useEmissiveMap ? gEmissiveMap.Sample(gsamPointClamp, pin.TexC).xyz : emissive;
     res.Emissive.a = emissiveIntensity;
-    res.TexCoord.xy = pin.TexC;
+    res.TexCoord = pin.TexC;
     
     return res;
 }
