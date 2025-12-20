@@ -152,6 +152,7 @@
     <ClInclude Include="Helpers\Model.h" />
     <ClInclude Include="Helpers\RenderItem.h" />
     <ClInclude Include="Helpers\VertexData.h" />
+    <ClInclude Include="Managers\AtmosphereManager.h" />
     <ClInclude Include="Managers\CubeMapManager.h" />
     <ClInclude Include="Managers\GeometryManager.h" />
     <ClInclude Include="Managers\LightingManager.h" />
@@ -514,6 +515,7 @@
     <ClCompile Include="imgui\imgui_widgets.cpp" />
     <ClCompile Include="imgui\misc\cpp\imgui_stdlib.cpp" />
     <ClCompile Include="imgui\misc\fonts\binary_to_compressed_c.cpp" />
+    <ClCompile Include="Managers\AtmosphereManager.cpp" />
     <ClCompile Include="Managers\CubeMapManager.cpp">
       <RuntimeLibrary>MultiThreadedDebugDll</RuntimeLibrary>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>

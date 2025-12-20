@@ -167,6 +167,19 @@ struct TaaConstants
 	float Pad[2] = {0.0f, 0.0f};
 };
 
+struct AtmosphereConstants
+{
+    DirectX::XMFLOAT3 DirToSun = {1.0f, 1.0f, 1.0f};
+    float AtmosphereRadius = 1050.0f;
+    DirectX::XMFLOAT3 PlanetCenter = {0.0f, -1000.0f, 0.0f};
+    float PlanetRadius = 1000.0f;
+    DirectX::XMFLOAT3 Wavelengths = {700.0f, 530.0f, 440.0f};
+    int NumInScatteringPoints = 10;
+    int NumOpticalDepthPoints = 10;
+    float DensityFalloff = 4;
+    int Pad[2];
+};
+
 // Stores the resources needed for the CPU to build the command lists
 // for a frame.  
 struct FrameResource
@@ -209,6 +222,7 @@ public:
 	std::unique_ptr<UploadBuffer<GridInfo>> GridInfoCb = nullptr;
 
 	std::unique_ptr<UploadBuffer<TaaConstants>> TaaCb = nullptr;
+	std::unique_ptr<UploadBuffer<AtmosphereConstants>> AtmosphereCb = nullptr;
 
     std::unordered_map<std::uint32_t, std::unique_ptr<UploadBuffer<OpaqueObjectConstants>>> OpaqueObjCb = {};
     std::unordered_map<std::uint32_t, std::unique_ptr<UploadBuffer<MaterialConstants>>> MaterialCb = {};

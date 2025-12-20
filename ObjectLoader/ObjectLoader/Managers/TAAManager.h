@@ -25,7 +25,6 @@ private:
 	void BuildPso();
 	void BuildTextures();
 	void ChangeHistoryState(ID3D12GraphicsCommandList* cmdList, int index, D3D12_RESOURCE_STATES newState);
-	static void ChangeTextureState(ID3D12GraphicsCommandList* cmdList, RtvSrvTexture& texture, D3D12_RESOURCE_STATES newState);
 
 private:
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> _rootSignature;
