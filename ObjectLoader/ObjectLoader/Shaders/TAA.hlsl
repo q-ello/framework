@@ -63,8 +63,10 @@ float4 TAAPS(VertexOut pin) : SV_Target
     
     float2 uvOffset = float2(1.f, 1.f) / gScreenSize;
  
+    [unroll]
     for (int x = -1; x <= 1; ++x)
     {
+        [unroll]
         for (int y = -1; y <= 1; ++y)
         {
             float4 color = gLitScene.Sample(gsamLinear, uv + float2(x, y) * uvOffset); // Sample neighbor

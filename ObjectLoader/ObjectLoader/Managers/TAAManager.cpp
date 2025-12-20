@@ -174,23 +174,7 @@ void TaaManager::BuildTextures()
 void TaaManager::ChangeHistoryState(ID3D12GraphicsCommandList* cmdList, const int index, const D3D12_RESOURCE_STATES newState)
 {
 	RtvSrvTexture& texture = _historyTextures[index];
-	ChangeTextureState(cmdList, texture, newState);
-}
-
-void TaaManager::ChangeTextureState(ID3D12GraphicsCommandList* cmdList, RtvSrvTexture& texture,
-                                    const D3D12_RESOURCE_STATES newState)
-{
-	if (texture.PrevState == newState)
-		return;
-
-	const D3D12_RESOURCE_BARRIER barrier = CD3DX12_RESOURCE_BARRIER::Transition(
-			texture.Resource.Get(),
-			texture.PrevState,
-			newState
-		);
-	cmdList->ResourceBarrier(1, &barrier);
-
-	texture.PrevState = newState;
+	BasicUtil::ChangeTextureState(cmdList, texture, newState);
 }
 
 void TaaManager::ApplyTaa(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource)

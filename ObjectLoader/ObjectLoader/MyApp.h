@@ -19,6 +19,7 @@
 #include "../Managers/CubeMapManager.h"
 #include "../Managers/TerrainManager.h"
 #include "../Managers/TAAManager.h"
+#include "Managers/AtmosphereManager.h"
 
 struct Toast {
 	std::string Message;
@@ -73,6 +74,7 @@ private:
 	void DrawObjectsList(int& btnId);
 	void DrawShadowMasksList(int& btnId) const;
 	void DrawTerrain(int& btnId) const;
+	void DrawAtmosphere(int& btnId);
 
 	void DrawHandSpotlight(int& btnId) const;
 	void DrawLightData(int& btnId) const;
@@ -110,6 +112,7 @@ private:
 	void AddMultipleModels();
 	void AddLod();
 	void AddShadowMask() const;
+	void UpdateDirToSun();
 
 	void InitManagers();
 
@@ -135,6 +138,7 @@ private:
 	std::unique_ptr<PostProcessManager> _postProcessManager = nullptr;
 	std::unique_ptr<TerrainManager> _terrainManager = nullptr;
 	std::unique_ptr<TaaManager> _taaManager = nullptr;
+	std::unique_ptr<AtmosphereManager> _atmosphereManager = nullptr;
 
 	GBufferPassConstants _gBufferCb;
 	LightingPassConstants _lightingCb;
@@ -160,7 +164,10 @@ private:
 	bool _chromaticAberration = false;
 	bool _vignetting = false;
 
-	//taa
 	bool _taaEnabled = false;
+	bool _atmosphereEnabled = false;	
+	int _timeInHours = 0;
+	int _timeInMinutes = 0;
+	
 };
 

@@ -1,5 +1,5 @@
 #include "BasicUtil.h"
-
+#include "../Managers/TextureManager.h"
 #include <shobjidl_core.h>
 
 std::wstring BasicUtil::GetCroppedName(const WCHAR* filename)
@@ -64,3 +64,20 @@ bool BasicUtil::TryToOpenFile(const WCHAR* extension1, const WCHAR* extension2, 
 
 	return true;
 }
+
+void BasicUtil::ChangeTextureState(ID3D12GraphicsCommandList* cmdList, RtvSrvTexture& texture,
+	const D3D12_RESOURCE_STATES newState)
+{
+	if (texture.PrevState == newState)
+		return;
+
+	const D3D12_RESOURCE_BARRIER barrier = CD3DX12_RESOURCE_BARRIER::Transition(
+			texture.Resource.Get(),
+			texture.PrevState,
+			newState
+		);
+	cmdList->ResourceBarrier(1, &barrier);
+
+	texture.PrevState = newState;
+}
+

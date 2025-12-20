@@ -30,6 +30,7 @@ FrameResource::FrameResource(ID3D12Device* device, UINT passCount)
 	GridInfoCb = std::make_unique<UploadBuffer<GridInfo>>(device, 8192, false);
 
 	TaaCb = std::make_unique<UploadBuffer<TaaConstants>>(device, passCount, true);
+    AtmosphereCb = std::make_unique<UploadBuffer<AtmosphereConstants>>(device, passCount, true);
 }
 
 void FrameResource::AddOpaqueObjectBuffer(ID3D12Device* device, std::uint32_t uid, int meshesCount, int materialsCount)

@@ -330,7 +330,7 @@ void LightingManager::DrawDirLight(ID3D12GraphicsCommandList* cmdList, const Fra
 	ChangeMiddlewareState(cmdList, D3D12_RESOURCE_STATE_RENDER_TARGET);
 
 	const auto& middlewareRtv = TextureManager::RtvHeapAllocator->GetCpuHandle(_middlewareTexture.OtherIndex);
-	cmdList->ClearRenderTargetView(middlewareRtv, Colors::LightSteelBlue, 0, nullptr);
+	cmdList->ClearRenderTargetView(middlewareRtv, Colors::Black, 0, nullptr);
 	const auto& dsv = _gbuffer->DepthStencilView();
 	cmdList->OMSetRenderTargets(1, &middlewareRtv, true, &dsv);
 

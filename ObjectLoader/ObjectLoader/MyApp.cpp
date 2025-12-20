@@ -1,4 +1,8 @@
 #include "MyApp.h"
+
+#include <chrono>
+#include <iostream>
+
 #include "imgui/backends/imgui_impl_win32.h"
 
 #pragma comment(lib, "ComCtl32.lib")
@@ -82,10 +86,16 @@ void MyApp::OnResize()
 
 	_camera.SetLens(0.25f * MathHelper::Pi, AspectRatio(), 10.f, 2000.f);
 
-	if (_taaEnabled && _taaManager != nullptr)
+	if (_taaManager != nullptr)
 	{
 		_taaManager->OnResize(mClientWidth, mClientHeight);
 	}
+	
+	if (_atmosphereManager != nullptr)
+	{
+		_atmosphereManager->OnResize(mClientWidth, mClientHeight);
+	}
+	
 	_camera.UpdateFrustum();
 }
 
@@ -119,6 +129,8 @@ void MyApp::Update(const GameTimer& gt)
 	
 	//camera gets changed every frame so we update ssr every frame too
 	_postProcessManager->UpdateSsrParameters(_currFrameResource);
+	
+	_atmosphereManager->UpdateParameters(_currFrameResource);
 }
 
 void MyApp::Draw(const GameTimer& gt)
@@ -146,7 +158,7 @@ void MyApp::Draw(const GameTimer& gt)
 	mCommandList->ResourceBarrier(1, &barrier);
 	_backBufferStates[mCurrBackBuffer] = D3D12_RESOURCE_STATE_RENDER_TARGET;
 
-	mCommandList->ClearRenderTargetView(CurrentBackBufferView(), Colors::LightSteelBlue, 0, nullptr);
+	mCommandList->ClearRenderTargetView(CurrentBackBufferView(), Colors::Black, 0, nullptr);
 
 
 	if (_isWireframe)
@@ -155,11 +167,16 @@ void MyApp::Draw(const GameTimer& gt)
 	}
 	else
 	{
-		auto objects = _objectsManager->Objects();
+		const auto objects = _objectsManager->Objects();
 		_lightingManager->DrawShadows(mCommandList.Get(), _currFrameResource, objects);
 		GBufferPass();
 		LightingPass();
-		_cubeMapManager->Draw(mCommandList.Get(), _currFrameResource);
+		if (_atmosphereEnabled)
+			_atmosphereManager->Draw(mCommandList.Get(), _currFrameResource);
+		
+		//we are getting rid of this one since we have atmosphere now
+		// _cubeMapManager->Draw(mCommandList.Get(), _currFrameResource);
+		
 		if (_taaEnabled)
 			_taaManager->ApplyTaa(mCommandList.Get(), _currFrameResource);
 		if (_godRays)
@@ -269,11 +286,12 @@ void MyApp::OnMouseWheel(const WPARAM btnState)
 
 void MyApp::OnKeyboardInput(const GameTimer& gt)
 {
-	if (GetAsyncKeyState('E') & 0x8000)
-	{
-		//since view matrix is transponed I'm taking z-column
-		_lightingManager->SetMainLightDirection(_camera.GetLook3F());
-	}
+	//made a sun dependent on time of day so bye for now
+	// if (GetAsyncKeyState('E') & 0x8000)
+	// {
+	// 	//since view matrix is transponed I'm taking z-column
+	// 	_lightingManager->SetMainLightDirection(_camera.GetLook3F());
+	// }
 
 	//moving camera
 	if (_mbDown && GetAsyncKeyState('W') & 0x8000)
@@ -374,6 +392,7 @@ void MyApp::DrawInterface()
 		DrawObjectsList(buttonId);
 		DrawShadowMasksList(buttonId);
 		DrawTerrain(buttonId);
+		DrawAtmosphere(buttonId);
 		ImGui::EndTabItem();
 	}
 
@@ -634,6 +653,94 @@ void MyApp::DrawTerrain(int& btnId) const
 	}
 }
 
+void MyApp::DrawAtmosphere(int& btnId)
+{
+	if (ImGui::CollapsingHeader("Atmosphere"))
+	{
+		ImGui::Checkbox("Enabled##atmosphere", &_atmosphereEnabled);
+		{
+			ImGui::Text("Time");
+			ImGui::SameLine();
+			ImGui::SetNextItemWidth(50.0f);
+			if (ImGui::DragInt("##atmosphere-time-in-hours", &_timeInHours, 1, -1, 24))
+			{
+				UpdateDirToSun();
+			}
+			ImGui::SameLine();
+			ImGui::Text("h");
+			ImGui::SameLine();
+			ImGui::SetNextItemWidth(50.0f);
+			if (ImGui::DragInt("##atmosphere-time-in-minutes", &_timeInMinutes, 1, -1, 60))
+			{
+				UpdateDirToSun();
+			}
+			ImGui::SameLine();
+			ImGui::Text("min");
+		}
+		{
+			ImGui::Text("Atmosphere Radius");
+			ImGui::SameLine();
+			ImGui::SetNextItemWidth(50.0f);
+			if (ImGui::DragFloat("##atmosphere-radius", &_atmosphereManager->Parameters.AtmosphereRadius, 10.0f, 1.0f, 10000.0f))
+			{
+				_atmosphereManager->SetDirty();
+			}
+		}
+		{
+			ImGui::Text("Planet Center");
+			ImGui::SameLine();
+			if (ImGui::DragFloat3("##atmosphere-planet-center", &_atmosphereManager->Parameters.PlanetCenter.x, 1.0f, 0.0f, 50.0f))
+			{
+				_atmosphereManager->SetDirty();
+			}
+		}
+		{
+			ImGui::Text("Planet Radius");
+			ImGui::SameLine();
+			ImGui::SetNextItemWidth(50.0f);
+			if (ImGui::DragFloat("##atmosphere-planet-radius", &_atmosphereManager->Parameters.PlanetRadius, 10.0f, 1.0f, 10000.0f))
+			{
+				_atmosphereManager->SetDirty();
+			}
+		}
+		{
+			ImGui::Text("Num Scattering Points");
+			ImGui::SameLine();
+			ImGui::SetNextItemWidth(50.0f);
+			if (ImGui::DragInt("##atmosphere-scattering", &_atmosphereManager->Parameters.NumInScatteringPoints, 1, 1, 50))
+			{
+				_atmosphereManager->SetDirty();
+			}
+		}
+		{
+			ImGui::Text("Num Optical Depth Points");
+			ImGui::SameLine();
+			ImGui::SetNextItemWidth(50.0f);
+			if (ImGui::DragInt("##atmosphere-optical-depth", &_atmosphereManager->Parameters.NumOpticalDepthPoints, 1, 1, 50))
+			{
+				_atmosphereManager->SetDirty();
+			}
+		}
+		{
+			ImGui::Text("Density Falloff");
+			ImGui::SameLine();
+			ImGui::SetNextItemWidth(50.0f);
+			if (ImGui::DragFloat("##atmosphere-density-falloff", &_atmosphereManager->Parameters.DensityFalloff, 1.0f, 1.0f, 50.0f))
+			{
+				_atmosphereManager->SetDirty();
+			}
+		}
+		{
+			ImGui::Text("Wavelengths");
+			ImGui::SameLine();
+			if (ImGui::DragFloat3("##atmosphere-wavelengths", &_atmosphereManager->Parameters.Wavelengths.x, 1.0f, 0.0f, 1000.0f))
+			{
+				_atmosphereManager->SetDirty();
+			}
+		}
+	}
+}
+
 void MyApp::DrawHandSpotlight(int& btnId) const
 {
 	const auto light = _lightingManager->MainSpotlight();
@@ -665,22 +772,30 @@ void MyApp::DrawHandSpotlight(int& btnId) const
 
 void MyApp::DrawLightData(int& btnId) const
 {
-	if (ImGui::CollapsingHeader("Directional Light", ImGuiTreeNodeFlags_DefaultOpen))
-	{
-		ImGui::Checkbox("Turn on", _lightingManager->IsMainLightOn());
-
-		ImGui::Text("Direction");
-		ImGui::SameLine();
-		ImGui::PushID(btnId++);
-		ImGui::DragFloat3("", _lightingManager->MainLightDirection(), 0.1f);
-		ImGui::PopID();
-
-		ImGui::Text("Color");
-		ImGui::SameLine();
-		ImGui::PushID(btnId++);
-		ImGui::ColorEdit3("", _lightingManager->MainLightColor());
-		ImGui::PopID();
-	}
+	//made a sun dependent on time of day so bye for now
+	// if (ImGui::CollapsingHeader("Directional Light", ImGuiTreeNodeFlags_DefaultOpen))
+	// {
+	// 	ImGui::Checkbox("Turn on", _lightingManager->IsMainLightOn());
+	//
+	// 	ImGui::Text("Direction");
+	// 	ImGui::SameLine();
+	// 	ImGui::PushID(btnId++);
+	// 	if (ImGui::DragFloat3("", _lightingManager->MainLightDirection(), 0.1f))
+	// 	{
+	// 		const float* dir = _lightingManager->MainLightDirection();
+	// 		XMVECTOR dirVec = XMVectorSet(-dir[0], -dir[1], -dir[2], 1.0f);
+	// 		dirVec = XMVector3Normalize(dirVec);
+	// 		XMStoreFloat3(&_atmosphereManager->Parameters.DirToSun, dirVec);
+	// 		_atmosphereManager->SetDirty();
+	// 	}
+	// 	ImGui::PopID();
+	//
+	// 	ImGui::Text("Color");
+	// 	ImGui::SameLine();
+	// 	ImGui::PushID(btnId++);
+	// 	ImGui::ColorEdit3("", _lightingManager->MainLightColor());
+	// 	ImGui::PopID();
+	// }
 	if (ImGui::CollapsingHeader("Spotlight in hand", ImGuiTreeNodeFlags_DefaultOpen))
 	{
 		DrawHandSpotlight(btnId);
@@ -1554,6 +1669,44 @@ void MyApp::AddShadowMask() const
 	}
 }
 
+void MyApp::UpdateDirToSun()
+{
+	//I like modulo better but I guess this way is faster.
+	{
+		if (_timeInMinutes > 59)
+		{
+			_timeInHours++;
+			_timeInMinutes = 0;
+		}
+		else if (_timeInMinutes < 0)
+		{
+			_timeInHours--;
+			_timeInMinutes = 59;
+		}
+	
+		if (_timeInHours > 23)
+			_timeInHours = 0;
+		else if (_timeInHours < 0)
+			_timeInHours = 23;
+	}
+	
+	const int timeTotal = _timeInHours * 60 + _timeInMinutes;
+		
+	constexpr float minutesInDay = 12.f * 60.f;
+	
+	constexpr float phi = 80.0f / 180.0f * XM_PI;
+	const float thetaPart = static_cast<float>(timeTotal) / minutesInDay;
+	const float theta = thetaPart * XM_PI;
+	XMVECTOR dirToSun = XMVectorSet(sin(theta)*cos(phi), -cos(theta), sin(theta)*sin(phi), 0.0f);
+	dirToSun = XMVector3Normalize(dirToSun);
+	const XMVECTOR negativeDirToSun = XMVectorNegate(dirToSun);
+	XMStoreFloat3(&_atmosphereManager->Parameters.DirToSun, dirToSun);
+	_atmosphereManager->SetDirty();
+	XMFLOAT3 negativeDirToSunF;
+	XMStoreFloat3(&negativeDirToSunF, negativeDirToSun);
+	_lightingManager->SetMainLightDirection(negativeDirToSunF);
+}
+
 void MyApp::InitManagers()
 {
 	_objectsManager = std::make_unique<EditableObjectManager>(_device.Get());
@@ -1580,6 +1733,24 @@ void MyApp::InitManagers()
 	_taaManager = std::make_unique<TaaManager>(_device.Get());
 	_taaManager->BindToManagers(_lightingManager.get(), _gBuffer.get(), &_camera);
 	_taaManager->Init(mClientWidth, mClientHeight);
+	
+	_atmosphereManager = std::make_unique<AtmosphereManager>(_device.Get());
+	_atmosphereManager->BindToManagers(_lightingManager.get(), _gBuffer.get());
+	_atmosphereManager->Init(mClientWidth, mClientHeight);
+	
+	//time of day for atmosphereManager so it'll also be here
+	{
+		struct tm newtime;
+		__time32_t time32;
+
+		_time32( &time32 );
+		// Convert to local time.
+		_localtime32_s(&newtime, &time32);
+		_timeInHours = newtime.tm_hour;
+		_timeInMinutes = newtime.tm_min;
+
+		UpdateDirToSun();
+	}
 }
 
 void MyApp::GBufferPass() const
