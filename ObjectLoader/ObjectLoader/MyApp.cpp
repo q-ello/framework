@@ -657,6 +657,19 @@ void MyApp::DrawTerrainTexture(int& btnId, const int index, const char* label) c
 {
 	MaterialProperty* property = _terrainManager->TerrainTexture(index);
 	const bool textureTabOpen = property->texture.UseTexture;
+	
+	// ReSharper disable once CppVariableCanBeMadeConstexpr
+	static const int propsNum = BasicUtil::EnumIndex(TerrainTexture::Count);
+	static std::vector<int> selectedTabs;
+	if (selectedTabs.size() == 0)
+	{
+		selectedTabs.resize(propsNum, -1);
+	}
+	
+	if (selectedTabs[index] == -1)
+	{
+		selectedTabs[index] = textureTabOpen;
+	}
 
 	if (ImGui::TreeNode(label))
 	{
@@ -664,19 +677,21 @@ void MyApp::DrawTerrainTexture(int& btnId, const int index, const char* label) c
 		{
 			if (ImGui::BeginTabItem("Constant"))
 			{
-				ImGui::PushID(btnId++);
+				selectedTabs[index] = 0;
+
 				if (ImGui::ColorEdit3("Color", &property->value.x))
 				{
 					property->texture.UseTexture = false;
 					_terrainManager->SetDirty();
 				}
-				ImGui::PopID();
 
 				ImGui::EndTabItem();
 
 			}
-			if (ImGui::BeginTabItem("Texture", nullptr, textureTabOpen ? ImGuiTabItemFlags_SetSelected : 0))
+			if (ImGui::BeginTabItem("Texture", nullptr, selectedTabs[index] ? ImGuiTabItemFlags_SetSelected : 0))
 			{
+				selectedTabs[index] = 1;
+				
 				const std::string name = BasicUtil::TrimName(property->texture.Name, 15);
 
 				TextureHandle texHandle = property->texture;
@@ -700,6 +715,12 @@ void MyApp::DrawTerrainTexture(int& btnId, const int index, const char* label) c
 		}
 		
 		ImGui::TreePop();
+	}
+	
+	if (textureTabOpen != static_cast<bool>(selectedTabs[index]))
+	{
+		property->texture.UseTexture = selectedTabs[index];
+		_terrainManager->SetDirty();
 	}
 }
 
