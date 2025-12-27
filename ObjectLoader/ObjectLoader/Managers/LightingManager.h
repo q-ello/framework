@@ -133,7 +133,7 @@ public:
 	}
 	std::string ShadowMaskName(const size_t i) const
 	{
-		return _shadowMasks[i].name;
+		return _shadowMasks[i].Name;
 	}
 	size_t SelectedShadowMask() const
 	{

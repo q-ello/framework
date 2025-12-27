@@ -32,7 +32,7 @@ public:
 
 	std::string EnvironmentName(CubeMap type) const
 	{
-		return _maps[static_cast<int>(type)].name;
+		return _maps[static_cast<int>(type)].Name;
 	}
 
 	void AddMap(CubeMap type, const TextureHandle& handle);

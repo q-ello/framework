@@ -67,15 +67,15 @@ void EditableObjectManager::UpdateObjectCBs(FrameResource* currFrameResource)
 				materialConstants.Metallic = material->properties[BasicUtil::EnumIndex(MatProp::Metallic)].value.x;
 				materialConstants.Opacity = material->properties[BasicUtil::EnumIndex(MatProp::Opacity)].value.x;
 				materialConstants.Roughness = material->properties[BasicUtil::EnumIndex(MatProp::Roughness)].value.x;
-				materialConstants.UseAoMap = material->textures[BasicUtil::EnumIndex(MatTex::AmbOcc)].useTexture;
-				materialConstants.UseBaseColorMap = material->properties[BasicUtil::EnumIndex(MatProp::BaseColor)].texture.useTexture;
-				materialConstants.UseDisplacementMap = material->textures[BasicUtil::EnumIndex(MatTex::Displacement)].useTexture;
-				materialConstants.UseEmissiveMap = material->properties[BasicUtil::EnumIndex(MatProp::Emissive)].texture.useTexture;
-				materialConstants.UseMetallicMap = material->properties[BasicUtil::EnumIndex(MatProp::Metallic)].texture.useTexture;
-				materialConstants.UseNormalMap = material->textures[BasicUtil::EnumIndex(MatTex::Normal)].useTexture;
-				materialConstants.UseOpacityMap = material->properties[BasicUtil::EnumIndex(MatProp::Opacity)].texture.useTexture;
-				materialConstants.UseRoughnessMap = material->properties[BasicUtil::EnumIndex(MatProp::Roughness)].texture.useTexture;
-				materialConstants.UseArmMap = material->textures[BasicUtil::EnumIndex(MatTex::ARM)].useTexture && material->useARMTexture;
+				materialConstants.UseAoMap = material->textures[BasicUtil::EnumIndex(MatTex::AmbOcc)].UseTexture;
+				materialConstants.UseBaseColorMap = material->properties[BasicUtil::EnumIndex(MatProp::BaseColor)].texture.UseTexture;
+				materialConstants.UseDisplacementMap = material->textures[BasicUtil::EnumIndex(MatTex::Displacement)].UseTexture;
+				materialConstants.UseEmissiveMap = material->properties[BasicUtil::EnumIndex(MatProp::Emissive)].texture.UseTexture;
+				materialConstants.UseMetallicMap = material->properties[BasicUtil::EnumIndex(MatProp::Metallic)].texture.UseTexture;
+				materialConstants.UseNormalMap = material->textures[BasicUtil::EnumIndex(MatTex::Normal)].UseTexture;
+				materialConstants.UseOpacityMap = material->properties[BasicUtil::EnumIndex(MatProp::Opacity)].texture.UseTexture;
+				materialConstants.UseRoughnessMap = material->properties[BasicUtil::EnumIndex(MatProp::Roughness)].texture.UseTexture;
+				materialConstants.UseArmMap = material->textures[BasicUtil::EnumIndex(MatTex::ARM)].UseTexture && material->useARMTexture;
 				materialConstants.ArmLayout = static_cast<int>(material->armLayout);
 
 				currMaterialCb[ri->uid].get()->CopyData(static_cast<int>(j), materialConstants);
@@ -414,12 +414,12 @@ bool EditableObjectManager::DeleteObject(const int selectedObject)
 	{
 		for (int i = 0; i < BasicUtil::EnumIndex(MatProp::Count); i++)
 		{
-			const std::string texName = materialToDelete->properties[i].texture.name;
+			const std::string texName = materialToDelete->properties[i].texture.Name;
 			TextureManager::DeleteTexture(std::wstring(texName.begin(), texName.end()));
 		}
 		for (int i = 0; i < BasicUtil::EnumIndex(MatTex::Count); i++)
 		{
-			const std::string texName = materialToDelete->textures[i].name;
+			const std::string texName = materialToDelete->textures[i].Name;
 			TextureManager::DeleteTexture(std::wstring(texName.begin(), texName.end()));
 		}
 	}
@@ -557,12 +557,12 @@ void EditableObjectManager::DrawObjects(ID3D12GraphicsCommandList* cmdList, Fram
 			for (int index = 0; index < offset; index++)
 			{
 				if (index == BasicUtil::EnumIndex(MatProp::Opacity)) index++;
-				const CD3DX12_GPU_DESCRIPTOR_HANDLE tex(heapAlloc->GetGpuHandle(material->properties[index].texture.index));
+				const CD3DX12_GPU_DESCRIPTOR_HANDLE tex(heapAlloc->GetGpuHandle(material->properties[index].texture.Index));
 				cmdList->SetGraphicsRootDescriptorTable(index, tex);
 			}
 			for (int i1 = 0; i1 < BasicUtil::EnumIndex(MatTex::Count); i1++)
 			{
-				const CD3DX12_GPU_DESCRIPTOR_HANDLE tex(heapAlloc->GetGpuHandle(material->textures[i1].index));
+				const CD3DX12_GPU_DESCRIPTOR_HANDLE tex(heapAlloc->GetGpuHandle(material->textures[i1].Index));
 				cmdList->SetGraphicsRootDescriptorTable(offset + i1, tex);
 			}
 

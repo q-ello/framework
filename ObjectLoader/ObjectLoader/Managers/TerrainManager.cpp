@@ -15,13 +15,17 @@ void TerrainManager::Init()
 
 	//allocating indices for heightmap and diffuse textures
 	const auto& allocator = TextureManager::SrvHeapAllocator.get();
-	_heightmapTexture.index = allocator->Allocate();
-	_diffuseTexture.index = allocator->Allocate();
+	_heightmapTexture.Index = allocator->Allocate();
+	
+	for (auto& texture : _textures)
+	{
+		texture.texture.Index = allocator->Allocate();
+	}
 }
 
 void TerrainManager::Draw(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource)
 {
-	if (_heightmapTexture.useTexture == false)
+	if (_heightmapTexture.UseTexture == false)
 		return;
 
 	FrustumCulling(currFrameResource);
@@ -31,12 +35,15 @@ void TerrainManager::Draw(ID3D12GraphicsCommandList* cmdList, FrameResource* cur
 	cmdList->SetPipelineState(_pso.Get());
 	cmdList->SetGraphicsRootSignature(_rootSignature.Get());
 
-	const D3D12_GPU_DESCRIPTOR_HANDLE heightMapTex(TextureManager::SrvHeapAllocator->GetGpuHandle(_heightmapTexture.index));
+	const D3D12_GPU_DESCRIPTOR_HANDLE heightMapTex(TextureManager::SrvHeapAllocator->GetGpuHandle(_heightmapTexture.Index));
 	cmdList->SetGraphicsRootDescriptorTable(0, heightMapTex);
 	cmdList->SetGraphicsRootConstantBufferView(1, currFrameResource->TerrainCb->Resource()->GetGPUVirtualAddress());
 	cmdList->SetGraphicsRootConstantBufferView(2, currFrameResource->GBufferPassCb->Resource()->GetGPUVirtualAddress());
 	cmdList->SetGraphicsRootShaderResourceView(3, currFrameResource->GridInfoCb->Resource()->GetGPUVirtualAddress());
+	const D3D12_GPU_DESCRIPTOR_HANDLE terrainTex(TextureManager::SrvHeapAllocator->GetGpuHandle(_textures->texture.Index));
+	cmdList->SetGraphicsRootDescriptorTable(4, terrainTex);
 	cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	cmdList->SetGraphicsRootConstantBufferView(5, currFrameResource->TerrainTexturesCb->Resource()->GetGPUVirtualAddress());
 
 	const auto& geo = GeometryManager::Geometries()["shapeGeo"].begin()->get();
 
@@ -56,7 +63,7 @@ void TerrainManager::BindToOtherData(Camera* camera)
 
 void TerrainManager::InitTerrain()
 {
-	const auto& texDesc = TextureManager::Textures()[std::wstring(_heightmapTexture.name.begin(), _heightmapTexture.name.end())]
+	const auto& texDesc = TextureManager::Textures()[std::wstring(_heightmapTexture.Name.begin(), _heightmapTexture.Name.end())]
 		->Resource->GetDesc();
 	if (texDesc.Width == _heightmapTextureWidth && texDesc.Height == _heightmapTextureHeight)
 		return;
@@ -83,14 +90,53 @@ void TerrainManager::InitTerrain()
 
 void TerrainManager::UpdateTerrainCb(const FrameResource* currFrameResource)
 {
-	const auto& terrainCb = currFrameResource->TerrainCb;
+	if (_numFramesDirty <= 0)
+		return;
 
-	TerrainConstants terrainConstants;
-	terrainConstants.HeightmapSize = { _heightmapTextureWidth, _heightmapTextureHeight };
-	terrainConstants.MaxHeight = MaxTerrainHeight;
-	terrainConstants.GridSize = _gridSize;
+	{
+		const auto& terrainCb = currFrameResource->TerrainCb;
 
-	terrainCb->CopyData(0, terrainConstants);
+		TerrainConstants terrainConstants;
+		terrainConstants.HeightmapSize = { _heightmapTextureWidth, _heightmapTextureHeight };
+		terrainConstants.MaxHeight = MaxTerrainHeight;
+		terrainConstants.GridSize = _gridSize;
+		terrainConstants.HeightThreshold = HeightThreshold;
+		terrainConstants.SlopeThreshold = SlopeThreshold;
+
+		terrainCb->CopyData(0, terrainConstants);
+	
+	}
+	
+	{
+		const auto& terrainTexturesCb = currFrameResource->TerrainTexturesCb;
+		TerrainTextures terrainTexturesConstants;
+
+		const MaterialProperty lowProperty = _textures[BasicUtil::EnumIndex(TerrainTexture::Low)];
+		terrainTexturesConstants.LowColor = lowProperty.value;
+		terrainTexturesConstants.UseLowTexture = lowProperty.texture.UseTexture;
+		
+		const MaterialProperty slopeProperty = _textures[BasicUtil::EnumIndex(TerrainTexture::Slope)];
+		terrainTexturesConstants.SlopeColor = slopeProperty.value;
+		terrainTexturesConstants.UseSlopeTexture = slopeProperty.texture.UseTexture;
+		
+		const MaterialProperty highProperty = _textures[BasicUtil::EnumIndex(TerrainTexture::High)];
+		terrainTexturesConstants.HighColor = highProperty.value;
+		terrainTexturesConstants.UseHighTexture = highProperty.texture.UseTexture;
+		
+		terrainTexturesCb->CopyData(0, terrainTexturesConstants);
+	}
+	
+	_numFramesDirty--;
+}
+
+MaterialProperty* TerrainManager::TerrainTexture(const int index)
+{
+	return &_textures[index];
+}
+
+void TerrainManager::SetDirty()
+{
+	_numFramesDirty = gNumFrameResources;
 }
 
 void TerrainManager::BuildInputLayout()
@@ -101,14 +147,20 @@ void TerrainManager::BuildInputLayout()
 void TerrainManager::BuildRootSignature()
 {
 	CD3DX12_DESCRIPTOR_RANGE texTable;
-	texTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 2, 0, 1);
+	texTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0, 1);
+	CD3DX12_DESCRIPTOR_RANGE texturesTable;
+	texturesTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, BasicUtil::EnumIndex(TerrainTexture::Count), 1, 1);
 
-	CD3DX12_ROOT_PARAMETER slotRootParameter[4];
+	constexpr int slotRootParameterCount = 6;
+	
+	CD3DX12_ROOT_PARAMETER slotRootParameter[slotRootParameterCount];
 	slotRootParameter[0].InitAsDescriptorTable(1, &texTable, D3D12_SHADER_VISIBILITY_ALL);
 	slotRootParameter[1].InitAsConstantBufferView(0);
 	slotRootParameter[2].InitAsConstantBufferView(1);
 	slotRootParameter[3].InitAsShaderResourceView(0);
-	const CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(4, slotRootParameter,
+	slotRootParameter[4].InitAsDescriptorTable(1, &texturesTable, D3D12_SHADER_VISIBILITY_PIXEL);
+	slotRootParameter[5].InitAsConstantBufferView(2);
+	const CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(slotRootParameterCount, slotRootParameter,
 	                                        static_cast<UINT>(TextureManager::GetLinearSamplers().size()),
 	                                        TextureManager::GetLinearSamplers().data(),
 	                                        D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
