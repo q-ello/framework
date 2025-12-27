@@ -20,12 +20,12 @@ public:
 	void Init(int width, int height);
 	void BindToManagers(GBuffer* gbuffer, LightingManager* lightingManager, Camera* camera);
 
-	void DrawGodRaysPass(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource) const;
-	void OcclusionMaskPass(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource) const;
+	void DrawGodRaysPass(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource);
+	void OcclusionMaskPass(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource);
 	void GodRaysPass(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource) const;
-	void DrawSsr(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource) const;
-	void DrawChromaticAberration(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource) const;
-	void DrawVignetting(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource) const;
+	void DrawSsr(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource);
+	void DrawChromaticAberration(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource);
+	void DrawVignetting(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource);
 
 	void OnResize(int newWidth, int newHeight);
 	void UpdateGodRaysParameters() const;
@@ -40,7 +40,6 @@ private:
 	void BuildShaders();
 	void BuildPsOs();
 	void BuildTextures();
-	static void ChangeTextureState(ID3D12GraphicsCommandList* cmdList, const RtvSrvTexture& texture, D3D12_RESOURCE_STATES state);
 
 	void SetNewResolutionAndRects(int newWidth, int newHeight);
 
