@@ -345,6 +345,9 @@ void LightingManager::DrawDirLight(ID3D12GraphicsCommandList* cmdList, const Fra
 
 void LightingManager::DrawLocalLights(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource, const bool rayTracingEnabled) const
 {
+	if (_lightsInsideFrustum.empty())
+		return;
+	
 	//draw local lights
 	MeshGeometry* geo = GeometryManager::Geometries()["shapeGeo"].begin()->get();
 
@@ -364,6 +367,8 @@ void LightingManager::DrawLocalLights(ID3D12GraphicsCommandList* cmdList, const 
 
 void LightingManager::DrawDebug(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource) const
 {
+	if (_lightsInsideFrustum.empty())
+		return;
 	const auto geo = GeometryManager::Geometries()["shapeGeo"].begin()->get();
 	const SubmeshGeometry mesh = geo->DrawArgs["box"];
 	cmdList->SetPipelineState(_localLightsWireframePso.Get());
@@ -570,23 +575,23 @@ void LightingManager::BuildRootSignature()
 	CD3DX12_DESCRIPTOR_RANGE skyTexTable;
 	skyTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 3, 0, 2);
 
-	constexpr int rootParameterCount = 11;
+	constexpr int rootParameterCountCsm = 11;
 
-	CD3DX12_ROOT_PARAMETER lightingSlotRootParameter[rootParameterCount];
+	CD3DX12_ROOT_PARAMETER lightingSlotRootParameterCsm[rootParameterCountCsm];
 
-	lightingSlotRootParameter[0].InitAsDescriptorTable(1, &lightingRange);
-	lightingSlotRootParameter[1].InitAsShaderResourceView(0, 1);
-	lightingSlotRootParameter[2].InitAsConstantBufferView(0);
-	lightingSlotRootParameter[3].InitAsConstantBufferView(1);
-	lightingSlotRootParameter[4].InitAsShaderResourceView(1, 1);
-	lightingSlotRootParameter[5].InitAsDescriptorTable(1, &skyTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
-	lightingSlotRootParameter[6].InitAsDescriptorTable(1, &depthTexTable);
-	lightingSlotRootParameter[7].InitAsDescriptorTable(1, &cascadesShadowTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
-	lightingSlotRootParameter[8].InitAsDescriptorTable(1, &shadowTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
-	lightingSlotRootParameter[9].InitAsDescriptorTable(1, &shadowMaskTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
-	lightingSlotRootParameter[10].InitAsConstants(1, 2);
+	lightingSlotRootParameterCsm[0].InitAsDescriptorTable(1, &lightingRange);
+	lightingSlotRootParameterCsm[1].InitAsShaderResourceView(0, 1);
+	lightingSlotRootParameterCsm[2].InitAsConstantBufferView(0);
+	lightingSlotRootParameterCsm[3].InitAsConstantBufferView(1);
+	lightingSlotRootParameterCsm[4].InitAsShaderResourceView(1, 1);
+	lightingSlotRootParameterCsm[5].InitAsDescriptorTable(1, &skyTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
+	lightingSlotRootParameterCsm[6].InitAsDescriptorTable(1, &depthTexTable);
+	lightingSlotRootParameterCsm[7].InitAsDescriptorTable(1, &cascadesShadowTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
+	lightingSlotRootParameterCsm[8].InitAsDescriptorTable(1, &shadowTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
+	lightingSlotRootParameterCsm[9].InitAsDescriptorTable(1, &shadowMaskTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
+	lightingSlotRootParameterCsm[10].InitAsConstants(1, 2);
 
-	CD3DX12_ROOT_SIGNATURE_DESC lightingRootSigDesc(rootParameterCount, lightingSlotRootParameter,
+	CD3DX12_ROOT_SIGNATURE_DESC lightingRootSigDesc(rootParameterCountCsm, lightingSlotRootParameterCsm,
 	                                                static_cast<UINT>(TextureManager::GetLinearSamplers().size()),
 	                                                TextureManager::GetLinearSamplers().data(),
 	                                                D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
@@ -681,7 +686,7 @@ void LightingManager::BuildRootSignature()
 
 	finalPassSlotRootParameter[0].InitAsDescriptorTable(1, &middlewareTexRange);
 
-	CD3DX12_ROOT_SIGNATURE_DESC finalRootSigDesc(rootParameterCount, lightingSlotRootParameter, 0, nullptr,
+	CD3DX12_ROOT_SIGNATURE_DESC finalRootSigDesc(1, finalPassSlotRootParameter, 0, nullptr,
 	                                             D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 
 	serializedRootSig = nullptr;

@@ -15,9 +15,6 @@ MyApp::MyApp(const HINSTANCE hInstance)
 
 MyApp::~MyApp()
 {
-	if (_device != nullptr)
-		FlushCommandQueue();
-
 	ImGui_ImplDX12_Shutdown();
 	ImGui_ImplWin32_Shutdown();
 	ImGui::DestroyContext();
@@ -67,7 +64,7 @@ bool MyApp::Initialize()
 	ImGui_ImplDX12_Init(&info);
 	ImGui_ImplWin32_Init(mhMainWnd);
 
-	RAWINPUTDEVICE rid;
+	RAWINPUTDEVICE rid = {};
 	rid.usUsagePage = 1;
 	rid.usUsage = 6; // Keyboard
 	rid.dwFlags = RIDEV_INPUTSINK;
@@ -370,7 +367,7 @@ void MyApp::BuildDescriptorHeaps()
 {
 	//imgui heap
 	D3D12_DESCRIPTOR_HEAP_DESC heapDesc = {};
-	heapDesc.NumDescriptors = 1; // Adjust based on the number of UI textures
+	heapDesc.NumDescriptors = 32; // Adjust based on the number of UI textures
 	heapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 	heapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 
@@ -856,6 +853,8 @@ void MyApp::DrawHandSpotlight(int& btnId) const
 	}
 	ImGui::PopID();
 
+	ImGui::BeginDisabled(!lightEnabled);
+
 	ImGui::PushID(btnId++);
 	ImGui::ColorEdit3("Color", &light->Color.x);
 	ImGui::PopID();
@@ -871,16 +870,18 @@ void MyApp::DrawHandSpotlight(int& btnId) const
 	ImGui::PushID(btnId++);
 	ImGui::SliderAngle("Angle", &light->Angle, 1.0f, 89.f);
 	ImGui::PopID();
+	
+	ImGui::EndDisabled();
 }
 
 void MyApp::DrawLightData(int& btnId) const
 {
-	 ImGui::BeginDisabled(_atmosphereEnabled);
-	 if (ImGui::CollapsingHeader("Directional Light", ImGuiTreeNodeFlags_DefaultOpen))
+	ImGui::BeginDisabled(_atmosphereEnabled);
+	if (ImGui::CollapsingHeader("Directional Light", ImGuiTreeNodeFlags_DefaultOpen))
 	 {
 	 	ImGui::Checkbox("Turn on", _lightingManager->IsMainLightOn());
 	 	
-	 	ImGui::BeginDisabled(!_lightingManager->IsMainLightOn());
+	 	ImGui::BeginDisabled(!(*_lightingManager->IsMainLightOn()));
 	
 	 	ImGui::Text("Direction");
 	 	ImGui::SameLine();
