@@ -22,7 +22,7 @@ void TaaManager::Init(const int width, const int height)
 void TaaManager::BindToManagers(LightingManager* lightingManager, GBuffer* buffer, Camera* camera)
 {
 	_lightingManager = lightingManager;
-	_fullscreenVs = _lightingManager->GetFullScreenVS();
+	_fullscreenVs = _lightingManager->GetFullScreenVs();
 	_gBuffer = buffer;
 	_camera = camera;
 }

@@ -165,9 +165,11 @@ private:
 	bool _vignetting = false;
 
 	bool _taaEnabled = false;
+
 	bool _atmosphereEnabled = false;	
 	int _timeInHours = 0;
 	int _timeInMinutes = 0;
-	
+
+	bool _rayTracingEnabled = false;
 };
 

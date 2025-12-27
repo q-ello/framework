@@ -26,7 +26,7 @@ struct LightRenderItem
 class LightingManager
 {
 public:
-	LightingManager(ID3D12Device* device, UINT width, UINT height);
+	LightingManager(ID3D12Device* device, UINT width, UINT height, bool rayTracingSupported);
 	~LightingManager() = default;
 
 	void AddLight(ID3D12Device* device);
@@ -41,8 +41,8 @@ public:
 	void CalculateCascadesViewProjs();
 
 	//different draw calls
-	void DrawDirLight(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource);
-	void DrawLocalLights(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource) const;
+	void DrawDirLight(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource, bool rayTracingEnabled);
+	void DrawLocalLights(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource, bool rayTracingEnabled) const;
 	void DrawDebug(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource) const;
 	void DrawEmissive(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource) const;
 	void DrawShadows(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, const std::vector<std::shared_ptr<EditableRenderItem>>& objects);
@@ -87,12 +87,9 @@ public:
 		return static_cast<int>(_lightsInsideFrustum.size());
 	}
 
-	ID3DBlob* GetFullScreenVSWithSamplers() const
-	{
-		return _dirLightVsShader.Get();
-	}
+	ID3DBlob* GetFullScreenVsWithSamplers() const;
 
-	ID3DBlob* GetFullScreenVS() const
+	ID3DBlob* GetFullScreenVs() const
 	{
 		return _finalPassVsShader.Get();
 	}
@@ -160,6 +157,8 @@ private:
 
 	bool _debugEnabled = false;
 
+	bool _rayTracingSupported = false;
+
 	//locallights data
 	std::vector<std::unique_ptr<LightRenderItem>> _localLights;
 	std::vector<int> _freeLightIndices;
@@ -173,18 +172,27 @@ private:
 	CubeMapManager* _cubeMapManager = nullptr;
 	GBuffer* _gbuffer = nullptr;
 
-	Microsoft::WRL::ComPtr<ID3D12RootSignature> _rootSignature;
-
+	Microsoft::WRL::ComPtr<ID3D12RootSignature> _rootSignatureCsm;
+	Microsoft::WRL::ComPtr<ID3D12RootSignature> _rootSignatureRt;
+	
 	//dirlight pso
-	Microsoft::WRL::ComPtr<ID3D12PipelineState> _dirLightPso;
 	Microsoft::WRL::ComPtr<ID3DBlob> _dirLightVsShader;
-	Microsoft::WRL::ComPtr<ID3DBlob> _dirLightPsShader;
+	//cascade shadow maps
+	Microsoft::WRL::ComPtr<ID3D12PipelineState> _dirLightPsoCsm;
+	Microsoft::WRL::ComPtr<ID3DBlob> _dirLightPsShaderCsm;
+	//ray tracing
+	Microsoft::WRL::ComPtr<ID3D12PipelineState> _dirLightPsoRt;
+	Microsoft::WRL::ComPtr<ID3DBlob> _dirLightPsShaderRt;
 
 	//local lights pso
-	Microsoft::WRL::ComPtr<ID3D12PipelineState> _localLightsPso;
 	std::vector<D3D12_INPUT_ELEMENT_DESC> _localLightsInputLayout;
 	Microsoft::WRL::ComPtr<ID3DBlob> _localLightsVsShader;
-	Microsoft::WRL::ComPtr<ID3DBlob> _localLightsPsShader;
+	//cascade shadow maps
+	Microsoft::WRL::ComPtr<ID3D12PipelineState> _localLightsPsoCsm;
+	Microsoft::WRL::ComPtr<ID3DBlob> _localLightsPsShaderCsm;
+	//ray tracing
+	Microsoft::WRL::ComPtr<ID3D12PipelineState> _localLightsPsoRt;
+	Microsoft::WRL::ComPtr<ID3DBlob> _localLightsPsShaderRt;
 
 	//local lights wireframe pso
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> _localLightsWireframePso;
@@ -221,6 +229,10 @@ private:
 	Microsoft::WRL::ComPtr<ID3DBlob> _finalPassPsShader;
 
 	int _finalTextureSrvIndex = -1;
+
+	//shadow mask stuff
+	std::vector<TextureHandle> _shadowMasks;
+	size_t _selectedShadowMask = -1;
 private:
 	//default functions
 	void BuildInputLayout();
@@ -238,8 +250,4 @@ private:
 	                       const std::vector<int>& visibleObjects, const std::vector<std::shared_ptr<EditableRenderItem>>& objects);
 	void SnapToTexel(DirectX::XMFLOAT3& minPt, DirectX::XMFLOAT3& maxPt) const;
 	void CreateMiddlewareTexture();
-
-	//shadow mask stuff
-	std::vector<TextureHandle> _shadowMasks;
-	size_t _selectedShadowMask = -1;
 };

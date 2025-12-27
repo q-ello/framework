@@ -88,20 +88,23 @@ protected:
 	// Set true to use 4X MSAA (�4.1.8).  The default is false.
     bool      m4xMsaaState = false;    // 4X MSAA enabled
     UINT      m4xMsaaQuality = 0;      // quality level of 4X MSAA
+    
+    //for working setup on devices with and without raytracing
+    bool _supportsRayTracing = false;
 
 	// Used to keep track of the �delta-time� and game time (�4.4).
 	GameTimer mTimer;
 	
     Microsoft::WRL::ComPtr<IDXGIFactory4> mdxgiFactory;
     Microsoft::WRL::ComPtr<IDXGISwapChain> mSwapChain;
-    Microsoft::WRL::ComPtr<ID3D12Device> _device;
+    Microsoft::WRL::ComPtr<ID3D12Device5> _device;
 
     Microsoft::WRL::ComPtr<ID3D12Fence> mFence;
     UINT64 mCurrentFence = 0;
 	
     Microsoft::WRL::ComPtr<ID3D12CommandQueue> mCommandQueue;
     Microsoft::WRL::ComPtr<ID3D12CommandAllocator> mDirectCmdListAlloc;
-    Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> mCommandList;
+    Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4> mCommandList;
 
 	static const int SwapChainBufferCount = 2;
 	int mCurrBackBuffer = 0;
