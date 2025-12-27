@@ -406,11 +406,16 @@ bool D3DApp::InitDirect3D()
 		mdxgiFactory->EnumAdapters1(0, &selectedAdapter);
 	}
 
-	// Use selectedAdapter here to create the D3D12 device
-	HRESULT hardwareResult = D3D12CreateDevice(
-		selectedAdapter.Get(),             // default adapter
-		D3D_FEATURE_LEVEL_11_0,
-		IID_PPV_ARGS(&_device));
+	HRESULT hardwareResult = D3D12CreateDevice(selectedAdapter.Get(), D3D_FEATURE_LEVEL_12_1, IID_PPV_ARGS(&_device));
+
+	D3D12_FEATURE_DATA_D3D12_OPTIONS5 caps = {};
+	ThrowIfFailed(_device->CheckFeatureSupport(
+		D3D12_FEATURE_D3D12_OPTIONS5, 
+		&caps, 
+		sizeof(caps)
+	));
+	
+	_supportsRayTracing = caps.RaytracingTier != D3D12_RAYTRACING_TIER_NOT_SUPPORTED;
 
 	// Fallback to WARP device.
 	if(FAILED(hardwareResult))

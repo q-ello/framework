@@ -36,8 +36,8 @@ void PostProcessManager::BindToManagers(GBuffer* gbuffer, LightingManager* light
 	_lightingManager = lightingManager;
 	_camera = camera;
 
-	_fullscreenLightVs = _lightingManager->GetFullScreenVSWithSamplers();
-	_fullscreenVs = _lightingManager->GetFullScreenVS();
+	_fullscreenLightVs = _lightingManager->GetFullScreenVsWithSamplers();
+	_fullscreenVs = _lightingManager->GetFullScreenVs();
 }
 
 void PostProcessManager::DrawGodRaysPass(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource) const

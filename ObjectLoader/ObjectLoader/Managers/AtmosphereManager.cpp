@@ -19,7 +19,7 @@ void AtmosphereManager::BindToManagers(LightingManager* lightingManager, GBuffer
     _lightingManager = lightingManager;
     _gBuffer = buffer;
     
-    _fullscreenVs = _lightingManager->GetFullScreenVS();
+    _fullscreenVs = _lightingManager->GetFullScreenVs();
 	const float* lightDir = _lightingManager->MainLightDirection();
 	Parameters.DirToSun = {-lightDir[0], -lightDir[1], -lightDir[2]};
 }

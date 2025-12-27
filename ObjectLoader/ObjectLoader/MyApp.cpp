@@ -171,14 +171,18 @@ void MyApp::Draw(const GameTimer& gt)
 	else
 	{
 		const auto objects = _objectsManager->Objects();
-		_lightingManager->DrawShadows(mCommandList.Get(), _currFrameResource, objects);
+		//cascade maps are needed only if rt is disabled
+		if (!_rayTracingEnabled)
+			_lightingManager->DrawShadows(mCommandList.Get(), _currFrameResource, objects);
 		GBufferPass();
 		LightingPass();
 		if (_atmosphereEnabled)
 			_atmosphereManager->Draw(mCommandList.Get(), _currFrameResource);
-		
-		//we are getting rid of this one since we have atmosphere now
-		// _cubeMapManager->Draw(mCommandList.Get(), _currFrameResource);
+		else
+		{
+			//black screen is kinda sad so I guess that won't hurt to draw skybox
+			_cubeMapManager->Draw(mCommandList.Get(), _currFrameResource);
+		}
 		
 		if (_taaEnabled)
 			_taaManager->ApplyTaa(mCommandList.Get(), _currFrameResource);
@@ -416,6 +420,11 @@ void MyApp::DrawInterface()
 		ImGui::Checkbox("Wireframe", &_isWireframe);
 		DrawPostProcesses();
 		ImGui::Checkbox("TAA Enabled", &_taaEnabled);
+		ImGui::BeginDisabled(!_supportsRayTracing);
+		ImGui::Checkbox("Ray Tracing Enabled", &_rayTracingEnabled);
+		if (!_supportsRayTracing)
+			ImGui::SetItemTooltip("Ray tracing is not supported in your device.");
+		ImGui::EndDisabled();
 		ImGui::EndTabItem();
 	}
 
@@ -741,6 +750,7 @@ void MyApp::DrawAtmosphere(int& btnId)
 	if (ImGui::CollapsingHeader("Atmosphere"))
 	{
 		ImGui::Checkbox("Enabled##atmosphere", &_atmosphereEnabled);
+		ImGui::BeginDisabled(!_atmosphereEnabled);
 		{
 			ImGui::Text("Time Speed");
 			ImGui::SameLine();
@@ -830,6 +840,7 @@ void MyApp::DrawAtmosphere(int& btnId)
 				_atmosphereManager->SetDirty();
 			}
 		}
+		ImGui::EndDisabled();
 	}
 }
 
@@ -864,30 +875,39 @@ void MyApp::DrawHandSpotlight(int& btnId) const
 
 void MyApp::DrawLightData(int& btnId) const
 {
-	//made a sun dependent on time of day so bye for now
-	// if (ImGui::CollapsingHeader("Directional Light", ImGuiTreeNodeFlags_DefaultOpen))
-	// {
-	// 	ImGui::Checkbox("Turn on", _lightingManager->IsMainLightOn());
-	//
-	// 	ImGui::Text("Direction");
-	// 	ImGui::SameLine();
-	// 	ImGui::PushID(btnId++);
-	// 	if (ImGui::DragFloat3("", _lightingManager->MainLightDirection(), 0.1f))
-	// 	{
-	// 		const float* dir = _lightingManager->MainLightDirection();
-	// 		XMVECTOR dirVec = XMVectorSet(-dir[0], -dir[1], -dir[2], 1.0f);
-	// 		dirVec = XMVector3Normalize(dirVec);
-	// 		XMStoreFloat3(&_atmosphereManager->Parameters.DirToSun, dirVec);
-	// 		_atmosphereManager->SetDirty();
-	// 	}
-	// 	ImGui::PopID();
-	//
-	// 	ImGui::Text("Color");
-	// 	ImGui::SameLine();
-	// 	ImGui::PushID(btnId++);
-	// 	ImGui::ColorEdit3("", _lightingManager->MainLightColor());
-	// 	ImGui::PopID();
-	// }
+	 ImGui::BeginDisabled(_atmosphereEnabled);
+	 if (ImGui::CollapsingHeader("Directional Light", ImGuiTreeNodeFlags_DefaultOpen))
+	 {
+	 	ImGui::Checkbox("Turn on", _lightingManager->IsMainLightOn());
+	 	
+	 	ImGui::BeginDisabled(!_lightingManager->IsMainLightOn());
+	
+	 	ImGui::Text("Direction");
+	 	ImGui::SameLine();
+	 	ImGui::PushID(btnId++);
+	 	if (ImGui::DragFloat3("", _lightingManager->MainLightDirection(), 0.1f))
+	 	{
+	 		const float* dir = _lightingManager->MainLightDirection();
+	 		XMVECTOR dirVec = XMVectorSet(-dir[0], -dir[1], -dir[2], 1.0f);
+	 		dirVec = XMVector3Normalize(dirVec);
+	 		XMStoreFloat3(&_atmosphereManager->Parameters.DirToSun, dirVec);
+	 		_atmosphereManager->SetDirty();
+	 	}
+	 	ImGui::PopID();
+	
+	 	ImGui::Text("Color");
+	 	ImGui::SameLine();
+	 	ImGui::PushID(btnId++);
+	 	ImGui::ColorEdit3("", _lightingManager->MainLightColor());
+	 	ImGui::PopID();
+	 	
+	 	ImGui::EndDisabled();
+	 }
+	ImGui::EndDisabled();
+	if (_atmosphereEnabled)
+	{
+		ImGui::SetItemTooltip("Cannot configure that when atmosphere is enabled");
+	}
 	if (ImGui::CollapsingHeader("Spotlight in hand", ImGuiTreeNodeFlags_DefaultOpen))
 	{
 		DrawHandSpotlight(btnId);
@@ -924,6 +944,17 @@ void MyApp::DrawLocalLightData(int& btnId, const int lightIndex) const
 		}
 		const auto light = _lightingManager->GetLight(lightIndex);
 
+		bool lightEnabled = light->LightData.Active == 1;
+		ImGui::PushID(btnId++);
+		if (ImGui::Checkbox("Enabled", &lightEnabled))
+		{
+			light->LightData.Active = static_cast<int>(lightEnabled);
+			light->NumFramesDirty = gNumFrameResources;
+		}
+		ImGui::PopID();
+
+		ImGui::BeginDisabled(!lightEnabled);
+
 		ImGui::PushID(btnId++);
 		if (ImGui::RadioButton("Point Light", light->LightData.Type == 0) && light->LightData.Type != 0)
 		{
@@ -937,15 +968,8 @@ void MyApp::DrawLocalLightData(int& btnId, const int lightIndex) const
 			light->LightData.Type = 1;
 			_lightingManager->UpdateWorld(lightIndex);
 		}
-		bool lightEnabled = light->LightData.Active == 1;
 		ImGui::PopID();
-		ImGui::PushID(btnId++);
-		if (ImGui::Checkbox("Enabled", &lightEnabled))
-		{
-			light->LightData.Active = static_cast<int>(lightEnabled);
-			light->NumFramesDirty = gNumFrameResources;
-		}
-		ImGui::PopID();
+		
 		ImGui::PushID(btnId++);
 		if (ImGui::DragFloat3("Position", &light->LightData.Position.x, 0.1f))
 		{
@@ -985,6 +1009,7 @@ void MyApp::DrawLocalLightData(int& btnId, const int lightIndex) const
 			}
 			ImGui::PopID();
 		}
+		ImGui::EndDisabled();
 	}
 }
 
@@ -1550,11 +1575,13 @@ void MyApp::DrawPostProcesses()
 	{
 		bool isDirty = false;
 		isDirty = ImGui::Checkbox("Enabled##godrays", &_godRays) || isDirty;
+		ImGui::BeginDisabled(!_godRays);
 		isDirty = ImGui::DragInt("Samples##godrays", &_postProcessManager->GodRaysParameters.SamplesCount, 5, 10, 100) || isDirty;
 		isDirty = ImGui::DragFloat("Decay##godrays", &_postProcessManager->GodRaysParameters.Decay, 0.05f, 0.1f, 1.0f) || isDirty;
 		isDirty = ImGui::DragFloat("Exposure##godrays", &_postProcessManager->GodRaysParameters.Exposure, 0.05f, 0.1f, 1.0f) || isDirty;
 		isDirty = ImGui::DragFloat("Density##godrays", &_postProcessManager->GodRaysParameters.Density, 0.05f, 0.1f, 1.0f) || isDirty;
 		isDirty = ImGui::DragFloat("Weight##godrays", &_postProcessManager->GodRaysParameters.Weight, 0.05f, 0.1f, 1.0f) || isDirty;
+		ImGui::EndDisabled();
 		if (isDirty)
 			_postProcessManager->UpdateGodRaysParameters();
 	}
@@ -1563,22 +1590,28 @@ void MyApp::DrawPostProcesses()
 	{
 		//no need for dirty flag 'cause we update it every frame
 		ImGui::Checkbox("Enabled##ssr", &_ssr);
+		ImGui::BeginDisabled(!_ssr);
 		ImGui::DragInt("Step Size##ssr", &_postProcessManager->SsrParameters.StepScale, 1, 1, 20);
 		ImGui::DragInt("Max Screen Distance##ssr", &_postProcessManager->SsrParameters.MaxScreenDistance, 5, 100, 1000);
 		ImGui::DragInt("Max Steps##ssr", &_postProcessManager->SsrParameters.MaxSteps, 5, 100, 500);
+		ImGui::EndDisabled();
 	}
 
 	if (ImGui::CollapsingHeader("Chromatic Aberration"))
 	{
 		//no need for dirty flag 'cause we just have one root constant
 		ImGui::Checkbox("Enabled##chromaticaberration", &_chromaticAberration);
+		ImGui::BeginDisabled(!_chromaticAberration);
 		ImGui::DragFloat("Strength##chromaticaberration", &_postProcessManager->ChromaticAberrationStrength, 0.01f, 0.0f, 0.1f);
+		ImGui::EndDisabled();
 	}
 
 	if (ImGui::CollapsingHeader("Vignetting"))
 	{
 		ImGui::Checkbox("Enabled##vignetting", &_vignetting);
+		ImGui::BeginDisabled(!_vignetting);
 		ImGui::DragFloat("Vignetting Power##vignetting", &_postProcessManager->VignettingPower, 0.1f, 1.f, 2.0f);
+		ImGui::EndDisabled();
 	}
 }
 
@@ -1810,7 +1843,7 @@ void MyApp::InitManagers()
 	_cubeMapManager = std::make_unique<CubeMapManager>(_device.Get());
 	_cubeMapManager->Init();
 
-	_lightingManager = std::make_unique<LightingManager>(_device.Get(), mClientWidth, mClientHeight);
+	_lightingManager = std::make_unique<LightingManager>(_device.Get(), mClientWidth, mClientHeight, _supportsRayTracing);
 	_lightingManager->BindToOtherData(_gBuffer.get(), _cubeMapManager.get(), &_camera, _objectsManager->InputLayout());
 	_lightingManager->Init();
 
@@ -1872,12 +1905,12 @@ void MyApp::LightingPass() const
 	_gBuffer->ChangeRtvsState(D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 	_gBuffer->ChangeDsvState(D3D12_RESOURCE_STATE_DEPTH_READ);
 
-	_lightingManager->DrawDirLight(mCommandList.Get(), _currFrameResource);
+	_lightingManager->DrawDirLight(mCommandList.Get(), _currFrameResource, _rayTracingEnabled);
 
 	if (_lightingManager->LightsCount() > 0)
 	{
 		_gBuffer->ChangeDsvState(D3D12_RESOURCE_STATE_DEPTH_READ);
-		_lightingManager->DrawLocalLights(mCommandList.Get(), _currFrameResource);
+		_lightingManager->DrawLocalLights(mCommandList.Get(), _currFrameResource, _rayTracingEnabled);
 
 		if (*_lightingManager->DebugEnabled())
 		{
@@ -1885,7 +1918,7 @@ void MyApp::LightingPass() const
 		}
 	}
 
-	_lightingManager->DrawEmissive(mCommandList.Get(), _currFrameResource);
+	//_lightingManager->DrawEmissive(mCommandList.Get(), _currFrameResource);
 }
 
 void MyApp::WireframePass() const

@@ -5,11 +5,12 @@
 using namespace Microsoft::WRL;
 using namespace DirectX;
 
-LightingManager::LightingManager(ID3D12Device* device, const UINT width, const UINT height)
+LightingManager::LightingManager(ID3D12Device* device, const UINT width, const UINT height, const bool rayTracingSupported)
 {
 	_device = device;
 	_width = width;
 	_height = height;
+	_rayTracingSupported = rayTracingSupported;
 }
 
 void LightingManager::AddLight(ID3D12Device* device)
@@ -294,31 +295,33 @@ void LightingManager::CalculateCascadesViewProjs()
 	}
 }
 
-void LightingManager::DrawDirLight(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource)
+void LightingManager::DrawDirLight(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource, const bool rayTracingEnabled)
 {
 	// Indicate a state transition on the resource usage.
-
-	cmdList->SetGraphicsRootSignature(_rootSignature.Get());
+	
+	cmdList->SetGraphicsRootSignature(rayTracingEnabled ? _rootSignatureRt.Get() : _rootSignatureCsm.Get());
 
 	const auto& srvAllocator = TextureManager::SrvHeapAllocator;
 
 	cmdList->SetGraphicsRootDescriptorTable(0, _gbuffer->SrvGpuHandle());
 	cmdList->SetGraphicsRootShaderResourceView(1, currFrameResource->LocalLightCb.get()->Resource()->GetGPUVirtualAddress());
 	cmdList->SetGraphicsRootShaderResourceView(4, currFrameResource->LightsContainingFrustum.get()->Resource()->GetGPUVirtualAddress());
-	cmdList->SetGraphicsRootDescriptorTable(5, srvAllocator->GetGpuHandle(_cascadeShadowTextureArray.Srv));
-	cmdList->SetGraphicsRootDescriptorTable(6, srvAllocator->GetGpuHandle(_localLightsShadowTextureArray.Srv));
-	cmdList->SetGraphicsRootDescriptorTable(7, _cubeMapManager->GetIblMapsGpuHandle());
-
-	const int shadowMaskSrvIndex = _shadowMasks.empty() ? 0 : _shadowMasks[_selectedShadowMask].Index;
-	cmdList->SetGraphicsRootDescriptorTable(8, srvAllocator->GetGpuHandle(shadowMaskSrvIndex));
-
-	constexpr float shadowMaskIntensity = 0.0f;
-	cmdList->SetGraphicsRoot32BitConstants(9, 1, _shadowMasks.empty() ? &shadowMaskIntensity : &ShadowMaskUvScale, 0);
-
+	cmdList->SetGraphicsRootDescriptorTable(5, _cubeMapManager->GetIblMapsGpuHandle());
 	//set current depth
-	cmdList->SetGraphicsRootDescriptorTable(10, _gbuffer->GetGBufferDepthSrv(true));
+	cmdList->SetGraphicsRootDescriptorTable(6, _gbuffer->GetGBufferDepthSrv(true));
+	
+	if (!rayTracingEnabled)
+	{
+		cmdList->SetGraphicsRootDescriptorTable(7, srvAllocator->GetGpuHandle(_cascadeShadowTextureArray.Srv));
+		cmdList->SetGraphicsRootDescriptorTable(8, srvAllocator->GetGpuHandle(_localLightsShadowTextureArray.Srv));
+		const int shadowMaskSrvIndex = _shadowMasks.empty() ? 0 : _shadowMasks[_selectedShadowMask].index;
+		cmdList->SetGraphicsRootDescriptorTable(9, srvAllocator->GetGpuHandle(shadowMaskSrvIndex));
+		constexpr float shadowMaskIntensity = 0.0f;
+        	cmdList->SetGraphicsRoot32BitConstants(10, 1, _shadowMasks.empty() ? &shadowMaskIntensity : &ShadowMaskUvScale, 0);
+	}
 
-	cmdList->SetPipelineState(_dirLightPso.Get());
+
+	cmdList->SetPipelineState(rayTracingEnabled ? _dirLightPsoRt.Get() : _dirLightPsoCsm.Get());
 	cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
 	const auto lightingPassCb = currFrameResource->LightingPassCb->Resource();
@@ -340,7 +343,7 @@ void LightingManager::DrawDirLight(ID3D12GraphicsCommandList* cmdList, const Fra
 	_finalTextureSrvIndex = _middlewareTexture.SrvIndex;
 }
 
-void LightingManager::DrawLocalLights(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource) const
+void LightingManager::DrawLocalLights(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource, const bool rayTracingEnabled) const
 {
 	//draw local lights
 	MeshGeometry* geo = GeometryManager::Geometries()["shapeGeo"].begin()->get();
@@ -352,7 +355,7 @@ void LightingManager::DrawLocalLights(ID3D12GraphicsCommandList* cmdList, const 
 
 	cmdList->SetGraphicsRootShaderResourceView(4, currFrameResource->LightsInsideFrustum.get()->Resource()->GetGPUVirtualAddress());
 
-	cmdList->SetPipelineState(_localLightsPso.Get());
+	cmdList->SetPipelineState(rayTracingEnabled ? _localLightsPsoRt.Get() : _localLightsPsoCsm.Get());
 
 	const SubmeshGeometry mesh = geo->DrawArgs["box"];
 	cmdList->DrawIndexedInstanced(mesh.IndexCount, static_cast<UINT>(_lightsInsideFrustum.size()), mesh.StartIndexLocation,
@@ -503,6 +506,11 @@ void LightingManager::OnResize(const UINT newWidth, const UINT newHeight)
 	CreateMiddlewareTexture();
 }
 
+ID3DBlob* LightingManager::GetFullScreenVsWithSamplers() const
+{
+	return _dirLightVsShader.Get();
+}
+
 void LightingManager::ChangeMiddlewareState(ID3D12GraphicsCommandList* cmdList, const D3D12_RESOURCE_STATES newState)
 {
 	if (_middlewareTexture.PrevState == newState)
@@ -540,22 +548,24 @@ void LightingManager::BuildInputLayout()
 
 void LightingManager::BuildRootSignature()
 {
-	int srvAmount = GBuffer::InfoCount();
+#pragma region CSMRootSignature
+	const int srvAmount = GBuffer::InfoCount();
+	int srvIndex = srvAmount;
 	//lighting root signature
 	CD3DX12_DESCRIPTOR_RANGE lightingRange;
-	lightingRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, srvAmount, 0);
+	lightingRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, srvIndex, 0);
 	//depth is separate
 	CD3DX12_DESCRIPTOR_RANGE depthTexTable;
-	depthTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, srvAmount++);
+	depthTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, srvIndex++);
 	//cascades shadow map
 	CD3DX12_DESCRIPTOR_RANGE cascadesShadowTexTable;
-	cascadesShadowTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, srvAmount++);
+	cascadesShadowTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, srvIndex++);
 	//shadow map
 	CD3DX12_DESCRIPTOR_RANGE shadowTexTable;
-	shadowTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, srvAmount++);
+	shadowTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, srvIndex++);
 	//shadow mask
 	CD3DX12_DESCRIPTOR_RANGE shadowMaskTexTable;
-	shadowMaskTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, srvAmount++);
+	shadowMaskTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, srvIndex++);
 	//sky
 	CD3DX12_DESCRIPTOR_RANGE skyTexTable;
 	skyTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 3, 0, 2);
@@ -569,12 +579,12 @@ void LightingManager::BuildRootSignature()
 	lightingSlotRootParameter[2].InitAsConstantBufferView(0);
 	lightingSlotRootParameter[3].InitAsConstantBufferView(1);
 	lightingSlotRootParameter[4].InitAsShaderResourceView(1, 1);
-	lightingSlotRootParameter[5].InitAsDescriptorTable(1, &cascadesShadowTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
-	lightingSlotRootParameter[6].InitAsDescriptorTable(1, &shadowTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
-	lightingSlotRootParameter[7].InitAsDescriptorTable(1, &skyTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
-	lightingSlotRootParameter[8].InitAsDescriptorTable(1, &shadowMaskTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
-	lightingSlotRootParameter[9].InitAsConstants(1, 2);
-	lightingSlotRootParameter[10].InitAsDescriptorTable(1, &depthTexTable);
+	lightingSlotRootParameter[5].InitAsDescriptorTable(1, &skyTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
+	lightingSlotRootParameter[6].InitAsDescriptorTable(1, &depthTexTable);
+	lightingSlotRootParameter[7].InitAsDescriptorTable(1, &cascadesShadowTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
+	lightingSlotRootParameter[8].InitAsDescriptorTable(1, &shadowTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
+	lightingSlotRootParameter[9].InitAsDescriptorTable(1, &shadowMaskTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
+	lightingSlotRootParameter[10].InitAsConstants(1, 2);
 
 	CD3DX12_ROOT_SIGNATURE_DESC lightingRootSigDesc(rootParameterCount, lightingSlotRootParameter,
 	                                                static_cast<UINT>(TextureManager::GetLinearSamplers().size()),
@@ -596,8 +606,50 @@ void LightingManager::BuildRootSignature()
 		0,
 		serializedRootSig->GetBufferPointer(),
 		serializedRootSig->GetBufferSize(),
-		IID_PPV_ARGS(_rootSignature.GetAddressOf())));
+		IID_PPV_ARGS(_rootSignatureCsm.GetAddressOf())));
+		
+#pragma endregion
 
+#pragma region RTRootSignature
+	if (_rayTracingSupported)
+	{
+        constexpr int rtRootParameterCount = 7;
+    
+        CD3DX12_ROOT_PARAMETER lightingSlotRootParameterRt[rtRootParameterCount];
+    
+        lightingSlotRootParameterRt[0].InitAsDescriptorTable(1, &lightingRange);
+        lightingSlotRootParameterRt[1].InitAsShaderResourceView(0, 1);
+        lightingSlotRootParameterRt[2].InitAsConstantBufferView(0);
+        lightingSlotRootParameterRt[3].InitAsConstantBufferView(1);
+        lightingSlotRootParameterRt[4].InitAsShaderResourceView(1, 1);
+        lightingSlotRootParameterRt[5].InitAsDescriptorTable(1, &skyTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
+        lightingSlotRootParameterRt[6].InitAsDescriptorTable(1, &depthTexTable);
+    
+        CD3DX12_ROOT_SIGNATURE_DESC lightingRootSigDescRt(rtRootParameterCount, lightingSlotRootParameterRt,
+                                                        static_cast<UINT>(TextureManager::GetLinearSamplers().size()),
+                                                        TextureManager::GetLinearSamplers().data(),
+                                                        D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+    
+        serializedRootSig = nullptr;
+        errorBlob = nullptr;
+        hr = D3D12SerializeRootSignature(&lightingRootSigDescRt, D3D_ROOT_SIGNATURE_VERSION_1,
+        	serializedRootSig.GetAddressOf(), errorBlob.GetAddressOf());
+    
+        if (errorBlob != nullptr)
+        {
+        	::OutputDebugStringA(static_cast<char*>(errorBlob->GetBufferPointer()));
+        }
+        ThrowIfFailed(hr);
+    
+        ThrowIfFailed(_device->CreateRootSignature(
+        	0,
+        	serializedRootSig->GetBufferPointer(),
+        	serializedRootSig->GetBufferSize(),
+        	IID_PPV_ARGS(_rootSignatureRt.GetAddressOf())));
+	}
+#pragma endregion
+
+#pragma region ShadowRootSignature
 	//shadow root signature
 	CD3DX12_ROOT_PARAMETER shadowSlotRootParameter[2];
 	shadowSlotRootParameter[0].InitAsConstantBufferView(0);
@@ -618,7 +670,9 @@ void LightingManager::BuildRootSignature()
 		shadowSerializedRootSig->GetBufferPointer(),
 		shadowSerializedRootSig->GetBufferSize(),
 		IID_PPV_ARGS(_shadowRootSignature.GetAddressOf())));
+#pragma endregion
 
+#pragma region FinalPassRootSignature
 	//final pass root signature
 	CD3DX12_DESCRIPTOR_RANGE middlewareTexRange;
 	middlewareTexRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
@@ -646,32 +700,46 @@ void LightingManager::BuildRootSignature()
 		serializedRootSig->GetBufferPointer(),
 		serializedRootSig->GetBufferSize(),
 		IID_PPV_ARGS(_finalPassRootSignature.GetAddressOf())));
+		
+#pragma endregion
 }
 
 void LightingManager::BuildShaders()
 {
+	constexpr D3D_SHADER_MACRO defines[] =
+    {
+    	"CSM", "1",
+    	nullptr, nullptr
+    };
+	
 	_dirLightVsShader = d3dUtil::CompileShader(L"Shaders\\Lighting.hlsl", nullptr, "DirLightingVS", "vs_5_1");
-	_dirLightPsShader = d3dUtil::CompileShader(L"Shaders\\Lighting.hlsl", nullptr, "DirLightingPS", "ps_5_1");
-
+	_dirLightPsShaderCsm = d3dUtil::CompileShader(L"Shaders\\Lighting.hlsl", defines, "DirLightingPS", "ps_5_1");
+	if (_rayTracingSupported)
+		_dirLightPsShaderRt = d3dUtil::CompileShader(L"Shaders\\Lighting.hlsl", nullptr, "DirLightingPS", "ps_5_1");
+	
 	_localLightsVsShader = d3dUtil::CompileShader(L"Shaders\\Lighting.hlsl", nullptr, "LocalLightingVS", "vs_5_1");
-	_localLightsPsShader = d3dUtil::CompileShader(L"Shaders\\Lighting.hlsl", nullptr, "LocalLightingPS", "ps_5_1");
+	_localLightsPsShaderCsm = d3dUtil::CompileShader(L"Shaders\\Lighting.hlsl", defines, "LocalLightingPS", "ps_5_1");
 	_localLightsWireframePsShader = d3dUtil::CompileShader(L"Shaders\\Lighting.hlsl", nullptr, "LocalLightingWireframePS", "ps_5_1");
-
+	if (_rayTracingSupported)
+		_localLightsPsShaderRt = d3dUtil::CompileShader(L"Shaders\\Lighting.hlsl", nullptr, "LocalLightingPS", "ps_5_1");
+	
 	_emissivePsShader = d3dUtil::CompileShader(L"Shaders\\Lighting.hlsl", nullptr, "EmissivePS", "ps_5_1");
 
 	_shadowVsShader = d3dUtil::CompileShader(L"Shaders\\ShadowPass.hlsl", nullptr, "ShadowVS", "vs_5_1");
 
+//TODO: make a different manager for that
 	_finalPassVsShader = d3dUtil::CompileShader(L"Shaders\\MiddlewareToBackBuffer.hlsl", nullptr, "VS", "vs_5_1");
 	_finalPassPsShader = d3dUtil::CompileShader(L"Shaders\\MiddlewareToBackBuffer.hlsl", nullptr, "PS", "ps_5_1");
 }
 
 void LightingManager::BuildPso()
 {
+#pragma region CSMDirLightPSO
 	//directional light pso
 	D3D12_GRAPHICS_PIPELINE_STATE_DESC lightingPsoDesc;
 
 	ZeroMemory(&lightingPsoDesc, sizeof(D3D12_GRAPHICS_PIPELINE_STATE_DESC));
-	lightingPsoDesc.pRootSignature = _rootSignature.Get();
+	lightingPsoDesc.pRootSignature = _rootSignatureCsm.Get();
 	lightingPsoDesc.VS =
 	{
 		static_cast<BYTE*>(_dirLightVsShader->GetBufferPointer()),
@@ -679,8 +747,8 @@ void LightingManager::BuildPso()
 	};
 	lightingPsoDesc.PS =
 	{
-		static_cast<BYTE*>(_dirLightPsShader->GetBufferPointer()),
-		_dirLightPsShader->GetBufferSize()
+		static_cast<BYTE*>(_dirLightPsShaderCsm->GetBufferPointer()),
+		_dirLightPsShaderCsm->GetBufferSize()
 	};
 	lightingPsoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
 	lightingPsoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
@@ -694,7 +762,11 @@ void LightingManager::BuildPso()
 	lightingPsoDesc.SampleDesc.Count = 1;
 	lightingPsoDesc.SampleDesc.Quality = 0;
 	lightingPsoDesc.DSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
-	ThrowIfFailed(_device->CreateGraphicsPipelineState(&lightingPsoDesc, IID_PPV_ARGS(&_dirLightPso)));
+	ThrowIfFailed(_device->CreateGraphicsPipelineState(&lightingPsoDesc, IID_PPV_ARGS(&_dirLightPsoCsm)));
+	
+#pragma endregion
+	
+#pragma region CSMLocalLightsPSO
 
 	//local lights pso
 	D3D12_GRAPHICS_PIPELINE_STATE_DESC localLightsPsoDesc = lightingPsoDesc;
@@ -707,8 +779,8 @@ void LightingManager::BuildPso()
 	};
 	localLightsPsoDesc.PS =
 	{
-		static_cast<BYTE*>(_localLightsPsShader->GetBufferPointer()),
-		_localLightsPsShader->GetBufferSize()
+		static_cast<BYTE*>(_localLightsPsShaderCsm->GetBufferPointer()),
+		_localLightsPsShaderCsm->GetBufferSize()
 	};
 
 	localLightsPsoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_BACK;
@@ -722,7 +794,10 @@ void LightingManager::BuildPso()
 	localLightsPsoDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
 	localLightsPsoDesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
 
-	ThrowIfFailed(_device->CreateGraphicsPipelineState(&localLightsPsoDesc, IID_PPV_ARGS(&_localLightsPso)));
+	ThrowIfFailed(_device->CreateGraphicsPipelineState(&localLightsPsoDesc, IID_PPV_ARGS(&_localLightsPsoCsm)));
+#pragma endregion
+
+#pragma region WireFramePSO
 
 	//wireframe pso
 	D3D12_GRAPHICS_PIPELINE_STATE_DESC wireframePso = localLightsPsoDesc;
@@ -734,6 +809,10 @@ void LightingManager::BuildPso()
 	wireframePso.RasterizerState.FillMode = D3D12_FILL_MODE_WIREFRAME;
 
 	ThrowIfFailed(_device->CreateGraphicsPipelineState(&wireframePso, IID_PPV_ARGS(&_localLightsWireframePso)));
+	
+#pragma endregion
+	
+#pragma region EmissivePSO
 
 	//emissive pso
 	D3D12_GRAPHICS_PIPELINE_STATE_DESC emissivePsoDesc = lightingPsoDesc;
@@ -750,7 +829,9 @@ void LightingManager::BuildPso()
 	emissivePsoDesc.BlendState.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
 
 	ThrowIfFailed(_device->CreateGraphicsPipelineState(&emissivePsoDesc, IID_PPV_ARGS(&_emissivePso)));
+#pragma endregion
 
+#pragma region ShadowPSO
 	//shadow pso
 	D3D12_GRAPHICS_PIPELINE_STATE_DESC shadowPsoDesc;
 	ZeroMemory(&shadowPsoDesc, sizeof(D3D12_GRAPHICS_PIPELINE_STATE_DESC));
@@ -766,6 +847,7 @@ void LightingManager::BuildPso()
 	D3D12_RASTERIZER_DESC shadowRasterDesc = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
 
 	//useless thing for now
+	//todo: make them parameters so I can finally know what they should be
 	/*shadowRasterDesc.DepthBias = 100;
 	shadowRasterDesc.DepthBiasClamp = 10.0f;
 	*/
@@ -783,8 +865,10 @@ void LightingManager::BuildPso()
 	shadowPsoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
 	ThrowIfFailed(_device->CreateGraphicsPipelineState(&shadowPsoDesc, IID_PPV_ARGS(&_shadowPso)));
 
+#pragma endregion
+#pragma region FinalPassPSO
+
 	//final pass
-	//directional light pso
 	D3D12_GRAPHICS_PIPELINE_STATE_DESC finalPsoDesc = lightingPsoDesc;
 
 	finalPsoDesc.pRootSignature = _finalPassRootSignature.Get();
@@ -799,6 +883,33 @@ void LightingManager::BuildPso()
 		_finalPassPsShader->GetBufferSize()
 	};
 	ThrowIfFailed(_device->CreateGraphicsPipelineState(&finalPsoDesc, IID_PPV_ARGS(&_finalPassPso)));
+#pragma endregion
+
+	if (_rayTracingSupported)
+	{
+#pragma region RTDirLightPSO
+		D3D12_GRAPHICS_PIPELINE_STATE_DESC rtDirPsoDesc = lightingPsoDesc;
+		rtDirPsoDesc.PS =
+		{
+			static_cast<BYTE*>(_dirLightPsShaderRt->GetBufferPointer()),
+			_dirLightPsShaderRt->GetBufferSize()
+		};
+		rtDirPsoDesc.pRootSignature = _rootSignatureRt.Get();
+		ThrowIfFailed(_device->CreateGraphicsPipelineState(&rtDirPsoDesc, IID_PPV_ARGS(&_dirLightPsoRt)));
+
+#pragma endregion
+#pragma region RTLocalLightsPSO
+		D3D12_GRAPHICS_PIPELINE_STATE_DESC rtLocalLightsPsoDesc = localLightsPsoDesc;
+		rtLocalLightsPsoDesc.PS =
+		{
+			static_cast<BYTE*>(_localLightsPsShaderRt->GetBufferPointer()),
+			_localLightsPsShaderRt->GetBufferSize()
+		};
+		rtLocalLightsPsoDesc.pRootSignature = _rootSignatureRt.Get();
+		ThrowIfFailed(_device->CreateGraphicsPipelineState(&rtLocalLightsPsoDesc, IID_PPV_ARGS(&_localLightsPsoRt)));
+#pragma endregion
+		
+	}
 }
 
 void LightingManager::BuildDescriptors()
