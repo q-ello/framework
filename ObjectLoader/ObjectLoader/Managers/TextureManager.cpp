@@ -75,11 +75,11 @@ void TextureManager::LoadTexture(const WCHAR* filename, TextureHandle& texHandle
 	if (!UploadManager::CreateTexture(tex.get()))
 	{
 		OutputDebugStringA(("Failed to load texture: " + std::string(tex->Filename.begin(), tex->Filename.end()) + "\n").c_str());
-		texHandle.useTexture = false;
+		texHandle.UseTexture = false;
 		return;
 	}
 
-	D3D12_CPU_DESCRIPTOR_HANDLE srvHandle = SrvHeapAllocator.get()->GetCpuHandle(texHandle.index);
+	D3D12_CPU_DESCRIPTOR_HANDLE srvHandle = SrvHeapAllocator.get()->GetCpuHandle(texHandle.Index);
 
 	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
@@ -94,11 +94,11 @@ void TextureManager::LoadTexture(const WCHAR* filename, TextureHandle& texHandle
 	UploadManager::ExecuteUploadCommandList();
 
 	Textures()[croppedName] = std::move(tex);
-	TexIndices()[croppedName] = texHandle.index;
+	TexIndices()[croppedName] = texHandle.Index;
 	TexUsed()[croppedName] = 1;
 
-	texHandle.name = std::string(croppedName.begin(), croppedName.end());
-	texHandle.useTexture = true;
+	texHandle.Name = std::string(croppedName.begin(), croppedName.end());
+	texHandle.UseTexture = true;
 	return;
 }
 

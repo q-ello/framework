@@ -5,6 +5,11 @@
 
 UINT FrameResource::StaticObjectCount = 0;
 
+Light::Light(const bool enabled)
+{
+    Active = static_cast<int>(enabled);
+}
+
 FrameResource::FrameResource(ID3D12Device* device, UINT passCount)
 {
     ThrowIfFailed(device->CreateCommandAllocator(
@@ -28,6 +33,7 @@ FrameResource::FrameResource(ID3D12Device* device, UINT passCount)
 
 	TerrainCb = std::make_unique<UploadBuffer<TerrainConstants>>(device, passCount, true);
 	GridInfoCb = std::make_unique<UploadBuffer<GridInfo>>(device, 8192, false);
+    TerrainTexturesCb = std::make_unique<UploadBuffer<TerrainTextures>>(device, passCount, true);
 
 	TaaCb = std::make_unique<UploadBuffer<TaaConstants>>(device, passCount, true);
     AtmosphereCb = std::make_unique<UploadBuffer<AtmosphereConstants>>(device, passCount, true);

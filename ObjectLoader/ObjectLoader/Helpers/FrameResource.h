@@ -64,9 +64,7 @@ struct LightingPassConstants
 
 struct Light
 {
-    explicit Light(const bool enabled = true)
-        : Active{ enabled ? 1 : 0 }
-    {}
+    explicit Light(const bool enabled = true);
     DirectX::XMMATRIX World = DirectX::XMMatrixIdentity();
     DirectX::XMFLOAT3 Position = { 0.0f, 0.0f, 0.0f };
     //0 - point, 1 - spotlight
@@ -154,6 +152,19 @@ struct TerrainConstants
 	DirectX::XMINT2 HeightmapSize = { 0, 0 };
     float MaxHeight = 1.0f;
     int GridSize = 33;
+    float HeightThreshold = 0.5f;
+    float SlopeThreshold = 0.5f;
+    float Pad[2];
+};
+
+struct TerrainTextures
+{
+    int UseLowTexture;
+    DirectX::XMFLOAT3 LowColor;
+    int UseSlopeTexture;
+    DirectX::XMFLOAT3 SlopeColor;
+    int UseHighTexture;
+    DirectX::XMFLOAT3 HighColor;
 };
 
 struct TaaConstants
@@ -220,6 +231,7 @@ public:
 
 	std::unique_ptr<UploadBuffer<TerrainConstants>> TerrainCb = nullptr;
 	std::unique_ptr<UploadBuffer<GridInfo>> GridInfoCb = nullptr;
+    std::unique_ptr<UploadBuffer<TerrainTextures>> TerrainTexturesCb = nullptr;
 
 	std::unique_ptr<UploadBuffer<TaaConstants>> TaaCb = nullptr;
 	std::unique_ptr<UploadBuffer<AtmosphereConstants>> AtmosphereCb = nullptr;

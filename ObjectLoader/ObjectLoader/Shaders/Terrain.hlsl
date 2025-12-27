@@ -16,6 +16,9 @@ cbuffer TerrainConstants : register (b0)
     int2 heightmapSize;
     float maxHeight;
     int gridSize;
+	float slopeThreshold;
+	float heightThreshold;
+	float2 pad;
 }
 
 cbuffer cbPass : register(b1)
@@ -25,6 +28,16 @@ cbuffer cbPass : register(b1)
     float gDeltaTime;
     float2 gScreenSize;
     float2 pad2;
+};
+
+cbuffer cbTerrainTextures : register(b2)
+{
+    int UseLowTexture;
+    float3 LowColor;
+    int UseSlopeTexture;
+    float3 SlopeColor;
+    int UseHighTexture;
+    float3 HighColor;
 };
 
 struct Grid
@@ -39,7 +52,9 @@ struct Grid
 StructuredBuffer<Grid> grids : register(t0);
 
 Texture2D heightmap : register(t0, space1);
-Texture2D diffuseMap : register(t1, space1);
+Texture2D lowDiffuseMap : register(t1, space1);
+Texture2D slopeDiffuseMap : register(t2, space1);
+Texture2D highDiffuseMap : register(t3, space1);
 
 SamplerComparisonState gsamShadow : register(s0);
 SamplerState gsamLinear : register(s1);
@@ -155,11 +170,22 @@ struct GBufferInfo
 GBufferInfo PS(VertexOut pin)
 {
     GBufferInfo gbuffer;
-    gbuffer.BaseColor = diffuseMap.Sample(gsamLinear, pin.uv);
-    if (gbuffer.BaseColor.a < 0.1f)
-    {
-        gbuffer.BaseColor = float4(0.5, 0.9, 0.3, 1.0);
-    }
+
+	float3 normal = normalize(pin.normal);
+	float slope = 1 - dot(normal, float3(0.f, 1.f, 0.f));
+	float slopeFactor = smoothstep(0.f, slopeThreshold, slope);
+
+	float height = heightmap.Sample(gsamLinear, pin.uv);
+	float heightFactor = smoothstep(heightThreshold - 0.1f, heightThreshold + 0.1f, height);	
+
+    float3 lowDiffuseColor = UseLowTexture == 1 ? lowDiffuseMap.Sample(gsamLinear, pin.uv) : LowColor;
+    float3 slopeDiffuseColor = UseSlopeTexture == 1 ? slopeDiffuseMap.Sample(gsamLinear, pin.uv) : SlopeColor;
+    float3 highDiffuseColor = UseHighTexture == 1 ? highDiffuseMap.Sample(gsamLinear, pin.uv) : HighColor;
+	float3 heightColor = lerp(lowDiffuseColor, highDiffuseColor, heightFactor);
+	float3 finalColor = lerp(heightColor, slopeDiffuseColor, slopeFactor);
+
+    gbuffer.BaseColor = float4(finalColor, 1.f);
+
     gbuffer.Emissive = float4(0, 0, 0, 0);
     gbuffer.Normal = float4(normalize(pin.normal), 1.0f);
     gbuffer.ORM = float4(0.2, 1.0, 0.0, 0);

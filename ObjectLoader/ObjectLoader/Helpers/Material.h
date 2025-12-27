@@ -8,12 +8,12 @@ using namespace DirectX;
 
 struct TextureHandle
 {
-	std::string name = "load";
-	UINT index = 0;
-	bool useTexture = false;
+	std::string Name = "load";
+	UINT Index = 0;
+	bool UseTexture = false;
 };
 
-enum class MatProp
+enum class MatProp : int8_t
 {
 	BaseColor = 0,
 	Emissive,
@@ -23,7 +23,7 @@ enum class MatProp
 	Count
 };
 
-enum class MatTex
+enum class MatTex : int8_t
 {
 	Normal = 0,
 	AmbOcc,
@@ -32,14 +32,14 @@ enum class MatTex
 	Count
 };
 
-enum class MatAddInfo
+enum class MatAddInfo : int8_t
 {
 	Emissive = 0,
 	Displacement,
 	Count
 };
 
-enum class ARMLayout
+enum class ARMLayout : int8_t
 {
 	AO_Rough_Metal,   // R=AO, G=Rough, B=Metal
 	Rough_Metal_AO,   // R=Rough, G=Metal, B=AO

@@ -309,7 +309,7 @@ void LightingManager::DrawDirLight(ID3D12GraphicsCommandList* cmdList, const Fra
 	cmdList->SetGraphicsRootDescriptorTable(6, srvAllocator->GetGpuHandle(_localLightsShadowTextureArray.Srv));
 	cmdList->SetGraphicsRootDescriptorTable(7, _cubeMapManager->GetIblMapsGpuHandle());
 
-	const int shadowMaskSrvIndex = _shadowMasks.empty() ? 0 : _shadowMasks[_selectedShadowMask].index;
+	const int shadowMaskSrvIndex = _shadowMasks.empty() ? 0 : _shadowMasks[_selectedShadowMask].Index;
 	cmdList->SetGraphicsRootDescriptorTable(8, srvAllocator->GetGpuHandle(shadowMaskSrvIndex));
 
 	constexpr float shadowMaskIntensity = 0.0f;
@@ -520,7 +520,7 @@ void LightingManager::AddShadowMask(const TextureHandle& handle)
 
 void LightingManager::DeleteShadowMask(const size_t i)
 {
-	const std::string texName = _shadowMasks[i].name;
+	const std::string texName = _shadowMasks[i].Name;
 	TextureManager::DeleteTexture(std::wstring(texName.begin(), texName.end()), 1);
 	_shadowMasks.erase(_shadowMasks.begin() + i);
 	if (_selectedShadowMask >= _shadowMasks.size())

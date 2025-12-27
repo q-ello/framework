@@ -47,7 +47,7 @@ void CubeMapManager::AddObjectToResource(const FrameResource* currFrameResource)
 
 void CubeMapManager::Draw(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource) const
 {
-	if (_maps[static_cast<int>(CubeMap::Skybox)].useTexture == false)
+	if (_maps[static_cast<int>(CubeMap::Skybox)].UseTexture == false)
 		return;
 
 	cmdList->SetGraphicsRootSignature(_rootSignature.Get());
@@ -86,12 +86,12 @@ void CubeMapManager::AddMap(CubeMap type, const TextureHandle& handle)
 
 D3D12_GPU_DESCRIPTOR_HANDLE CubeMapManager::GetCubeMapGpuHandle() const
 {
-	return TextureManager::SrvHeapAllocator->GetGpuHandle(_maps[static_cast<int>(CubeMap::Skybox)].index);
+	return TextureManager::SrvHeapAllocator->GetGpuHandle(_maps[static_cast<int>(CubeMap::Skybox)].Index);
 }
 
 D3D12_GPU_DESCRIPTOR_HANDLE CubeMapManager::GetIblMapsGpuHandle() const
 {
-	return TextureManager::SrvHeapAllocator->GetGpuHandle(_maps[static_cast<int>(CubeMap::Irradiance)].index);
+	return TextureManager::SrvHeapAllocator->GetGpuHandle(_maps[static_cast<int>(CubeMap::Irradiance)].Index);
 }
 
 void CubeMapManager::BuildInputLayout()

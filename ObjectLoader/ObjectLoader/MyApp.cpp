@@ -124,13 +124,10 @@ void MyApp::Update(const GameTimer& gt)
 
 	UpdateMainPassCBs(gt);
 	_taaManager->UpdateTaaParameters(_currFrameResource);
-
 	_lightingManager->UpdateLightCBs(_currFrameResource);
-	
-	//camera gets changed every frame so we update ssr every frame too
 	_postProcessManager->UpdateSsrParameters(_currFrameResource);
-	
 	_atmosphereManager->UpdateParameters(_currFrameResource);
+	_terrainManager->UpdateTerrainCb(_currFrameResource);
 }
 
 void MyApp::Draw(const GameTimer& gt)
@@ -602,36 +599,14 @@ void MyApp::DrawTerrain(int& btnId) const
 			ImGui::Text("Heightmap Texture:");
 			ImGui::PopID();
 			ImGui::PushID(btnId++);
-			if (ImGui::Button(heightTexHandle.name.c_str()))
+			if (ImGui::Button(heightTexHandle.Name.c_str()))
 			{
 				WCHAR* texturePath;
 				if (BasicUtil::TryToOpenFile(L"Image Files", L"*.dds;*.png;*.jpg;*.jpeg;*.tga;*.bmp", texturePath))
 				{
 					TextureManager::LoadTexture(texturePath, heightTexHandle);
 					_terrainManager->InitTerrain();
-					for (int i = 0; i < gNumFrameResources; i++)
-					{
-						_terrainManager->UpdateTerrainCb(FrameResource::FrameResources()[i].get());
-					}
-					CoTaskMemFree(texturePath);
-				}
-			}
-			ImGui::PopID();
-		}
-
-		{
-			TextureHandle& diffTexHandle = _terrainManager->DiffuseTexture();
-
-			ImGui::PushID(btnId++);
-			ImGui::Text("Diffuse Texture:");
-			ImGui::PopID();
-			ImGui::PushID(btnId++);
-			if (ImGui::Button(diffTexHandle.name.c_str()))
-			{
-				WCHAR* texturePath;
-				if (BasicUtil::TryToOpenFile(L"Image Files", L"*.dds;*.png;*.jpg;*.jpeg;*.tga;*.bmp", texturePath))
-				{
-					TextureManager::LoadTexture(texturePath, diffTexHandle);
+					_terrainManager->SetDirty();
 					CoTaskMemFree(texturePath);
 				}
 			}
@@ -642,14 +617,89 @@ void MyApp::DrawTerrain(int& btnId) const
 			ImGui::Text("Max height");
 			ImGui::SameLine();
 			ImGui::SetNextItemWidth(50.0f);
-			if (ImGui::DragFloat("height##terrain", &_terrainManager->MaxTerrainHeight, 1.0f, 1.0f, 50.0f))
+			if (ImGui::DragFloat("##terrain-height", &_terrainManager->MaxTerrainHeight, 1.0f, 1.0f, 50.0f))
 			{
-				for (int i = 0; i < gNumFrameResources; i++)
-				{
-					_terrainManager->UpdateTerrainCb(FrameResource::FrameResources()[i].get());
-				}
+				_terrainManager->SetDirty();
 			}
 		}
+		
+		{
+			for (int i = 0; i < static_cast<int>(TerrainTexture::Count); i++)
+			{
+				const std::string labels[] = {"Low", "Slope", "High"};
+				DrawTerrainTexture(btnId, i, labels[i].c_str());
+			}
+		}
+		
+		{
+			ImGui::Text("Height threshold");
+			ImGui::SameLine();
+			ImGui::SetNextItemWidth(50.0f);
+			if (ImGui::DragFloat("##terrain-height-threshold", &_terrainManager->HeightThreshold, 0.01f, 0.0f, 1.0f))
+			{
+				_terrainManager->SetDirty();
+			}
+		}
+		
+		{
+			ImGui::Text("Slope Threshold");
+			ImGui::SameLine();
+			ImGui::SetNextItemWidth(50.0f);
+			if (ImGui::DragFloat("##terrain-slope-threshold", &_terrainManager->SlopeThreshold, 0.01f, 0.0f, 1.0f))
+			{
+				_terrainManager->SetDirty();
+			}
+		}
+	}
+}
+
+void MyApp::DrawTerrainTexture(int& btnId, const int index, const char* label) const
+{
+	MaterialProperty* property = _terrainManager->TerrainTexture(index);
+	const bool textureTabOpen = property->texture.UseTexture;
+
+	if (ImGui::TreeNode(label))
+	{
+		if (ImGui::BeginTabBar("Tab bar"))
+		{
+			if (ImGui::BeginTabItem("Constant"))
+			{
+				ImGui::PushID(btnId++);
+				if (ImGui::ColorEdit3("Color", &property->value.x))
+				{
+					property->texture.UseTexture = false;
+					_terrainManager->SetDirty();
+				}
+				ImGui::PopID();
+
+				ImGui::EndTabItem();
+
+			}
+			if (ImGui::BeginTabItem("Texture", nullptr, textureTabOpen ? ImGuiTabItemFlags_SetSelected : 0))
+			{
+				const std::string name = BasicUtil::TrimName(property->texture.Name, 15);
+
+				TextureHandle texHandle = property->texture;
+
+				ImGui::PushID(btnId++);
+				if (ImGui::Button(name.c_str()))
+				{
+					WCHAR* texturePath;
+					if (BasicUtil::TryToOpenFile(L"Image Files", L"*.dds;*.png;*.jpg;*.jpeg;*.tga;*.bmp", texturePath))
+					{
+						TextureManager::LoadTexture(texturePath, texHandle);
+						property->texture = texHandle;
+						_terrainManager->SetDirty();
+						CoTaskMemFree(texturePath);
+					}
+				}
+				ImGui::PopID();
+				ImGui::EndTabItem();
+			}
+			ImGui::EndTabBar();
+		}
+		
+		ImGui::TreePop();
 	}
 }
 
@@ -1174,7 +1224,7 @@ void MyApp::DrawMaterialProperty(Material* material, const std::string& label, c
                                  const bool isFloat3, const bool hasAdditionalInfo, const std::string& additionalInfoLabel,
                                  const size_t additionalInfoIndex) const
 {
-	const bool textureTabOpen = material->properties[index].texture.useTexture;
+	const bool textureTabOpen = material->properties[index].texture.UseTexture;
 
 	// ReSharper disable once CppVariableCanBeMadeConstexpr
 	static const int propsNum = static_cast<int>(material->properties.size());
@@ -1223,7 +1273,7 @@ void MyApp::DrawMaterialProperty(Material* material, const std::string& label, c
 			{
 				selectedTabs[index] = 1;
 
-				const std::string name = BasicUtil::TrimName(material->properties[index].texture.name, 15);
+				const std::string name = BasicUtil::TrimName(material->properties[index].texture.Name, 15);
 
 				TextureHandle texHandle = material->properties[index].texture;
 
@@ -1233,7 +1283,7 @@ void MyApp::DrawMaterialProperty(Material* material, const std::string& label, c
 					WCHAR* texturePath;
 					if (BasicUtil::TryToOpenFile(L"Image Files", L"*.dds;*.png;*.jpg;*.jpeg;*.tga;*.bmp", texturePath))
 					{
-						texHandle = TextureManager::LoadTexture(texturePath, material->properties[index].texture.index, static_cast<int>(_selectedModels.size()));
+						texHandle = TextureManager::LoadTexture(texturePath, material->properties[index].texture.Index, static_cast<int>(_selectedModels.size()));
 						material->properties[index].texture = texHandle;
 						material->numFramesDirty = gNumFrameResources;
 						CoTaskMemFree(texturePath);
@@ -1243,12 +1293,12 @@ void MyApp::DrawMaterialProperty(Material* material, const std::string& label, c
 				if (ImGui::BeginPopupContextItem())
 				{
 					ImGui::PushID(btnId++);
-					if (ImGui::Button("delete") && texHandle.useTexture == true)
+					if (ImGui::Button("delete") && texHandle.UseTexture == true)
 					{
-						const std::string texName = texHandle.name;
+						const std::string texName = texHandle.Name;
 						TextureManager::DeleteTexture(std::wstring(texName.begin(), texName.end()), static_cast<int>(_selectedModels.size()));
 						material->properties[index].texture = TextureHandle();
-						material->properties[index].texture.useTexture = true;
+						material->properties[index].texture.UseTexture = true;
 						material->numFramesDirty = gNumFrameResources;
 					}
 					ImGui::PopID();
@@ -1276,7 +1326,7 @@ void MyApp::DrawMaterialProperty(Material* material, const std::string& label, c
 
 		if (textureTabOpen != static_cast<bool>(selectedTabs[index]))
 		{
-			material->properties[index].texture.useTexture = selectedTabs[index];
+			material->properties[index].texture.UseTexture = selectedTabs[index];
 			material->numFramesDirty = gNumFrameResources;
 		}
 
@@ -1292,7 +1342,7 @@ void MyApp::DrawMaterialTexture(Material* material, const std::string& label, co
 	if (ImGui::TreeNode(label.c_str()))
 	{
 		TextureHandle texHandle = material->textures[index];
-		const std::string name = BasicUtil::TrimName(texHandle.name, 15);
+		const std::string name = BasicUtil::TrimName(texHandle.Name, 15);
 
 		ImGui::PushID(btnId++);
 		if (ImGui::Button(name.c_str()))
@@ -1300,7 +1350,7 @@ void MyApp::DrawMaterialTexture(Material* material, const std::string& label, co
 			WCHAR* texturePath;
 			if (BasicUtil::TryToOpenFile(L"Image Files", L"*.dds;*.png;*.jpg;*.jpeg;*.tga;*.bmp", texturePath))
 			{
-				texHandle = TextureManager::LoadTexture(texturePath, material->textures[index].index, static_cast<int>(_selectedModels.size()));
+				texHandle = TextureManager::LoadTexture(texturePath, material->textures[index].Index, static_cast<int>(_selectedModels.size()));
 				material->textures[index] = texHandle;
 				material->numFramesDirty = gNumFrameResources;
 				CoTaskMemFree(texturePath);
@@ -1310,9 +1360,9 @@ void MyApp::DrawMaterialTexture(Material* material, const std::string& label, co
 		if (ImGui::BeginPopupContextItem())
 		{
 			ImGui::PushID(btnId++);
-			if (ImGui::Button("delete") && texHandle.useTexture == true)
+			if (ImGui::Button("delete") && texHandle.UseTexture == true)
 			{
-				const std::string texName = texHandle.name;
+				const std::string texName = texHandle.Name;
 				TextureManager::DeleteTexture(std::wstring(texName.begin(), texName.end()), static_cast<int>(_selectedModels.size()));
 				material->textures[index] = TextureHandle();
 				material->numFramesDirty = gNumFrameResources;
@@ -1353,7 +1403,7 @@ void MyApp::DrawMaterialArmTexture(Material* material, const std::string& label,
 		}
 
 		TextureHandle texHandle = material->textures[index];
-		const std::string name = BasicUtil::TrimName(texHandle.name, 15);
+		const std::string name = BasicUtil::TrimName(texHandle.Name, 15);
 
 		ImGui::PushID(btnId++);
 		if (ImGui::Button(name.c_str()))
@@ -1361,7 +1411,7 @@ void MyApp::DrawMaterialArmTexture(Material* material, const std::string& label,
 			WCHAR* texturePath;
 			if (BasicUtil::TryToOpenFile(L"Image Files", L"*.dds;*.png;*.jpg;*.jpeg;*.tga;*.bmp", texturePath))
 			{
-				texHandle = TextureManager::LoadTexture(texturePath, material->textures[index].index, static_cast<int>(_selectedModels.size()));
+				texHandle = TextureManager::LoadTexture(texturePath, material->textures[index].Index, static_cast<int>(_selectedModels.size()));
 				material->textures[index] = texHandle;
 				material->numFramesDirty = gNumFrameResources;
 				CoTaskMemFree(texturePath);
@@ -1371,9 +1421,9 @@ void MyApp::DrawMaterialArmTexture(Material* material, const std::string& label,
 		if (ImGui::BeginPopupContextItem())
 		{
 			ImGui::PushID(btnId++);
-			if (ImGui::Button("delete") && texHandle.useTexture == true)
+			if (ImGui::Button("delete") && texHandle.UseTexture == true)
 			{
-				const std::string texName = texHandle.name;
+				const std::string texName = texHandle.Name;
 				TextureManager::DeleteTexture(std::wstring(texName.begin(), texName.end()), static_cast<int>(_selectedModels.size()));
 				material->textures[index] = TextureHandle();
 				material->numFramesDirty = gNumFrameResources;

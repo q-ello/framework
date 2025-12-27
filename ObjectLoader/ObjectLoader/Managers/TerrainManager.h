@@ -4,6 +4,14 @@
 #include "../Helpers/Camera.h"
 #include "GeometryManager.h"
 
+enum class TerrainTexture : int8_t
+{
+	Low = 0,
+	Slope,
+	High,
+	Count
+};
+
 struct GridQuadNode
 {
 	DirectX::BoundingBox Aabb;
@@ -34,12 +42,9 @@ public:
 		return _heightmapTexture;
 	}
 
-	TextureHandle& DiffuseTexture()
-	{
-		return _diffuseTexture;
-	}
-
 	float MaxTerrainHeight = 10.0f;
+	float HeightThreshold = 0.5f;
+	float SlopeThreshold = 0.5f;
 
 	int GridsCount() const
 	{
@@ -50,14 +55,19 @@ public:
 	{
 		return _visibleGrids;
 	}
+	
+	MaterialProperty* TerrainTexture(int index);
+	
+	void SetDirty();
 
 private:
 	std::vector<std::unique_ptr<GridQuadNode>> _grids;
 	TextureHandle _heightmapTexture;
-	TextureHandle _diffuseTexture;
 	int _visibleGrids;
 	int _heightmapTextureWidth = 0;
 	int _heightmapTextureHeight = 0;
+	
+	MaterialProperty _textures[static_cast<int>(TerrainTexture::Count)];
 
 	ID3D12Device* _device = nullptr;
 	Camera* _camera = nullptr;
@@ -70,6 +80,8 @@ private:
 
 	DXGI_FORMAT _format = DXGI_FORMAT_R8G8B8A8_UNORM;
 	int _gridSize = 33;
+	
+	int _numFramesDirty = gNumFrameResources;
 
 private:
 	void BuildInputLayout();

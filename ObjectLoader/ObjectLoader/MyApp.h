@@ -74,6 +74,7 @@ private:
 	void DrawObjectsList(int& btnId);
 	void DrawShadowMasksList(int& btnId) const;
 	void DrawTerrain(int& btnId) const;
+	void DrawTerrainTexture(int& btnId, int index, const char* label) const;
 	void DrawAtmosphere(int& btnId);
 
 	void DrawHandSpotlight(int& btnId) const;
