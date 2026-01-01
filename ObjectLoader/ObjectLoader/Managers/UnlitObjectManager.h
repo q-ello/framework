@@ -8,9 +8,9 @@ class UnlitObjectManager : public ObjectManager
 
 public:
 	void UpdateObjectCBs(FrameResource* currFrameResource) override;
-	int AddRenderItem(ID3D12Device* device, ModelData&& modelData) override;
+	int AddRenderItem(ID3D12Device5* device, ModelData&& modelData) override;
 	void Draw(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource, float screenHeight = 0.f, bool isWireframe = false) const;
-	void AddObjectToResource(Microsoft::WRL::ComPtr<ID3D12Device> device, FrameResource* currFrameResource) override;
+	void AddObjectToResource(Microsoft::WRL::ComPtr<ID3D12Device5> device, FrameResource* currFrameResource) override;
 
 private:
 	std::vector<std::unique_ptr<UnlitRenderItem>> _objects;

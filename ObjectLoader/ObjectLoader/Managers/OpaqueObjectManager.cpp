@@ -331,13 +331,13 @@ float EditableObjectManager::ComputeScreenSize(XMVECTOR& center, const float rad
 	return projectedSize; // in pixels (height of sphere on screen)
 }
 
-void EditableObjectManager::AddObjectToResource(const Microsoft::WRL::ComPtr<ID3D12Device> device, FrameResource* currFrameResource)
+void EditableObjectManager::AddObjectToResource(const Microsoft::WRL::ComPtr<ID3D12Device5> device, FrameResource* currFrameResource)
 {
 	for (const auto& obj : _objects)
 		currFrameResource->AddOpaqueObjectBuffer(device.Get(), obj->Uid, static_cast<int>(obj->LodsData.begin()->Meshes.size()), static_cast<int>(obj->Materials.size()));
 }
 
-int EditableObjectManager::AddRenderItem(ID3D12Device* device, ModelData&& modelData)  // NOLINT(cppcoreguidelines-rvalue-reference-param-not-moved)
+int EditableObjectManager::AddRenderItem(ID3D12Device5* device, ModelData&& modelData)  // NOLINT(cppcoreguidelines-rvalue-reference-param-not-moved)
 {
 	// Correct: actually move out the string
 	const std::string itemName = modelData.CroppedName;
@@ -400,7 +400,7 @@ int EditableObjectManager::AddRenderItem(ID3D12Device* device, ModelData&& model
 	return static_cast<int>(_objects.size()) - 1;
 }
 
-int EditableObjectManager::AddLod(ID3D12Device* device, LodData lod, EditableRenderItem* ri) const
+int EditableObjectManager::AddLod(ID3D12Device5* device, LodData lod, EditableRenderItem* ri) const
 {
 	int i = 0;
 	for (; i < ri->LodsData.size(); i++)
@@ -476,7 +476,7 @@ bool EditableObjectManager::DeleteObject(const int selectedObject)
 
 	for (int i = 0; i < gNumFrameResources; ++i)
 	{
-		FrameResource::FrameResources()[i]->RemoveOpaqueObjectBuffer(UploadManager::Device, uid);
+		FrameResource::FrameResources()[i]->RemoveOpaqueObjectBuffer(_device.Get(), uid);
 	}
 
 	if (_objectLoaded[name] == 0)
@@ -506,7 +506,7 @@ EditableRenderItem* EditableObjectManager::Object(const int i)
 	return _objects[i].get();
 }
 
-void EditableObjectManager::Draw(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, const float screenHeight, const bool isWireframe, const bool fixedLod) const
+void EditableObjectManager::Draw(ID3D12GraphicsCommandList4* cmdList, FrameResource* currFrameResource, const float screenHeight, const bool isWireframe, const bool fixedLod) const
 {
 	cmdList->SetGraphicsRootSignature(_rootSignature.Get());
 
@@ -534,7 +534,7 @@ void EditableObjectManager::Draw(ID3D12GraphicsCommandList* cmdList, FrameResour
 	}
 }
 
-void EditableObjectManager::DrawObjects(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource,
+void EditableObjectManager::DrawObjects(ID3D12GraphicsCommandList4* cmdList, FrameResource* currFrameResource,
                                         const std::vector<uint32_t>& indices,
                                         std::unordered_map<uint32_t, EditableRenderItem*> objects,
                                         const float screenHeight, const bool fixedLod) const
@@ -588,7 +588,7 @@ void EditableObjectManager::DrawObjects(ID3D12GraphicsCommandList* cmdList, Fram
 	}
 }
 
-void EditableObjectManager::DrawAabBs(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource) const
+void EditableObjectManager::DrawAabBs(ID3D12GraphicsCommandList4* cmdList, FrameResource* currFrameResource) const
 {
 	for (const auto& ri : _objects)
 	{

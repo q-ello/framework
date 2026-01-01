@@ -65,8 +65,8 @@ bool BasicUtil::TryToOpenFile(const WCHAR* extension1, const WCHAR* extension2, 
 	return true;
 }
 
-void BasicUtil::ChangeTextureState(ID3D12GraphicsCommandList* cmdList, RtvSrvTexture& texture,
-	const D3D12_RESOURCE_STATES newState)
+void BasicUtil::ChangeTextureState(ID3D12GraphicsCommandList4* cmdList, RtvSrvTexture& texture,
+                                   const D3D12_RESOURCE_STATES newState)
 {
 	if (texture.PrevState == newState)
 		return;

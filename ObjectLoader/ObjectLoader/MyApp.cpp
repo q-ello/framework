@@ -1707,7 +1707,16 @@ void MyApp::DrawImportModal()
 			//merge meshes into one file
 			ModelData data = std::move(GeometryManager::BuildModelGeometry(_modelManager->ParseAsOneObject().get()));
 			_selectedModels.clear();
+			if (_supportsRayTracing)
+            {
+            	for (auto& lod : GeometryManager::Geometries()[data.CroppedName])
+            	{
+            		GeometryManager::BuildBlasForMesh(*lod.get(), mCommandList.Get());
+            	}
+            }
 			_selectedModels.insert(_objectsManager->AddRenderItem(_device.Get(), std::move(data)));
+
+			
 			ImGui::CloseCurrentPopup();
 		}
 
@@ -1778,6 +1787,10 @@ void MyApp::AddLod()
 			//generating it as one mesh
 			const int lodIdx = _objectsManager->AddLod(_device.Get(), data, ri);
 			GeometryManager::AddLodGeometry(ri->Name, lodIdx, lod);
+			if (_supportsRayTracing)
+			{
+				GeometryManager::BuildBlasForMesh(*(GeometryManager::Geometries()[ri->Name].end() - 1)->get(), mCommandList.Get());
+			}
 			AddToast("Your LOD was added as LOD" + std::to_string(lodIdx) + "!");
 		}
 		CoTaskMemFree(pszFilePath);

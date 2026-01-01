@@ -295,7 +295,7 @@ void LightingManager::CalculateCascadesViewProjs()
 	}
 }
 
-void LightingManager::DrawDirLight(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource, const bool rayTracingEnabled)
+void LightingManager::DrawDirLight(ID3D12GraphicsCommandList4* cmdList, const FrameResource* currFrameResource, const bool rayTracingEnabled)
 {
 	// Indicate a state transition on the resource usage.
 	
@@ -343,7 +343,7 @@ void LightingManager::DrawDirLight(ID3D12GraphicsCommandList* cmdList, const Fra
 	_finalTextureSrvIndex = _middlewareTexture.SrvIndex;
 }
 
-void LightingManager::DrawLocalLights(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource, const bool rayTracingEnabled) const
+void LightingManager::DrawLocalLights(ID3D12GraphicsCommandList4* cmdList, const FrameResource* currFrameResource, const bool rayTracingEnabled) const
 {
 	if (_lightsInsideFrustum.empty())
 		return;
@@ -365,7 +365,7 @@ void LightingManager::DrawLocalLights(ID3D12GraphicsCommandList* cmdList, const 
 		mesh.BaseVertexLocation, 0);
 }
 
-void LightingManager::DrawDebug(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource) const
+void LightingManager::DrawDebug(ID3D12GraphicsCommandList4* cmdList, FrameResource* currFrameResource) const
 {
 	if (_lightsInsideFrustum.empty())
 		return;
@@ -376,14 +376,14 @@ void LightingManager::DrawDebug(ID3D12GraphicsCommandList* cmdList, FrameResourc
 	                              mesh.StartIndexLocation, mesh.BaseVertexLocation, 0);
 }
 
-void LightingManager::DrawEmissive(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource) const
+void LightingManager::DrawEmissive(ID3D12GraphicsCommandList4* cmdList, FrameResource* currFrameResource) const
 {
 	cmdList->SetPipelineState(_emissivePso.Get());
 
 	cmdList->DrawInstanced(3, 1, 0, 0);
 }
 
-void LightingManager::DrawShadows(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource,
+void LightingManager::DrawShadows(ID3D12GraphicsCommandList4* cmdList, FrameResource* currFrameResource,
                                   const std::vector<std::shared_ptr<EditableRenderItem>>& objects)
 {
 	cmdList->RSSetViewports(1, &_shadowViewport);
@@ -474,7 +474,7 @@ void LightingManager::DrawShadows(ID3D12GraphicsCommandList* cmdList, FrameResou
 	cmdList->ResourceBarrier(1, &barrier);
 }
 
-void LightingManager::DrawIntoBackBuffer(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource)
+void LightingManager::DrawIntoBackBuffer(ID3D12GraphicsCommandList4* cmdList, FrameResource* currFrameResource)
 {
 	//middleware to srv
 	if (_finalTextureSrvIndex == _middlewareTexture.SrvIndex)
@@ -516,7 +516,7 @@ ID3DBlob* LightingManager::GetFullScreenVsWithSamplers() const
 	return _dirLightVsShader.Get();
 }
 
-void LightingManager::ChangeMiddlewareState(ID3D12GraphicsCommandList* cmdList, const D3D12_RESOURCE_STATES newState)
+void LightingManager::ChangeMiddlewareState(ID3D12GraphicsCommandList4* cmdList, const D3D12_RESOURCE_STATES newState)
 {
 	if (_middlewareTexture.PrevState == newState)
 		return;
@@ -1058,7 +1058,7 @@ std::vector<int> LightingManager::FrustumCulling(const std::vector<std::shared_p
 	return visibleObjects;
 }
 
-void LightingManager::ShadowPass(FrameResource* currFrameResource, ID3D12GraphicsCommandList* cmdList,
+void LightingManager::ShadowPass(FrameResource* currFrameResource, ID3D12GraphicsCommandList4* cmdList,
                                  const std::vector<int>& visibleObjects,
                                  const std::vector<std::shared_ptr<EditableRenderItem>>& objects)
 {

@@ -9,10 +9,10 @@ class EditableObjectManager : public ObjectManager
 public:
 	void UpdateObjectCBs(FrameResource* currFrameResource) override;
 	void SetCamera(Camera* camera);
-	void AddObjectToResource(Microsoft::WRL::ComPtr<ID3D12Device> device, FrameResource* currFrameResource) override;
-	int AddRenderItem(ID3D12Device* device, ModelData&& modelData) override;
+	void AddObjectToResource(Microsoft::WRL::ComPtr<ID3D12Device5> device, FrameResource* currFrameResource) override;
+	int AddRenderItem(ID3D12Device5* device, ModelData&& modelData) override;
 	bool DeleteObject(int selectedObject) override;
-	int AddLod(ID3D12Device* device, LodData lod, EditableRenderItem* ri) const;
+	int AddLod(ID3D12Device5* device, LODData lod, EditableRenderItem* ri) const;
 	static void DeleteLod(EditableRenderItem* ri, int index);
 
 	int VisibleObjectsCount() override { return static_cast<int>(_visibleTesselatedObjects.size() + _visibleUntesselatedObjects.size()); };
@@ -20,12 +20,12 @@ public:
 
 	std::string ObjectName(int i) override;
 	EditableRenderItem* Object(int i) override;
-	void Draw(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, float screenHeight, bool isWireframe = false, bool fixedLod = false) const;
-	auto DrawObjects(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource,
+	void Draw(ID3D12GraphicsCommandList4* cmdList, FrameResource* currFrameResource, float screenHeight, bool isWireframe = false, bool fixedLod = false) const;
+	auto DrawObjects(ID3D12GraphicsCommandList4* cmdList, FrameResource* currFrameResource,
 	                 const std::vector<uint32_t>& indices, std::unordered_map<uint32_t, EditableRenderItem*> objects,
 	                 float screenHeight,
 	                 bool fixedLod) const -> void;
-	void DrawAabBs(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource) const;
+	void DrawAabBs(ID3D12GraphicsCommandList4* cmdList, FrameResource* currFrameResource) const;
 
 	std::vector< D3D12_INPUT_ELEMENT_DESC > InputLayout() const
 	{

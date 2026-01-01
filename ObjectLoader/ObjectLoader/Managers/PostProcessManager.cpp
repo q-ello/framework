@@ -40,7 +40,7 @@ void PostProcessManager::BindToManagers(GBuffer* gbuffer, LightingManager* light
 	_fullscreenVs = _lightingManager->GetFullScreenVs();
 }
 
-void PostProcessManager::DrawGodRaysPass(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource)
+void PostProcessManager::DrawGodRaysPass(ID3D12GraphicsCommandList4* cmdList, const FrameResource* currFrameResource)
 {
 	if (!*_lightingManager->IsMainLightOn())
 		return;
@@ -49,7 +49,7 @@ void PostProcessManager::DrawGodRaysPass(ID3D12GraphicsCommandList* cmdList, con
 	GodRaysPass(cmdList, currFrameResource);
 }
 
-void PostProcessManager::OcclusionMaskPass(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource)
+void PostProcessManager::OcclusionMaskPass(ID3D12GraphicsCommandList4* cmdList, const FrameResource* currFrameResource)
 {
 	//occlusion mask to rtv
 	BasicUtil::ChangeTextureState(cmdList, _lightOcclusionMask, D3D12_RESOURCE_STATE_RENDER_TARGET);
@@ -104,7 +104,7 @@ void PostProcessManager::GodRaysPass(ID3D12GraphicsCommandList* cmdList, const F
 	cmdList->DrawInstanced(3, 1, 0, 0);
 }
 
-void PostProcessManager::DrawSsr(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource)
+void PostProcessManager::DrawSsr(ID3D12GraphicsCommandList4* cmdList, const FrameResource* currFrameResource)
 {
 	cmdList->SetPipelineState(_ssrPso.Get());
 	cmdList->SetGraphicsRootSignature(_ssrRootSignature.Get());
@@ -132,7 +132,7 @@ void PostProcessManager::DrawSsr(ID3D12GraphicsCommandList* cmdList, const Frame
 	_lightingManager->SetFinalTextureIndex(_ssrTexture.SrvIndex);
 }
 
-void PostProcessManager::DrawChromaticAberration(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource)
+void PostProcessManager::DrawChromaticAberration(ID3D12GraphicsCommandList4* cmdList, const FrameResource* currFrameResource)
 {
 	//just in case
 	_lightingManager->ChangeMiddlewareState(cmdList, D3D12_RESOURCE_STATE_GENERIC_READ);
@@ -159,7 +159,7 @@ void PostProcessManager::DrawChromaticAberration(ID3D12GraphicsCommandList* cmdL
 	_lightingManager->SetFinalTextureIndex(_chromaticAberrationTexture.SrvIndex);
 }
 
-void PostProcessManager::DrawVignetting(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource)
+void PostProcessManager::DrawVignetting(ID3D12GraphicsCommandList4* cmdList, const FrameResource* currFrameResource)
 {
 	//just in case
 	_lightingManager->ChangeMiddlewareState(cmdList, D3D12_RESOURCE_STATE_GENERIC_READ);

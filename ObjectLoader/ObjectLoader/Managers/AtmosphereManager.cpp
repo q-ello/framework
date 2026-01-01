@@ -24,7 +24,7 @@ void AtmosphereManager::BindToManagers(LightingManager* lightingManager, GBuffer
 	Parameters.DirToSun = {-lightDir[0], -lightDir[1], -lightDir[2]};
 }
 
-void AtmosphereManager::Draw(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource)
+void AtmosphereManager::Draw(ID3D12GraphicsCommandList4* cmdList, const FrameResource* currFrameResource)
 {
 	//just in case
 	_lightingManager->ChangeMiddlewareState(cmdList, D3D12_RESOURCE_STATE_GENERIC_READ);

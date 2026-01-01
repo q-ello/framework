@@ -2,7 +2,7 @@
 using namespace DirectX;
 using namespace Microsoft::WRL;
 
-ObjectManager::ObjectManager(ID3D12Device* device)
+ObjectManager::ObjectManager(ID3D12Device5* device)
 	: _uidCount{ 0 }
 	, _device {device}
 {

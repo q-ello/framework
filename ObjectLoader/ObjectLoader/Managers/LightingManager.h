@@ -41,12 +41,12 @@ public:
 	void CalculateCascadesViewProjs();
 
 	//different draw calls
-	void DrawDirLight(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource, bool rayTracingEnabled);
-	void DrawLocalLights(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource, bool rayTracingEnabled) const;
-	void DrawDebug(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource) const;
-	void DrawEmissive(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource) const;
-	void DrawShadows(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource, const std::vector<std::shared_ptr<EditableRenderItem>>& objects);
-	void DrawIntoBackBuffer(ID3D12GraphicsCommandList* cmdList, FrameResource* currFrameResource);
+	void DrawDirLight(ID3D12GraphicsCommandList4* cmdList, const FrameResource* currFrameResource, bool rayTracingEnabled);
+	void DrawLocalLights(ID3D12GraphicsCommandList4* cmdList, const FrameResource* currFrameResource, bool rayTracingEnabled) const;
+	void DrawDebug(ID3D12GraphicsCommandList4* cmdList, FrameResource* currFrameResource) const;
+	void DrawEmissive(ID3D12GraphicsCommandList4* cmdList, FrameResource* currFrameResource) const;
+	void DrawShadows(ID3D12GraphicsCommandList4* cmdList, FrameResource* currFrameResource, const std::vector<std::shared_ptr<EditableRenderItem>>& objects);
+	void DrawIntoBackBuffer(ID3D12GraphicsCommandList4* cmdList, FrameResource* currFrameResource);
 
 	void Init();
 	void BindToOtherData(GBuffer* gbuffer, CubeMapManager* cubeMapManager, Camera* camera, const std::vector<D3D12_INPUT_ELEMENT_DESC>& inputLayout);
@@ -119,7 +119,7 @@ public:
 		return TextureManager::SrvHeapAllocator->GetGpuHandle(_finalTextureSrvIndex);
 	}
 
-	void ChangeMiddlewareState(ID3D12GraphicsCommandList* cmdList, D3D12_RESOURCE_STATES newState);
+	void ChangeMiddlewareState(ID3D12GraphicsCommandList4* cmdList, D3D12_RESOURCE_STATES newState);
 
 	//shadow mask stuff
 	void AddShadowMask(const TextureHandle& handle);
@@ -246,7 +246,7 @@ private:
 	static void DeleteShadowTexture(int texDsv);
 	std::vector<int> FrustumCulling(const std::vector<std::shared_ptr<EditableRenderItem>>& objects, int cascadeIdx) const;
 	static std::vector<int> FrustumCulling(const std::vector<std::shared_ptr<EditableRenderItem>>& objects, DirectX::BoundingSphere lightAabb);
-	static void ShadowPass(FrameResource* currFrameResource, ID3D12GraphicsCommandList* cmdList,
+	static void ShadowPass(FrameResource* currFrameResource, ID3D12GraphicsCommandList4* cmdList,
 	                       const std::vector<int>& visibleObjects, const std::vector<std::shared_ptr<EditableRenderItem>>& objects);
 	void SnapToTexel(DirectX::XMFLOAT3& minPt, DirectX::XMFLOAT3& maxPt) const;
 	void CreateMiddlewareTexture();

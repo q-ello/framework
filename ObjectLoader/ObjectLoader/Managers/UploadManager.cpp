@@ -2,15 +2,15 @@
 
 #include <DirectXTex.h>
 
-ID3D12Device* UploadManager::Device = nullptr;
-Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> UploadManager::UploadCmdList = nullptr;
+ID3D12Device5* UploadManager::Device = nullptr;
+Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4> UploadManager::UploadCmdList = nullptr;
 Microsoft::WRL::ComPtr<ID3D12CommandQueue> UploadManager::_commandQueue = nullptr;
 Microsoft::WRL::ComPtr<ID3D12CommandAllocator> UploadManager::_uploadCmdAlloc = nullptr;
 Microsoft::WRL::ComPtr<ID3D12Fence> UploadManager::_uploadFence = nullptr;
 UINT64 UploadManager::_uploadFenceValue = 0;
 HANDLE UploadManager::_uploadFenceEvent = nullptr;
 
-void UploadManager::InitUploadCmdList(ID3D12Device* device, const Microsoft::WRL::ComPtr<ID3D12CommandQueue>& cmdQueue)
+void UploadManager::InitUploadCmdList(ID3D12Device5* device, const Microsoft::WRL::ComPtr<ID3D12CommandQueue>& cmdQueue)
 {
 	Device = device;
 	_commandQueue = cmdQueue;

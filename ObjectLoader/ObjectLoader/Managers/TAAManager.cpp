@@ -161,13 +161,13 @@ void TaaManager::BuildTextures()
 	}
 }
 
-void TaaManager::ChangeHistoryState(ID3D12GraphicsCommandList* cmdList, const int index, const D3D12_RESOURCE_STATES newState)
+void TaaManager::ChangeHistoryState(ID3D12GraphicsCommandList4* cmdList, const int index, const D3D12_RESOURCE_STATES newState)
 {
 	RtvSrvTexture& texture = _historyTextures[index];
 	BasicUtil::ChangeTextureState(cmdList, texture, newState);
 }
 
-void TaaManager::ApplyTaa(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource)
+void TaaManager::ApplyTaa(ID3D12GraphicsCommandList4* cmdList, const FrameResource* currFrameResource)
 {
 	_gBuffer->ChangeBothDepthState(D3D12_RESOURCE_STATE_GENERIC_READ);
 	

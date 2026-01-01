@@ -20,12 +20,12 @@ public:
 	void Init(int width, int height);
 	void BindToManagers(GBuffer* gbuffer, LightingManager* lightingManager, Camera* camera);
 
-	void DrawGodRaysPass(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource);
-	void OcclusionMaskPass(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource);
+	void DrawGodRaysPass(ID3D12GraphicsCommandList4* cmdList, const FrameResource* currFrameResource);
+	void OcclusionMaskPass(ID3D12GraphicsCommandList4* cmdList, const FrameResource* currFrameResource);
 	void GodRaysPass(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource) const;
-	void DrawSsr(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource);
-	void DrawChromaticAberration(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource);
-	void DrawVignetting(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource);
+	void DrawSsr(ID3D12GraphicsCommandList4* cmdList, const FrameResource* currFrameResource);
+	void DrawChromaticAberration(ID3D12GraphicsCommandList4* cmdList, const FrameResource* currFrameResource);
+	void DrawVignetting(ID3D12GraphicsCommandList4* cmdList, const FrameResource* currFrameResource);
 
 	void OnResize(int newWidth, int newHeight);
 	void UpdateGodRaysParameters() const;
