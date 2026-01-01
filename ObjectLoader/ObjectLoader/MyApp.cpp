@@ -64,7 +64,7 @@ bool MyApp::Initialize()
 	ImGui_ImplDX12_Init(&info);
 	ImGui_ImplWin32_Init(mhMainWnd);
 
-	RAWINPUTDEVICE rid = {};
+	RAWINPUTDEVICE rid;
 	rid.usUsagePage = 1;
 	rid.usUsage = 6; // Keyboard
 	rid.dwFlags = RIDEV_INPUTSINK;
@@ -142,6 +142,11 @@ void MyApp::Draw(const GameTimer& gt)
 
 	DrawInterface();
 
+	if (_supportsRayTracing)
+	{
+		_rayTracingManager->UpdateData(mCommandList.Get());
+	}
+
 	const auto cmdListAlloc = _currFrameResource->CmdListAlloc;
 
 	// Reuse the memory associated with command recording.
@@ -177,7 +182,7 @@ void MyApp::Draw(const GameTimer& gt)
 			_atmosphereManager->Draw(mCommandList.Get(), _currFrameResource);
 		else
 		{
-			//black screen is kinda sad so I guess that won't hurt to draw skybox
+			//black screen is kinda sad, so I guess that won't hurt to draw skybox
 			_cubeMapManager->Draw(mCommandList.Get(), _currFrameResource);
 		}
 		
@@ -1095,6 +1100,7 @@ void MyApp::DrawMultiObjectTransform(int& btnId) const
 			for (const int idx : _selectedModels)
 			{
 				manager->Object(idx)->LockedScale = scale;
+				manager->Object(idx)->RayTracingDirty = true;
 				manager->Object(idx)->NumFramesDirty = gNumFrameResources;
 			}
 		}
@@ -1135,6 +1141,7 @@ void MyApp::DrawMultiObjectTransform(int& btnId) const
 					pos = after;
 				}
 				manager->Object(idx)->Transform[scaleIndex] = pos;
+				manager->Object(idx)->RayTracingDirty = true;
 				manager->Object(idx)->NumFramesDirty = gNumFrameResources;
 			}
 		}
@@ -1176,6 +1183,7 @@ void MyApp::DrawTransformInput(const std::string& label, const int btnId, const 
 			for (const int idx : _selectedModels)
 			{
 				manager->Object(idx)->Transform[transformIndex] = pos;
+				manager->Object(idx)->RayTracingDirty = true;
 				manager->Object(idx)->NumFramesDirty = gNumFrameResources;
 			}
 		}
@@ -1674,6 +1682,18 @@ void MyApp::DrawCameraSpeed() const
 	ImGui::Text(("Camera speed: " + cameraSpeedStr.substr(0, cameraSpeedStr.find_last_of('.') + 3)).c_str());
 }
 
+void MyApp::AddRenderItem(ModelData data)
+{
+	if (_supportsRayTracing)
+	{
+		for (auto& lod : GeometryManager::Geometries()[data.CroppedName])
+		{
+			GeometryManager::BuildBlasForMesh(*lod.get(), mCommandList.Get());
+		}
+	}
+	_selectedModels.insert(_objectsManager->AddRenderItem(_device.Get(), std::move(data)));
+}
+
 void MyApp::DrawImportModal()
 {
 	const ImVec2 center = ImGui::GetMainViewport()->GetCenter();
@@ -1707,14 +1727,7 @@ void MyApp::DrawImportModal()
 			//merge meshes into one file
 			ModelData data = std::move(GeometryManager::BuildModelGeometry(_modelManager->ParseAsOneObject().get()));
 			_selectedModels.clear();
-			if (_supportsRayTracing)
-            {
-            	for (auto& lod : GeometryManager::Geometries()[data.CroppedName])
-            	{
-            		GeometryManager::BuildBlasForMesh(*lod.get(), mCommandList.Get());
-            	}
-            }
-			_selectedModels.insert(_objectsManager->AddRenderItem(_device.Get(), std::move(data)));
+			AddRenderItem(std::move(data));
 
 			
 			ImGui::CloseCurrentPopup();
@@ -1750,7 +1763,7 @@ void MyApp::AddModel()
 			//generating it as one mesh
 			ModelData data = GeometryManager::BuildModelGeometry(model.get());
 			_selectedModels.clear();
-			_selectedModels.insert(_objectsManager->AddRenderItem(_device.Get(), std::move(data)));
+			AddRenderItem(std::move(data));
 		}
 		else if (modelCount >= 20)
 		{
@@ -1769,7 +1782,7 @@ void MyApp::AddMultipleModels()
 		ModelData data = std::move(GeometryManager::BuildModelGeometry(model.get()));
 		if (data.LodsData.empty())
 			continue;
-		_selectedModels.insert(_objectsManager->AddRenderItem(_device.Get(), std::move(data)));
+		AddRenderItem(std::move(data));
 	}
 }
 
@@ -1810,7 +1823,7 @@ void MyApp::AddShadowMask() const
 
 void MyApp::UpdateDirToSun()
 {
-	//I like modulo better but I guess this way is faster.
+	//I like modulo better, but I guess this way is faster.
 	{
 		if (_timeInMinutes > 59.f)
 		{
@@ -1848,9 +1861,11 @@ void MyApp::UpdateDirToSun()
 
 void MyApp::InitManagers()
 {
+	_rayTracingManager = std::make_unique<RayTracingManager>();
+	
 	_objectsManager = std::make_unique<EditableObjectManager>(_device.Get());
 	_objectsManager->Init();
-	_objectsManager->SetCamera(&_camera);
+	_objectsManager->BindToOtherData(&_camera, _rayTracingManager.get());
 	_gridManager = std::make_unique<UnlitObjectManager>(_device.Get());
 	_gridManager->Init();
 

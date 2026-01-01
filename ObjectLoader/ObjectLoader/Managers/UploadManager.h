@@ -13,6 +13,10 @@ public:
 	static void Flush();
 	static void Reset();
 
+	static Microsoft::WRL::ComPtr<ID3D12Resource> CreateUavBuffer(const UINT64 size);
+	static Microsoft::WRL::ComPtr<ID3D12Resource> CreateAsBuffer(UINT64 size);
+	static Microsoft::WRL::ComPtr<ID3D12Resource> CreateUploadBuffer(UINT bufferSize);
+
 	static ID3D12Device5* Device;
 	static Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4> UploadCmdList;
 private:

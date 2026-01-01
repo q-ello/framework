@@ -25,7 +25,5 @@ public:
 	static void UnloadModel(const std::string& modelName);
 	static void AddLodGeometry(const std::string& name, int lodIdx, const Lod& lod);
 	static void DeleteLodGeometry(const std::string& name, int lodIdx);
-	static Microsoft::WRL::ComPtr<ID3D12Resource> CreateUavBuffer(const UINT64 size);
-	static Microsoft::WRL::ComPtr<ID3D12Resource> CreateAsBuffer(UINT64 size);
 	static void BuildBlasForMesh(MeshGeometry& geo, ID3D12GraphicsCommandList4* cmdList);
 };

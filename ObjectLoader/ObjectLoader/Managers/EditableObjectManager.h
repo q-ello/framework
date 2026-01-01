@@ -1,6 +1,7 @@
 #pragma once
 #define NOMINMAX
 #include "ObjectManager.h"
+#include "RayTracingManager.h"
 #include "../Helpers/Camera.h"
 
 class EditableObjectManager : public ObjectManager
@@ -8,11 +9,11 @@ class EditableObjectManager : public ObjectManager
 	using ObjectManager::ObjectManager;
 public:
 	void UpdateObjectCBs(FrameResource* currFrameResource) override;
-	void SetCamera(Camera* camera);
+	void BindToOtherData(Camera* camera, RayTracingManager* rayTracingManager);
 	void AddObjectToResource(Microsoft::WRL::ComPtr<ID3D12Device5> device, FrameResource* currFrameResource) override;
 	int AddRenderItem(ID3D12Device5* device, ModelData&& modelData) override;
 	bool DeleteObject(int selectedObject) override;
-	int AddLod(ID3D12Device5* device, LODData lod, EditableRenderItem* ri) const;
+	int AddLod(ID3D12Device5* device, LodData lod, EditableRenderItem* ri) const;
 	static void DeleteLod(EditableRenderItem* ri, int index);
 
 	int VisibleObjectsCount() override { return static_cast<int>(_visibleTesselatedObjects.size() + _visibleUntesselatedObjects.size()); };
@@ -25,7 +26,7 @@ public:
 	                 const std::vector<uint32_t>& indices, std::unordered_map<uint32_t, EditableRenderItem*> objects,
 	                 float screenHeight,
 	                 bool fixedLod) const -> void;
-	void DrawAabBs(ID3D12GraphicsCommandList4* cmdList, FrameResource* currFrameResource) const;
+	void DrawAabbs(ID3D12GraphicsCommandList4* cmdList, FrameResource* currFrameResource) const;
 
 	std::vector< D3D12_INPUT_ELEMENT_DESC > InputLayout() const
 	{
@@ -39,6 +40,7 @@ public:
 
 private:
 	std::vector<std::shared_ptr<EditableRenderItem>> _objects;
+	RayTracingManager* _rayTracingManager;
 
 	void BuildInputLayout() override;
 	void BuildRootSignature() override;

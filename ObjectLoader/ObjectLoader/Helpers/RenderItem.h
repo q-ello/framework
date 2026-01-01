@@ -62,6 +62,8 @@ struct EditableRenderItem : public RenderItem
 	bool IsTesselated = false;
 	DirectX::XMMATRIX World = DirectX::XMMatrixIdentity();
 	DirectX::XMMATRIX PrevWorld = DirectX::XMMatrixIdentity();
+
+	bool RayTracingDirty = true;
 };
 
 struct UnlitRenderItem : public RenderItem

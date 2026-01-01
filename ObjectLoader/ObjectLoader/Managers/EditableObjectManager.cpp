@@ -1,4 +1,6 @@
-#include "OpaqueObjectManager.h"
+#include "EditableObjectManager.h"
+
+#include "RayTracingManager.h"
 #include "UploadManager.h"
 #include "../../../Common/GBuffer.h"
 
@@ -113,9 +115,10 @@ void EditableObjectManager::UpdateObjectCBs(FrameResource* currFrameResource)
 	}
 }
 
-void EditableObjectManager::SetCamera(Camera* camera)
+void EditableObjectManager::BindToOtherData(Camera* camera, RayTracingManager* rayTracingManager)
 {
 	_camera = camera;
+	_rayTracingManager = rayTracingManager;
 }
 
 void EditableObjectManager::BuildInputLayout()
@@ -315,7 +318,14 @@ void EditableObjectManager::CountLodIndex(EditableRenderItem* ri, const float sc
 
 	const int maxIndex = static_cast<int>(ri->LodsData.size()) - 1;
 
+	const int prevLodIdx = ri->CurrentLodIdx;
+
 	ri->CurrentLodIdx = std::min(preferableLod, maxIndex);
+
+	if (prevLodIdx != ri->CurrentLodIdx)
+	{
+		ri->RayTracingDirty = true; 
+	}
 }
 
 float EditableObjectManager::ComputeScreenSize(XMVECTOR& center, const float radius, const float screenHeight) const
@@ -393,6 +403,8 @@ int EditableObjectManager::AddRenderItem(ID3D12Device5* device, ModelData&& mode
 
 	(isTesselated ? _tesselatedObjects : _untesselatedObjects)[modelRitem->Uid] = modelRitem.get();
 
+	_rayTracingManager->AddRtObject(modelRitem.get());
+
 	_objects.push_back(std::move(modelRitem));
 
 	UploadManager::ExecuteUploadCommandList();
@@ -424,6 +436,8 @@ void EditableObjectManager::DeleteLod(EditableRenderItem* ri, const int index)
 bool EditableObjectManager::DeleteObject(const int selectedObject)
 {
 	const EditableRenderItem* objectToDelete = _objects[selectedObject].get();
+
+	_rayTracingManager->DeleteRtObject(objectToDelete);
 
 	for (auto& materialToDelete : objectToDelete->Materials)
 	{
@@ -530,7 +544,7 @@ void EditableObjectManager::Draw(ID3D12GraphicsCommandList4* cmdList, FrameResou
 	{
 		cmdList->SetPipelineState(_wireframePso.Get());
 		cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-		DrawAabBs(cmdList, currFrameResource);
+		DrawAabbs(cmdList, currFrameResource);
 	}
 }
 
@@ -588,7 +602,7 @@ void EditableObjectManager::DrawObjects(ID3D12GraphicsCommandList4* cmdList, Fra
 	}
 }
 
-void EditableObjectManager::DrawAabBs(ID3D12GraphicsCommandList4* cmdList, FrameResource* currFrameResource) const
+void EditableObjectManager::DrawAabbs(ID3D12GraphicsCommandList4* cmdList, FrameResource* currFrameResource) const
 {
 	for (const auto& ri : _objects)
 	{

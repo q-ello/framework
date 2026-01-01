@@ -246,72 +246,6 @@ void GeometryManager::DeleteLodGeometry(const std::string& name, const int lodId
 	UploadManager::ExecuteUploadCommandList();
 }
 
-Microsoft::WRL::ComPtr<ID3D12Resource> GeometryManager::CreateUavBuffer(const UINT64 size)
-{
-	D3D12_RESOURCE_DESC desc;
-	desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-	desc.Alignment = 0;
-	desc.Width = size;
-	desc.Height = 1;
-	desc.DepthOrArraySize = 1;
-	desc.MipLevels = 1;
-	desc.Format = DXGI_FORMAT_UNKNOWN;
-	desc.SampleDesc.Count = 1;
-	desc.SampleDesc.Quality = 0;
-	desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-	desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
-
-	D3D12_HEAP_PROPERTIES heapProps = {};
-	heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
-
-	Microsoft::WRL::ComPtr<ID3D12Resource> buffer;
-	ThrowIfFailed(
-		UploadManager::Device->CreateCommittedResource(
-			&heapProps,
-			D3D12_HEAP_FLAG_NONE,
-			&desc,
-			D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-			nullptr,
-			IID_PPV_ARGS(&buffer)));
-
-	return buffer;
-}
-
-Microsoft::WRL::ComPtr<struct ID3D12Resource> GeometryManager::CreateAsBuffer(UINT64 size)
-{
-	// DXR requires 64 KB alignment
-	size = (size + D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT - 1) &
-		   ~(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT - 1);
-
-	D3D12_RESOURCE_DESC desc;
-	desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-	desc.Alignment = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT;
-	desc.Width = size;
-	desc.Height = 1;
-	desc.DepthOrArraySize = 1;
-	desc.MipLevels = 1;
-	desc.Format = DXGI_FORMAT_UNKNOWN;
-	desc.SampleDesc.Count = 1;
-	desc.SampleDesc.Quality = 0;
-	desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-	desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
-
-	D3D12_HEAP_PROPERTIES heapProps = {};
-	heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
-
-	Microsoft::WRL::ComPtr<ID3D12Resource> buffer;
-	ThrowIfFailed(
-		UploadManager::Device->CreateCommittedResource(
-			&heapProps,
-			D3D12_HEAP_FLAG_NONE,
-			&desc,
-			D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE,
-			nullptr,
-			IID_PPV_ARGS(&buffer)));
-
-	return buffer;
-}
-
 void GeometryManager::BuildBlasForMesh(MeshGeometry& geo, ID3D12GraphicsCommandList4* cmdList)
 {
 	geo.Rt = std::make_unique<RayTracingGeometry>();
@@ -341,8 +275,8 @@ void GeometryManager::BuildBlasForMesh(MeshGeometry& geo, ID3D12GraphicsCommandL
 	geo.Rt->ScratchSize = asBuildInfo.ScratchDataSizeInBytes;
 	geo.Rt->ResultSize = asBuildInfo.ResultDataMaxSizeInBytes;
 
-	geo.Rt->Scratch = CreateUavBuffer(asBuildInfo.ScratchDataSizeInBytes);
-	geo.Rt->Blas    = CreateAsBuffer(asBuildInfo.ResultDataMaxSizeInBytes);
+	geo.Rt->Scratch = UploadManager::CreateUavBuffer(asBuildInfo.ScratchDataSizeInBytes);
+	geo.Rt->Blas    = UploadManager::CreateAsBuffer(asBuildInfo.ResultDataMaxSizeInBytes);
 	
 	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC desc = {};
 	desc.Inputs = asInputs;
