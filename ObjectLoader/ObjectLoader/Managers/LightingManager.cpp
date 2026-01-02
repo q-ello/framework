@@ -310,16 +310,20 @@ void LightingManager::DrawDirLight(ID3D12GraphicsCommandList4* cmdList, const Fr
 	//set current depth
 	cmdList->SetGraphicsRootDescriptorTable(6, _gbuffer->GetGBufferDepthSrv(true));
 	
-	if (!rayTracingEnabled)
+	const int shadowMaskSrvIndex = _shadowMasks.empty() ? 0 : _shadowMasks[_selectedShadowMask].index;
+	cmdList->SetGraphicsRootDescriptorTable(7, srvAllocator->GetGpuHandle(shadowMaskSrvIndex));
+	constexpr float shadowMaskIntensity = 0.0f;
+	cmdList->SetGraphicsRoot32BitConstants(8, 1, _shadowMasks.empty() ? &shadowMaskIntensity : &ShadowMaskUvScale, 0);
+	
+	if (rayTracingEnabled)
 	{
-		cmdList->SetGraphicsRootDescriptorTable(7, srvAllocator->GetGpuHandle(_cascadeShadowTextureArray.Srv));
-		cmdList->SetGraphicsRootDescriptorTable(8, srvAllocator->GetGpuHandle(_localLightsShadowTextureArray.Srv));
-		const int shadowMaskSrvIndex = _shadowMasks.empty() ? 0 : _shadowMasks[_selectedShadowMask].index;
-		cmdList->SetGraphicsRootDescriptorTable(9, srvAllocator->GetGpuHandle(shadowMaskSrvIndex));
-		constexpr float shadowMaskIntensity = 0.0f;
-        	cmdList->SetGraphicsRoot32BitConstants(10, 1, _shadowMasks.empty() ? &shadowMaskIntensity : &ShadowMaskUvScale, 0);
+		cmdList->SetGraphicsRootDescriptorTable(9, srvAllocator->GetGpuHandle(_rayTracingManager->ShadowMaskSrv()));
 	}
-
+	else
+	{
+		cmdList->SetGraphicsRootDescriptorTable(9, srvAllocator->GetGpuHandle(_cascadeShadowTextureArray.Srv));
+		cmdList->SetGraphicsRootDescriptorTable(10, srvAllocator->GetGpuHandle(_localLightsShadowTextureArray.Srv));
+	}
 
 	cmdList->SetPipelineState(rayTracingEnabled ? _dirLightPsoRt.Get() : _dirLightPsoCsm.Get());
 	cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -496,12 +500,18 @@ void LightingManager::Init()
 	BuildDescriptors();
 }
 
-void LightingManager::BindToOtherData(GBuffer* gbuffer, CubeMapManager* cubeMapManager, Camera* camera, const std::vector<D3D12_INPUT_ELEMENT_DESC>& inputLayout)
+void LightingManager::BindToOtherData(
+	GBuffer* gbuffer,
+	CubeMapManager* cubeMapManager,
+	Camera* camera,
+	const std::vector<D3D12_INPUT_ELEMENT_DESC>& inputLayout,
+	RayTracingManager* rayTracingManager)
 {
 	_gbuffer = gbuffer;
 	_cubeMapManager = cubeMapManager;
 	_camera = camera;
 	_shadowInputLayout = inputLayout;
+	_rayTracingManager = rayTracingManager;
 }
 
 void LightingManager::OnResize(const UINT newWidth, const UINT newHeight)
@@ -562,15 +572,17 @@ void LightingManager::BuildRootSignature()
 	//depth is separate
 	CD3DX12_DESCRIPTOR_RANGE depthTexTable;
 	depthTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, srvIndex++);
+	//shadow mask
+	CD3DX12_DESCRIPTOR_RANGE shadowMaskTexTable;
+	shadowMaskTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, srvIndex++);
+
+	const int afterShadowMaskIndex = srvIndex;
 	//cascades shadow map
 	CD3DX12_DESCRIPTOR_RANGE cascadesShadowTexTable;
 	cascadesShadowTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, srvIndex++);
 	//shadow map
 	CD3DX12_DESCRIPTOR_RANGE shadowTexTable;
 	shadowTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, srvIndex++);
-	//shadow mask
-	CD3DX12_DESCRIPTOR_RANGE shadowMaskTexTable;
-	shadowMaskTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, srvIndex++);
 	//sky
 	CD3DX12_DESCRIPTOR_RANGE skyTexTable;
 	skyTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 3, 0, 2);
@@ -586,10 +598,10 @@ void LightingManager::BuildRootSignature()
 	lightingSlotRootParameterCsm[4].InitAsShaderResourceView(1, 1);
 	lightingSlotRootParameterCsm[5].InitAsDescriptorTable(1, &skyTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
 	lightingSlotRootParameterCsm[6].InitAsDescriptorTable(1, &depthTexTable);
-	lightingSlotRootParameterCsm[7].InitAsDescriptorTable(1, &cascadesShadowTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
-	lightingSlotRootParameterCsm[8].InitAsDescriptorTable(1, &shadowTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
-	lightingSlotRootParameterCsm[9].InitAsDescriptorTable(1, &shadowMaskTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
-	lightingSlotRootParameterCsm[10].InitAsConstants(1, 2);
+	lightingSlotRootParameterCsm[7].InitAsDescriptorTable(1, &shadowMaskTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
+	lightingSlotRootParameterCsm[8].InitAsConstants(1, 2);
+	lightingSlotRootParameterCsm[9].InitAsDescriptorTable(1, &cascadesShadowTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
+	lightingSlotRootParameterCsm[10].InitAsDescriptorTable(1, &shadowTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
 
 	CD3DX12_ROOT_SIGNATURE_DESC lightingRootSigDesc(rootParameterCountCsm, lightingSlotRootParameterCsm,
 	                                                static_cast<UINT>(TextureManager::GetLinearSamplers().size()),
@@ -618,7 +630,10 @@ void LightingManager::BuildRootSignature()
 #pragma region RTRootSignature
 	if (_rayTracingSupported)
 	{
-        constexpr int rtRootParameterCount = 7;
+		CD3DX12_DESCRIPTOR_RANGE rtShadowTexTable;
+		rtShadowTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, afterShadowMaskIndex);
+        	
+        constexpr int rtRootParameterCount = 10;
     
         CD3DX12_ROOT_PARAMETER lightingSlotRootParameterRt[rtRootParameterCount];
     
@@ -629,6 +644,9 @@ void LightingManager::BuildRootSignature()
         lightingSlotRootParameterRt[4].InitAsShaderResourceView(1, 1);
         lightingSlotRootParameterRt[5].InitAsDescriptorTable(1, &skyTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
         lightingSlotRootParameterRt[6].InitAsDescriptorTable(1, &depthTexTable);
+		lightingSlotRootParameterRt[7].InitAsDescriptorTable(1, &shadowMaskTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
+		lightingSlotRootParameterRt[8].InitAsConstants(1, 2);
+		lightingSlotRootParameterRt[9].InitAsDescriptorTable(1, &rtShadowTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
     
         CD3DX12_ROOT_SIGNATURE_DESC lightingRootSigDescRt(rtRootParameterCount, lightingSlotRootParameterRt,
                                                         static_cast<UINT>(TextureManager::GetLinearSamplers().size()),

@@ -6,6 +6,7 @@
 #include "../Helpers/Camera.h"
 #include "TextureManager.h"
 #include "CubeMapManager.h"
+#include "RayTracingManager.h"
 #include "../../../Common/GBuffer.h"
 
 struct ShadowTextureArray
@@ -49,7 +50,8 @@ public:
 	void DrawIntoBackBuffer(ID3D12GraphicsCommandList4* cmdList, FrameResource* currFrameResource);
 
 	void Init();
-	void BindToOtherData(GBuffer* gbuffer, CubeMapManager* cubeMapManager, Camera* camera, const std::vector<D3D12_INPUT_ELEMENT_DESC>& inputLayout);
+	void BindToOtherData(GBuffer* gbuffer, CubeMapManager* cubeMapManager, Camera* camera, const std::vector<D3D12_INPUT_ELEMENT_DESC>& inputLayout, RayTracingManager
+	                     * rayTracingManager);
 	void OnResize(UINT newWidth, UINT newHeight);
 
 	bool* IsMainLightOn()
@@ -171,6 +173,7 @@ private:
 	Camera* _camera = nullptr;
 	CubeMapManager* _cubeMapManager = nullptr;
 	GBuffer* _gbuffer = nullptr;
+	RayTracingManager* _rayTracingManager = nullptr;
 
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> _rootSignatureCsm;
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> _rootSignatureRt;

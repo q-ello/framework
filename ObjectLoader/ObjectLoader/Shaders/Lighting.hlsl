@@ -6,22 +6,22 @@ Texture2D gEmissive : register(t2);
 Texture2D gORM : register(t3);
 Texture2D gTexCoord : register(t4);
 Texture2D gDepth : register(t5);
+Texture2D gShadowMask : register(t6);
 #ifdef CSM
-Texture2DArray gCascadesShadowMap : register(t6);
-Texture2DArray gShadowMap : register(t7);
-Texture2D gShadowMask : register(t8);
+Texture2DArray gCascadesShadowMap : register(t7);
+Texture2DArray gShadowMap : register(t8);
+#else
+Texture2D gRtShadowMask : register(t7);
 #endif
 
 TextureCube gSkyIrradiance : register(t0, space2);
 TextureCube gSkyPrefiltered : register(t1, space2);
 Texture2D gSkyBRDF : register(t2, space2);
 
-#ifdef CSM
 cbuffer shadowMaskUVScale : register(b2)
 {
     float scale;
 };
-#endif
 
 //pbr stuff
 float3 ImportanceSampleGGX(float2 Xi, float3 N, float roughness)
@@ -184,8 +184,10 @@ float4 DirLightingPS(VertexOut pin) : SV_Target
         //main light intensity is 3
 #ifdef CSM
         shadowFactor = ShadowFactor(posOffseted, cascades[cascadeIdx].viewProj, cascadeIdx, gCascadesShadowMap);
-        shadowFactor += gShadowMask.Sample(gsamLinearWrap, gTexCoord.Load(coords).xy).a * scale;
+#else
+        shadowFactor = gRtShadowMask.Load(coords).x;
 #endif
+        shadowFactor += gShadowMask.Sample(gsamLinearWrap, gTexCoord.Load(coords).xy).a * scale;
         finalColor.xyz = PBRShading(coords, -mainLightDirection, mainLightColor, posW, saturate(shadowFactor), 1.f);
     }
     

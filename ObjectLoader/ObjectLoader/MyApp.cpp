@@ -1896,7 +1896,7 @@ void MyApp::InitManagers()
 	_cubeMapManager->Init();
 
 	_lightingManager = std::make_unique<LightingManager>(_device.Get(), mClientWidth, mClientHeight, _supportsRayTracing);
-	_lightingManager->BindToOtherData(_gBuffer.get(), _cubeMapManager.get(), &_camera, _objectsManager->InputLayout());
+	_lightingManager->BindToOtherData(_gBuffer.get(), _cubeMapManager.get(), &_camera, _objectsManager->InputLayout(), _rayTracingManager.get());
 	_lightingManager->Init();
 
 	_postProcessManager = std::make_unique<PostProcessManager>(_device.Get());

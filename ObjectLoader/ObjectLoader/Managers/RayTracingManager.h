@@ -22,6 +22,8 @@ public:
 
     void DispatchRays(ID3D12GraphicsCommandList4* cmdList, const FrameResource* currFrameResource);
 
+    int ShadowMaskSrv() const;
+
 private:
     std::vector<EditableRenderItem*> _rtObjects;
 

@@ -241,6 +241,11 @@ void RayTracingManager::DispatchRays(ID3D12GraphicsCommandList4* cmdList, const 
     BasicUtil::ChangeTextureState(cmdList, _shadowMaskTexture, D3D12_RESOURCE_STATE_GENERIC_READ);
 }
 
+int RayTracingManager::ShadowMaskSrv() const
+{
+    return _shadowMaskTexture.SrvIndex;
+}
+
 void RayTracingManager::BuildPso()
 {
     std::vector<D3D12_STATE_SUBOBJECT> subobjects;
