@@ -5,24 +5,31 @@
       <w>chromatica</w>
       <w>chromaticaberration</w>
       <w>cmds</w>
+      <w>descs</w>
       <w>dirlight</w>
       <w>disp</w>
       <w>dsvs</w>
+      <w>dxil</w>
       <w>emiss</w>
       <w>godrays</w>
       <w>imgui</w>
       <w>locallights</w>
       <w>lods</w>
       <w>metall</w>
+      <w>newtime</w>
       <w>projs</w>
+      <w>qembed</w>
       <w>ritem</w>
       <w>rtvs</w>
       <w>srvs</w>
       <w>tesselatable</w>
       <w>texcoord</w>
+      <w>tlas</w>
       <w>transponed</w>
       <w>untesselated</w>
+      <w>vkey</w>
       <w>wndproc</w>
+      <w>wstr</w>
     </words>
   </dictionary>
 </component>

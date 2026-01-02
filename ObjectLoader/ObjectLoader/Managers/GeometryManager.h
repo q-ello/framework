@@ -25,5 +25,5 @@ public:
 	static void UnloadModel(const std::string& modelName);
 	static void AddLodGeometry(const std::string& name, int lodIdx, const Lod& lod);
 	static void DeleteLodGeometry(const std::string& name, int lodIdx);
-	static void BuildBlasForMesh(MeshGeometry& geo, ID3D12GraphicsCommandList4* cmdList);
+	static void BuildBlasForMesh(MeshGeometry& geo);
 };

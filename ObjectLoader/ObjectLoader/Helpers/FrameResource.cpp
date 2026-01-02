@@ -36,15 +36,17 @@ FrameResource::FrameResource(ID3D12Device* device, UINT passCount)
     TerrainTexturesCb = std::make_unique<UploadBuffer<TerrainTextures>>(device, passCount, true);
 
     AtmosphereCb = std::make_unique<UploadBuffer<AtmosphereConstants>>(device, passCount, true);
+
+    RayTracingCb = std::make_unique<UploadBuffer<RayTracingConstants>>(device, passCount, true);
 }
 
-void FrameResource::AddOpaqueObjectBuffer(ID3D12Device* device, std::uint32_t uid, int meshesCount, int materialsCount)
+void FrameResource::AddOpaqueObjectBuffer(ID3D12Device* device, const std::uint32_t uid, int meshesCount, int materialsCount)
 {
     OpaqueObjCb[uid] = std::make_unique<UploadBuffer<OpaqueObjectConstants>>(device, meshesCount, true);
     MaterialCb[uid] = std::make_unique<UploadBuffer<MaterialConstants>>(device, materialsCount, true);
 }
 
-void FrameResource::RemoveOpaqueObjectBuffer(ID3D12Device* device, std::uint32_t uid)
+void FrameResource::RemoveOpaqueObjectBuffer(ID3D12Device* device, const std::uint32_t uid)
 {
     OpaqueObjCb.erase(uid);
     MaterialCb.erase(uid);

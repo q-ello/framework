@@ -1,9 +1,11 @@
+#include "Helpers.hlsl"
+
 RaytracingAccelerationStructure SceneBVH : register(t0);
-Texture2D<float4> gBufferPos : register(t1);
-Texture2D<float4> gBufferNorm : register(t2);
+Texture2D<float4> gBufferNorm : register(t1);
+Texture2D<float4> gBufferDepth : register(t2);
 RWTexture2D<float4> shadowMask : register(u0);
 
-cbuffer SunCB : register(b0)
+cbuffer SunCB : register(b1)
 {
     float3 SunDirectionWS;
     float  Pad;
@@ -20,7 +22,11 @@ void RayGenShadows()
 {
     uint2 pixel = DispatchRaysIndex().xy;
 
-    float3 pos  = gBufferPos[pixel].xyz;
+    uint2 dim   = DispatchRaysDimensions().xy;
+
+    float2 uv = (pixel + 0.5) / dim;
+
+    float3 pos  = ComputeWorldPos(uv, gBufferDepth);
     float3 norm = normalize(gBufferNorm[pixel].xyz);
 
     if (all(pos == 0))

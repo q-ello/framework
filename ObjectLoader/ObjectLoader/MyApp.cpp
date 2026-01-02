@@ -92,6 +92,11 @@ void MyApp::OnResize()
 	{
 		_atmosphereManager->OnResize(mClientWidth, mClientHeight);
 	}
+
+	if (_supportsRayTracing && _rayTracingManager != nullptr)
+	{
+		_rayTracingManager->OnResize(mClientWidth, mClientHeight);
+	}
 	
 	_camera.UpdateFrustum();
 }
@@ -144,7 +149,7 @@ void MyApp::Draw(const GameTimer& gt)
 
 	if (_supportsRayTracing)
 	{
-		_rayTracingManager->UpdateData(mCommandList.Get());
+		_rayTracingManager->UpdateData();
 	}
 
 	const auto cmdListAlloc = _currFrameResource->CmdListAlloc;
@@ -177,6 +182,12 @@ void MyApp::Draw(const GameTimer& gt)
 		if (!_rayTracingEnabled)
 			_lightingManager->DrawShadows(mCommandList.Get(), _currFrameResource, objects);
 		GBufferPass();
+
+		if (_rayTracingEnabled)
+		{
+			_rayTracingManager->DispatchRays(mCommandList.Get(), _currFrameResource);
+		}
+		
 		LightingPass();
 		if (_atmosphereEnabled)
 			_atmosphereManager->Draw(mCommandList.Get(), _currFrameResource);
@@ -366,6 +377,12 @@ void MyApp::UpdateMainPassCBs(const GameTimer& gt)
 	currLightingCb->CopyData(0, _lightingCb);
 
 	_lightingManager->UpdateDirectionalLightCb(_currFrameResource);
+
+	const auto rayTracingCb = _currFrameResource->RayTracingCb.get();
+	RayTracingConstants rayTracCb;
+	float* lightDirection = _lightingManager->MainLightDirection();
+	rayTracCb.SunDirection = {lightDirection[0], lightDirection[1], lightDirection[2]};
+	rayTracingCb->CopyData(0, rayTracCb);
 }
 
 void MyApp::BuildDescriptorHeaps()
@@ -1688,7 +1705,7 @@ void MyApp::AddRenderItem(ModelData data)
 	{
 		for (auto& lod : GeometryManager::Geometries()[data.CroppedName])
 		{
-			GeometryManager::BuildBlasForMesh(*lod.get(), mCommandList.Get());
+			GeometryManager::BuildBlasForMesh(*lod.get());
 		}
 	}
 	_selectedModels.insert(_objectsManager->AddRenderItem(_device.Get(), std::move(data)));
@@ -1802,7 +1819,7 @@ void MyApp::AddLod()
 			GeometryManager::AddLodGeometry(ri->Name, lodIdx, lod);
 			if (_supportsRayTracing)
 			{
-				GeometryManager::BuildBlasForMesh(*(GeometryManager::Geometries()[ri->Name].end() - 1)->get(), mCommandList.Get());
+				GeometryManager::BuildBlasForMesh(*(GeometryManager::Geometries()[ri->Name].end() - 1)->get());
 			}
 			AddToast("Your LOD was added as LOD" + std::to_string(lodIdx) + "!");
 		}
@@ -1861,15 +1878,17 @@ void MyApp::UpdateDirToSun()
 
 void MyApp::InitManagers()
 {
-	_rayTracingManager = std::make_unique<RayTracingManager>(_device.Get());
+	_rayTracingManager = std::make_unique<RayTracingManager>(_device.Get(), mClientWidth, mClientHeight);
 	if (_supportsRayTracing)
 	{
 		_rayTracingManager->Init();
+		_rayTracingManager->BindToOtherData(_gBuffer.get());
 	}
 	
 	_objectsManager = std::make_unique<EditableObjectManager>(_device.Get());
 	_objectsManager->Init();
 	_objectsManager->BindToOtherData(&_camera, _rayTracingManager.get());
+	
 	_gridManager = std::make_unique<UnlitObjectManager>(_device.Get());
 	_gridManager->Init();
 

@@ -144,17 +144,22 @@ Microsoft::WRL::ComPtr<IDxcBlob> d3dUtil::CompileDxilLibrary(const std::wstring&
 
     // DXIL library compile arguments
     std::vector<LPCWSTR> args = {
-        L"-T", L"lib_6_3",      // DXIL library
+        L"-T", L"lib_6_3",     // DXIL library
         L"-Zi",                // debug info
         L"-Qembed_debug",      // embed PDB
-        L"-Od"                 // disable optimization (debug)
+        L"-Od",                // disable optimization (debug)
+        L"-I", L"Shaders"      
     };
+
+    ComPtr<IDxcIncludeHandler> includeHandler;
+    ThrowIfFailed(utils->CreateDefaultIncludeHandler(&includeHandler));
+
 
     ThrowIfFailed(compiler->Compile(
         &buffer,
         args.data(),
         static_cast<UINT>(args.size()),
-        nullptr,
+        includeHandler.Get(),
         IID_PPV_ARGS(&result)
     ));
 

@@ -16,6 +16,7 @@ public:
 	static Microsoft::WRL::ComPtr<ID3D12Resource> CreateUavBuffer(const UINT64 size);
 	static Microsoft::WRL::ComPtr<ID3D12Resource> CreateAsBuffer(UINT64 size);
 	static Microsoft::WRL::ComPtr<ID3D12Resource> CreateUploadBuffer(UINT bufferSize);
+	static Microsoft::WRL::ComPtr<ID3D12Resource> CreateShaderTable(UINT64 size);
 
 	static ID3D12Device5* Device;
 	static Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4> UploadCmdList;

@@ -182,6 +182,12 @@ struct AtmosphereConstants
     int Pad[2];
 };
 
+struct RayTracingConstants
+{
+    DirectX::XMFLOAT3 SunDirection = {1.0f, 1.0f, 1.0f};
+    float Pad = 0.0f;
+};
+
 // Stores the resources needed for the CPU to build the command lists
 // for a frame.  
 struct FrameResource
@@ -225,6 +231,8 @@ public:
     std::unique_ptr<UploadBuffer<TerrainTextures>> TerrainTexturesCb = nullptr;
 
 	std::unique_ptr<UploadBuffer<AtmosphereConstants>> AtmosphereCb = nullptr;
+
+    std::unique_ptr<UploadBuffer<RayTracingConstants>> RayTracingCb = nullptr;
 
     std::unordered_map<std::uint32_t, std::unique_ptr<UploadBuffer<OpaqueObjectConstants>>> OpaqueObjCb = {};
     std::unordered_map<std::uint32_t, std::unique_ptr<UploadBuffer<MaterialConstants>>> MaterialCb = {};

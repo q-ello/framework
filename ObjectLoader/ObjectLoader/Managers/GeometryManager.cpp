@@ -246,7 +246,7 @@ void GeometryManager::DeleteLodGeometry(const std::string& name, const int lodId
 	UploadManager::ExecuteUploadCommandList();
 }
 
-void GeometryManager::BuildBlasForMesh(MeshGeometry& geo, ID3D12GraphicsCommandList4* cmdList)
+void GeometryManager::BuildBlasForMesh(MeshGeometry& geo)
 {
 	geo.Rt = std::make_unique<RayTracingGeometry>();
 	
@@ -282,8 +282,9 @@ void GeometryManager::BuildBlasForMesh(MeshGeometry& geo, ID3D12GraphicsCommandL
 	desc.Inputs = asInputs;
 	desc.ScratchAccelerationStructureData = geo.Rt->Scratch->GetGPUVirtualAddress();
 	desc.DestAccelerationStructureData = geo.Rt->Blas->GetGPUVirtualAddress();
+	
+	const auto& cmdList = UploadManager::UploadCmdList;
 	cmdList->BuildRaytracingAccelerationStructure(&desc, 0, nullptr);
-
 	
 	D3D12_RESOURCE_BARRIER barrier = {};
 	barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;

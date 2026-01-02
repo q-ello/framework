@@ -29,7 +29,7 @@ TextureHandle TextureManager::LoadTexture(const WCHAR* filename, int prevIndex, 
 		{
 			TexUsed()[croppedName] += texCount;
 		}
-		return { std::string(croppedName.begin(), croppedName.end()), TexIndices()[croppedName], true };
+		return { BasicUtil::WStringToUtf8(croppedName), TexIndices()[croppedName], true };
 	}
 
 	auto tex = std::make_unique<Texture>();
@@ -38,8 +38,8 @@ TextureHandle TextureManager::LoadTexture(const WCHAR* filename, int prevIndex, 
 
 	if (!UploadManager::CreateTexture(tex.get()))
 	{
-		OutputDebugStringA(("Failed to load texture: " + std::string(tex->Filename.begin(), tex->Filename.end()) + "\n").c_str());
-		return { std::string(croppedName.begin(), croppedName.end()), 0, false };
+		OutputDebugStringA(("Failed to load texture: " + BasicUtil::WStringToUtf8(tex->Filename) + "\n").c_str());
+		return { BasicUtil::WStringToUtf8(croppedName), 0, false };
 	}
 
 	UINT index = SrvHeapAllocator.get()->Allocate();
@@ -61,7 +61,7 @@ TextureHandle TextureManager::LoadTexture(const WCHAR* filename, int prevIndex, 
 	TexIndices()[croppedName] = index;
 	TexUsed()[croppedName] = texCount;
 
-	return { std::string(croppedName.begin(), croppedName.end()), index, true };
+	return { BasicUtil::WStringToUtf8(croppedName), index, true };
 }
 
 void TextureManager::LoadTexture(const WCHAR* filename, TextureHandle& texHandle)
@@ -74,7 +74,7 @@ void TextureManager::LoadTexture(const WCHAR* filename, TextureHandle& texHandle
 
 	if (!UploadManager::CreateTexture(tex.get()))
 	{
-		OutputDebugStringA(("Failed to load texture: " + std::string(tex->Filename.begin(), tex->Filename.end()) + "\n").c_str());
+		OutputDebugStringA(("Failed to load texture: " + BasicUtil::WStringToUtf8(tex->Filename) + "\n").c_str());
 		texHandle.UseTexture = false;
 		return;
 	}
@@ -97,7 +97,7 @@ void TextureManager::LoadTexture(const WCHAR* filename, TextureHandle& texHandle
 	TexIndices()[croppedName] = texHandle.Index;
 	TexUsed()[croppedName] = 1;
 
-	texHandle.Name = std::string(croppedName.begin(), croppedName.end());
+	texHandle.Name = BasicUtil::WStringToUtf8(croppedName);
 	texHandle.UseTexture = true;
 	return;
 }
@@ -110,7 +110,7 @@ TextureHandle TextureManager::LoadEmbeddedTexture(const std::wstring& texName, c
 	if (Textures().find(texName) != Textures().end())
 	{
 		TexUsed()[texName]++;
-		return { std::string(texName.begin(), texName.end()), TexIndices()[texName], true };
+		return { BasicUtil::WStringToUtf8(texName), TexIndices()[texName], true };
 	}
 
 	UploadManager::CreateEmbeddedTexture(tex.get(), embeddedTex);
@@ -134,7 +134,7 @@ TextureHandle TextureManager::LoadEmbeddedTexture(const std::wstring& texName, c
 	TexIndices()[texName] = index;
 	TexUsed()[texName] = 1;
 
-	return  { std::string(texName.begin(), texName.end()), index, true};
+	return  {  BasicUtil::WStringToUtf8(texName), index, true};
 }
 
 bool TextureManager::LoadCubeTexture(const WCHAR* texturePath, TextureHandle& cubeMapHandle)
@@ -143,7 +143,7 @@ bool TextureManager::LoadCubeTexture(const WCHAR* texturePath, TextureHandle& cu
 
 	if (Textures().find(croppedName) != Textures().end())
 	{
-		cubeMapHandle = { std::string(croppedName.begin(), croppedName.end()), TexIndices()[croppedName], true };
+		cubeMapHandle = { BasicUtil::WStringToUtf8(croppedName), TexIndices()[croppedName], true };
 		return true;
 	}
 
@@ -153,7 +153,7 @@ bool TextureManager::LoadCubeTexture(const WCHAR* texturePath, TextureHandle& cu
 
 	if (!UploadManager::CreateTexture(tex.get()))
 	{
-		OutputDebugStringA(("Failed to load texture: " + std::string(tex->Filename.begin(), tex->Filename.end()) + "\n").c_str());
+		OutputDebugStringA(("Failed to load texture: " + BasicUtil::WStringToUtf8(tex->Filename) + "\n").c_str());
 		return false;
 	}
 
@@ -184,7 +184,7 @@ bool TextureManager::LoadCubeTexture(const WCHAR* texturePath, TextureHandle& cu
 	TexIndices()[croppedName] = index;
 	TexUsed()[croppedName] = 1;
 
-	cubeMapHandle = { std::string(croppedName.begin(), croppedName.end()), index, true };
+	cubeMapHandle = { BasicUtil::WStringToUtf8(croppedName), index, true };
 
 	return true;
 }

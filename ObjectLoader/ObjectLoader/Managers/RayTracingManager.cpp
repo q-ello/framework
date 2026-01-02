@@ -1,32 +1,54 @@
 ﻿#include "RayTracingManager.h"
 
 #include "GeometryManager.h"
+#include "LightingManager.h"
 #include "UploadManager.h"
 
-RayTracingManager::RayTracingManager(ID3D12Device5* device)
+RayTracingManager::RayTracingManager(ID3D12Device5* device, const int width, const int height) : _gbuffer(nullptr)
 {
     _device = device;
+    _width = width;
+    _height = height;
+
+    const auto& allocator = TextureManager::SrvHeapAllocator;
+    _shadowMaskTexture.SrvIndex = allocator->Allocate();
+    _shadowMaskTexture.OtherIndex = allocator->Allocate();
+    _tlasSrvIndex = allocator->Allocate();
 }
 
 void RayTracingManager::Init()
 {
     BuildRootSignature();
     BuildPso();
+    BuildTextures();
+    BuildShaderTables();
 }
 
-void RayTracingManager::UpdateData(ID3D12GraphicsCommandList4* cmdList)
+void RayTracingManager::BindToOtherData(GBuffer* buffer)
+{
+    _gbuffer = buffer;
+}
+
+void RayTracingManager::OnResize(const int newWidth, const int newHeight)
+{
+    _width = newWidth;
+    _height = newHeight;
+    BuildTextures();
+}
+
+void RayTracingManager::UpdateData()
 {
     for (const auto& obj : _rtObjects)
     {
         if (obj->RayTracingDirty)
         {
-            BuildTlas(cmdList);
+            BuildTlas();
             return;
         }
     }
 }
 
-void RayTracingManager::BuildTlas(ID3D12GraphicsCommandList4* cmdList)
+void RayTracingManager::BuildTlas()
 {
     if (_rtObjects.empty() && _instanceCount == 0)
     {
@@ -118,7 +140,9 @@ void RayTracingManager::BuildTlas(ID3D12GraphicsCommandList4* cmdList)
         _scratch->GetGPUVirtualAddress();
     desc.DestAccelerationStructureData =
         _tlas->GetGPUVirtualAddress();
+    desc.SourceAccelerationStructureData = 0;
 
+    const auto& cmdList = UploadManager::UploadCmdList;
     cmdList->BuildRaytracingAccelerationStructure(&desc, 0, nullptr);
 
     // 7. UAV barrier
@@ -126,6 +150,19 @@ void RayTracingManager::BuildTlas(ID3D12GraphicsCommandList4* cmdList)
     barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
     barrier.UAV.pResource = _tlas.Get();
     cmdList->ResourceBarrier(1, &barrier);
+
+    D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+    srvDesc.ViewDimension = D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE;
+    srvDesc.RaytracingAccelerationStructure.Location =
+        _tlas->GetGPUVirtualAddress();
+    srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+
+
+    _device->CreateShaderResourceView(
+        nullptr,
+        &srvDesc,
+        TextureManager::SrvHeapAllocator->GetCpuHandle(_tlasSrvIndex)
+    );
 }
 
 ID3D12Resource* RayTracingManager::Tlas() const
@@ -154,6 +191,54 @@ void RayTracingManager::DeleteRtObject(const EditableRenderItem* object)
         return;
 
     _rtObjects.erase(_rtObjects.begin() + index);
+}
+
+void RayTracingManager::DispatchRays(ID3D12GraphicsCommandList4* cmdList, const FrameResource* currFrameResource)
+{
+    cmdList->SetPipelineState1(_rtPso.Get());
+    cmdList->SetComputeRootSignature(_rootSignature.Get());
+
+    const auto& allocator = TextureManager::SrvHeapAllocator;
+    
+    cmdList->SetComputeRootDescriptorTable(0, allocator->GetGpuHandle(_tlasSrvIndex));
+
+    cmdList->SetComputeRootDescriptorTable(1, _gbuffer->GetGBufferTextureSrv(GBufferInfo::Normals));
+    cmdList->SetComputeRootDescriptorTable(2, _gbuffer->GetGBufferDepthSrv(true));
+
+    cmdList->SetComputeRootDescriptorTable(3, allocator->GetGpuHandle(_shadowMaskTexture.OtherIndex));
+    
+    const auto lightingPassCb = currFrameResource->LightingPassCb->Resource();
+    cmdList->SetComputeRootConstantBufferView(4, lightingPassCb->GetGPUVirtualAddress());
+    const auto rayTracingCb = currFrameResource->RayTracingCb->Resource();
+    cmdList->SetComputeRootConstantBufferView(4, rayTracingCb->GetGPUVirtualAddress());
+
+    D3D12_DISPATCH_RAYS_DESC dispatch = {};
+    dispatch.RayGenerationShaderRecord = {
+        _rayGenTable->GetGPUVirtualAddress(),
+        _shaderRecord
+    };
+
+    dispatch.MissShaderTable = {
+        _missTable->GetGPUVirtualAddress(),
+        _shaderRecord,
+        _shaderRecord
+    };
+
+    dispatch.HitGroupTable = {
+        _hitGroupTable->GetGPUVirtualAddress(),
+        _shaderRecord,
+        _shaderRecord
+    };
+
+    dispatch.Width  = _width;
+    dispatch.Height = _height;
+    dispatch.Depth  = 1;
+
+    BasicUtil::ChangeTextureState(cmdList, _shadowMaskTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+    cmdList->DispatchRays(&dispatch);
+
+    BasicUtil::ChangeTextureState(cmdList, _shadowMaskTexture, D3D12_RESOURCE_STATE_GENERIC_READ);
 }
 
 void RayTracingManager::BuildPso()
@@ -260,28 +345,34 @@ void RayTracingManager::BuildPso()
 
 void RayTracingManager::BuildRootSignature()
 {
-    CD3DX12_DESCRIPTOR_RANGE ranges[3];
+    CD3DX12_DESCRIPTOR_RANGE bvhTexTable;
+    bvhTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
 
-    // SRVs: t0-t2
-    ranges[0].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 3, 0);
+    CD3DX12_DESCRIPTOR_RANGE normalTexTable;
+    normalTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1);
+    
+    CD3DX12_DESCRIPTOR_RANGE depthTexTable;
+    depthTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 2);
 
-    // UAVs: u0
-    ranges[1].Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0);
+    CD3DX12_DESCRIPTOR_RANGE shadowMaskTexTable;
+    shadowMaskTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0);
 
-    // CBVs: b0
-    ranges[2].Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0);
+    constexpr int rootParameterCount = 6;
 
-    CD3DX12_ROOT_PARAMETER params[3];
-    params[0].InitAsDescriptorTable(1, &ranges[0]);
-    params[1].InitAsDescriptorTable(1, &ranges[1]);
-    params[2].InitAsDescriptorTable(1, &ranges[2]);
+    CD3DX12_ROOT_PARAMETER params[rootParameterCount];
+    params[0].InitAsDescriptorTable(1, &bvhTexTable);
+    params[1].InitAsDescriptorTable(1, &normalTexTable);
+    params[2].InitAsDescriptorTable(1, &depthTexTable);
+    params[3].InitAsDescriptorTable(1, &shadowMaskTexTable);
+    params[4].InitAsConstantBufferView(0);
+    params[5].InitAsConstantBufferView(1);
 
     CD3DX12_ROOT_SIGNATURE_DESC desc;
     desc.Init(
         _countof(params),
         params,
-        0,
-        nullptr,
+        static_cast<UINT>(TextureManager::GetLinearSamplers().size()),
+        TextureManager::GetLinearSamplers().data(),
         D3D12_ROOT_SIGNATURE_FLAG_NONE
     );
 
@@ -297,4 +388,86 @@ void RayTracingManager::BuildRootSignature()
         blob->GetBufferPointer(),
         blob->GetBufferSize(),
         IID_PPV_ARGS(&_rootSignature)));
+}
+
+void RayTracingManager::BuildTextures()
+{
+    DXGI_FORMAT format = DXGI_FORMAT_R8_UNORM;
+    
+    D3D12_RESOURCE_DESC resourceDesc = {};
+	resourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+	resourceDesc.Alignment = 0;
+	resourceDesc.Width = _width;
+	resourceDesc.Height = _height;
+	resourceDesc.DepthOrArraySize = 1;
+	resourceDesc.MipLevels = 1;
+	resourceDesc.Format = format;
+	resourceDesc.SampleDesc.Count = 1;
+	resourceDesc.SampleDesc.Quality = 0;
+	resourceDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+	resourceDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+
+	CD3DX12_HEAP_PROPERTIES heapProperties(D3D12_HEAP_TYPE_DEFAULT);
+
+	ThrowIfFailed(_device->CreateCommittedResource(
+		&heapProperties, D3D12_HEAP_FLAG_NONE, &resourceDesc, D3D12_RESOURCE_STATE_GENERIC_READ,
+		nullptr, IID_PPV_ARGS(&_shadowMaskTexture.Resource)));
+
+	// Create UAV
+    D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
+    uavDesc.Format = format;
+    uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+
+    _device->CreateUnorderedAccessView(
+        _shadowMaskTexture.Resource.Get(),
+        nullptr,
+        &uavDesc,
+        TextureManager::SrvHeapAllocator->GetCpuHandle(_shadowMaskTexture.OtherIndex)
+    );
+    
+	//create SRV
+	D3D12_SHADER_RESOURCE_VIEW_DESC shaderResourceViewDesc = {};
+	shaderResourceViewDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	shaderResourceViewDesc.Format = format;
+	shaderResourceViewDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+	shaderResourceViewDesc.Texture2D.MipLevels = 1;
+
+	_device->CreateShaderResourceView(_shadowMaskTexture.Resource.Get(), &shaderResourceViewDesc,
+		TextureManager::SrvHeapAllocator->GetCpuHandle(_shadowMaskTexture.SrvIndex));
+}
+
+void RayTracingManager::BuildShaderTables()
+{
+    Microsoft::WRL::ComPtr<ID3D12StateObjectProperties> props;
+    ThrowIfFailed(_rtPso.As(&props));
+
+    //ray gen
+    const void* rayGenId = props->GetShaderIdentifier(L"RayGenShadows");
+
+    const UINT recordSize = _shaderRecord;
+
+    _rayGenTable = UploadManager::CreateShaderTable(recordSize);
+
+    void* mapped;
+    ThrowIfFailed(_rayGenTable->Map(0, nullptr, &mapped));
+    memcpy(mapped, rayGenId, _shaderRecord);
+    _rayGenTable->Unmap(0, nullptr);
+    
+    //miss
+    const void* missId   = props->GetShaderIdentifier(L"ShadowMiss");
+
+    _missTable = UploadManager::CreateShaderTable(recordSize);
+
+    ThrowIfFailed(_missTable->Map(0, nullptr, &mapped));
+    memcpy(mapped, missId, _shaderRecord);
+    _missTable->Unmap(0, nullptr);
+    
+    //hit group
+    const void* hitId    = props->GetShaderIdentifier(L"ShadowHitGroup");
+
+    _hitGroupTable = UploadManager::CreateShaderTable(recordSize);
+
+    ThrowIfFailed(_hitGroupTable->Map(0, nullptr, &mapped));
+    memcpy(mapped, hitId, _shaderRecord);
+    _hitGroupTable->Unmap(0, nullptr);
 }

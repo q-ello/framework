@@ -339,3 +339,34 @@ Microsoft::WRL::ComPtr<ID3D12Resource> UploadManager::CreateUploadBuffer(UINT bu
 
 	return buffer;
 }
+
+Microsoft::WRL::ComPtr<ID3D12Resource> UploadManager::CreateShaderTable(const UINT64 size)
+{
+	D3D12_RESOURCE_DESC desc = {};
+	desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+	desc.Width = size;
+	desc.Height = 1;
+	desc.DepthOrArraySize = 1;
+	desc.MipLevels = 1;
+	desc.Format = DXGI_FORMAT_UNKNOWN;
+	desc.SampleDesc.Count = 1;
+	desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+	desc.Flags = D3D12_RESOURCE_FLAG_NONE; // 🔴 IMPORTANT
+
+	D3D12_HEAP_PROPERTIES heapProps = {};
+	heapProps.Type = D3D12_HEAP_TYPE_UPLOAD; // 🔴 REQUIRED
+
+	Microsoft::WRL::ComPtr<ID3D12Resource> buffer;
+	ThrowIfFailed(
+		Device->CreateCommittedResource(
+			&heapProps,
+			D3D12_HEAP_FLAG_NONE,
+			&desc,
+			D3D12_RESOURCE_STATE_GENERIC_READ, // 🔴 REQUIRED
+			nullptr,
+			IID_PPV_ARGS(&buffer)
+		)
+	);
+
+	return buffer;
+}
