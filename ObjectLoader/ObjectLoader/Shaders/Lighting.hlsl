@@ -1,8 +1,8 @@
 #include "LightingCommon.hlsl"
 
 Texture2D gBaseColor : register(t0);
-Texture2D gNormal : register(t1);
-Texture2D gEmissive : register(t2);
+Texture2D gEmissive : register(t1);
+Texture2D gNormal : register(t2);
 Texture2D gORM : register(t3);
 Texture2D gTexCoord : register(t4);
 Texture2D gDepth : register(t5);
