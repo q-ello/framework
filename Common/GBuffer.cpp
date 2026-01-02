@@ -2,7 +2,7 @@
 
 int GBuffer::CurrentDepth = 0;
 
-GBuffer::GBuffer(ID3D12Device* device, ID3D12GraphicsCommandList* cmdList, const int width, const int height)
+GBuffer::GBuffer(ID3D12Device* device, ID3D12GraphicsCommandList4* cmdList, const int width, const int height)
 {
 	_device = device;
 	_width = width;

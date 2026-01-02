@@ -5,8 +5,8 @@
 enum class GBufferInfo : uint8_t
 {
 	BaseColor = 0,
-	Emissive,
 	Normals,
+	Emissive,
 	Orm,
 	TexCoord,
 	Velocity,
@@ -17,7 +17,7 @@ enum class GBufferInfo : uint8_t
 class GBuffer
 {
 public:
-	GBuffer(ID3D12Device* device, ID3D12GraphicsCommandList* cmdList, int width, int height);
+	GBuffer(ID3D12Device* device, ID3D12GraphicsCommandList4* cmdList, int width, int height);
 	~GBuffer() = default;
 	GBuffer(GBuffer&) = delete;
 	GBuffer& operator=(GBuffer&) = delete;
@@ -81,6 +81,6 @@ private:
 	RtvSrvTexture _info[static_cast<int>(GBufferInfo::Count)];
 	RtvSrvTexture _depths[depthsNum];
 
-	Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> _cmdList;
+	Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4> _cmdList;
 	Microsoft::WRL::ComPtr<ID3D12Device> _device;
 };
