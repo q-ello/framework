@@ -1861,7 +1861,11 @@ void MyApp::UpdateDirToSun()
 
 void MyApp::InitManagers()
 {
-	_rayTracingManager = std::make_unique<RayTracingManager>();
+	_rayTracingManager = std::make_unique<RayTracingManager>(_device.Get());
+	if (_supportsRayTracing)
+	{
+		_rayTracingManager->Init();
+	}
 	
 	_objectsManager = std::make_unique<EditableObjectManager>(_device.Get());
 	_objectsManager->Init();

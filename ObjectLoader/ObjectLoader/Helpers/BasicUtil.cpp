@@ -81,3 +81,34 @@ void BasicUtil::ChangeTextureState(ID3D12GraphicsCommandList4* cmdList, RtvSrvTe
 	texture.PrevState = newState;
 }
 
+std::string BasicUtil::WStringToUtf8(const std::wstring& wstr)
+{
+	if (wstr.empty()) return {};
+
+	int size = WideCharToMultiByte(
+		CP_UTF8,
+		0,
+		wstr.data(),
+		static_cast<int>(wstr.size()),
+		nullptr,
+		0,
+		nullptr,
+		nullptr
+	);
+
+	std::string result(size, 0);
+
+	WideCharToMultiByte(
+		CP_UTF8,
+		0,
+		wstr.data(),
+		static_cast<int>(wstr.size()),
+		const_cast<LPSTR>(result.data()),
+		size,
+		nullptr,
+		nullptr
+	);
+
+	return result;
+}
+
