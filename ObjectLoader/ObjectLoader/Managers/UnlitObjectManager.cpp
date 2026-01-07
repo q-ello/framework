@@ -15,7 +15,7 @@ void UnlitObjectManager::UpdateObjectCBs(FrameResource* currFrameResource)
 			StaticObjectConstants objConstants;
 			XMStoreFloat4x4(&objConstants.World, XMMatrixIdentity());
 
-			currObjectsCb.get()->CopyData(ri->uid, objConstants);
+			currObjectsCb.get()->CopyData(ri->Uid, objConstants);
 
 			ri->NumFramesDirty--;
 		}
@@ -107,12 +107,12 @@ void UnlitObjectManager::AddObjectToResource(Microsoft::WRL::ComPtr<ID3D12Device
 int UnlitObjectManager::AddRenderItem(ID3D12Device* device, ModelData&& modelData)
 {
 	auto renderItem = std::make_unique<UnlitRenderItem>();
-	renderItem->uid = FrameResource::StaticObjectCount++;
+	renderItem->Uid = FrameResource::StaticObjectCount++;
 	const std::string& itemName = modelData.CroppedName;
 	const std::string name(itemName.begin(), itemName.end());
 
 	renderItem->Name = name;
-	renderItem->nameCount = _objectCounters[itemName]++;
+	renderItem->NameCount = _objectCounters[itemName]++;
 	renderItem->Geo = &GeometryManager::Geometries()["shapeGeo"];
 	renderItem->PrimitiveType = D3D11_PRIMITIVE_TOPOLOGY_LINELIST;
 
@@ -134,7 +134,7 @@ bool UnlitObjectManager::DeleteObject(const int selectedObject)
 	_objectLoaded[name]--;
 
 	//need for deleting from frame resource
-	std::uint32_t uid = _objects[selectedObject]->uid;
+	std::uint32_t uid = _objects[selectedObject]->Uid;
 
 	_objects.erase(_objects.begin() + selectedObject);
 
@@ -163,7 +163,7 @@ int UnlitObjectManager::ObjectsCount()
 std::string UnlitObjectManager::ObjectName(const int i)
 {
 	return _objects[i]->Name +
-		(_objects[i]->nameCount == 0 ? "" : std::to_string(_objects[i]->nameCount));
+		(_objects[i]->NameCount == 0 ? "" : std::to_string(_objects[i]->NameCount));
 }
 
 void UnlitObjectManager::Draw(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource, float screenHeight, bool isWireframe) const
@@ -187,7 +187,7 @@ void UnlitObjectManager::Draw(ID3D12GraphicsCommandList* cmdList, const FrameRes
 		cmdList->IASetIndexBuffer(&indexBuffer);
 		cmdList->IASetPrimitiveTopology(ri->PrimitiveType);
 
-		const D3D12_GPU_VIRTUAL_ADDRESS objCbAddress = objectCb->GetGPUVirtualAddress() + ri->uid * _cbSize;
+		const D3D12_GPU_VIRTUAL_ADDRESS objCbAddress = objectCb->GetGPUVirtualAddress() + ri->Uid * _cbSize;
 
 		cmdList->SetGraphicsRootConstantBufferView(0, objCbAddress);
 

@@ -59,19 +59,6 @@ void TaaManager::OnResize(const int newWidth, const int newHeight)
 	BuildTextures();
 }
 
-void TaaManager::UpdateTaaParameters(const FrameResource* currFrame) const
-{
-	//we'll just call this before updating it in lighting pass
-	TaaConstants taaParams;
-	taaParams.PrevView = _camera->GetPrevView4X4FTransposed();
-	taaParams.PrevProj = _camera->GetPrevProj4X4FTransposed();
-	taaParams.PrevInvProj = _camera->GetPrevInvProj4X4FTransposed();
-	taaParams.CurrInvView = _camera->GetInvView4X4FTransposed();
-	taaParams.CurrInvProj = _camera->GetInvProj4X4FTransposed();
-	taaParams.ScreenSize = { static_cast<float>(_width), static_cast<float>(_height) };
-	currFrame->TaaCb->CopyData(0, taaParams);
-}
-
 void TaaManager::BuildRootSignature()
 {
 	{
@@ -83,8 +70,10 @@ void TaaManager::BuildRootSignature()
 		currentDepthTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 2);
 		CD3DX12_DESCRIPTOR_RANGE previousDepthTexTable;
 		previousDepthTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 3);
+		CD3DX12_DESCRIPTOR_RANGE velocityTexTable;
+		velocityTexTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 4);
 
-		constexpr int rootParameterCount = 5;
+		constexpr int rootParameterCount = 6;
 
 		CD3DX12_ROOT_PARAMETER slotRootParameter[rootParameterCount];
 
@@ -92,8 +81,9 @@ void TaaManager::BuildRootSignature()
 		slotRootParameter[1].InitAsDescriptorTable(1, &historyTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
 		slotRootParameter[2].InitAsDescriptorTable(1, &currentDepthTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
 		slotRootParameter[3].InitAsDescriptorTable(1, &previousDepthTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
-		slotRootParameter[4].InitAsConstantBufferView(0, 1);
-
+		slotRootParameter[4].InitAsConstants(2, 0);
+		slotRootParameter[5].InitAsDescriptorTable(1, &velocityTexTable, D3D12_SHADER_VISIBILITY_PIXEL);
+		
 		const CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(rootParameterCount, slotRootParameter,
 		                                              static_cast<UINT>(TextureManager::GetLinearSamplers().size()),
 		                                              TextureManager::GetLinearSamplers().data(),
@@ -187,13 +177,16 @@ void TaaManager::ApplyTaa(ID3D12GraphicsCommandList* cmdList, const FrameResourc
 	cmdList->SetGraphicsRootSignature(_rootSignature.Get());
 
 	//setting up data and drawing
+	
+	const float constants[] = {static_cast<float>(_width), static_cast<float>(_height)};
 	const auto& allocator = TextureManager::SrvHeapAllocator;
 	cmdList->SetGraphicsRootDescriptorTable(0, _lightingManager->GetFinalTextureSrv());
 	cmdList->SetGraphicsRootDescriptorTable(1, 
 		allocator->GetGpuHandle(_historyTextures[_currentHistoryIndex].SrvIndex));
 	cmdList->SetGraphicsRootDescriptorTable(2, _gBuffer->GetGBufferDepthSrv(true));
 	cmdList->SetGraphicsRootDescriptorTable(3, _gBuffer->GetGBufferDepthSrv(false));
-	cmdList->SetGraphicsRootConstantBufferView(4, currFrameResource->TaaCb->Resource()->GetGPUVirtualAddress());
+	cmdList->SetGraphicsRoot32BitConstants(4, 2, &constants, 0);
+	cmdList->SetGraphicsRootDescriptorTable(5, _gBuffer->GetGBufferTextureSrv(GBufferInfo::Velocity));
 	
 	cmdList->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 	cmdList->DrawInstanced(3, 1, 0, 0);

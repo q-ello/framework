@@ -12,7 +12,7 @@ public:
 	void AddObjectToResource(Microsoft::WRL::ComPtr<ID3D12Device> device, FrameResource* currFrameResource) override;
 	int AddRenderItem(ID3D12Device* device, ModelData&& modelData) override;
 	bool DeleteObject(int selectedObject) override;
-	int AddLod(ID3D12Device* device, LODData lod, EditableRenderItem* ri) const;
+	int AddLod(ID3D12Device* device, LodData lod, EditableRenderItem* ri) const;
 	static void DeleteLod(EditableRenderItem* ri, int index);
 
 	int VisibleObjectsCount() override { return static_cast<int>(_visibleTesselatedObjects.size() + _visibleUntesselatedObjects.size()); };
@@ -45,7 +45,7 @@ private:
 	void BuildPso() override;
 	void BuildShaders() override;
 
-	void CountLodOffsets(LODData* lod) const;
+	void CountLodOffsets(LodData* lod) const;
 	void CountLodIndex(EditableRenderItem* ri, float screenHeight) const;
 	float ComputeScreenSize(XMVECTOR& center, float radius, float screenHeight) const;
 

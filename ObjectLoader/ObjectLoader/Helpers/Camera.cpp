@@ -163,6 +163,18 @@ XMMATRIX Camera::GetProj()const
 	return XMLoadFloat4x4(&_proj);
 }
 
+XMMATRIX Camera::GetPrevView() const
+{
+	assert(!_viewDirty);
+	return XMLoadFloat4x4(&_prevView);
+}
+
+DirectX::XMMATRIX Camera::GetPrevProj() const
+{
+	assert(!_viewDirty);
+	return XMLoadFloat4x4(&_prevProj);
+}
+
 DirectX::XMMATRIX Camera::GetInvView() const
 {
 	assert(!_viewDirty);

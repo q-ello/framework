@@ -41,8 +41,8 @@ void CubeMapManager::AddObjectToResource(const FrameResource* currFrameResource)
 {
 	StaticObjectConstants constants;
 	//it is just scaling matrix so no need to transpose
-	XMStoreFloat4x4(&constants.World, _skyRItem->world);
-	currFrameResource->StaticObjCb->CopyData(_skyRItem->uid, constants);
+	XMStoreFloat4x4(&constants.World, _skyRItem->World);
+	currFrameResource->StaticObjCb->CopyData(_skyRItem->Uid, constants);
 }
 
 void CubeMapManager::Draw(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource) const
@@ -70,7 +70,7 @@ void CubeMapManager::Draw(ID3D12GraphicsCommandList* cmdList, const FrameResourc
 	cmdList->IASetIndexBuffer(&indexBuffer);
 	cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-	const D3D12_GPU_VIRTUAL_ADDRESS objCbAddress = staticObjectCb->GetGPUVirtualAddress() + _skyRItem->uid * _cbSize;
+	const D3D12_GPU_VIRTUAL_ADDRESS objCbAddress = staticObjectCb->GetGPUVirtualAddress() + _skyRItem->Uid * _cbSize;
 
 	cmdList->SetGraphicsRootConstantBufferView(2, objCbAddress);
 
@@ -179,8 +179,8 @@ void CubeMapManager::BuildPso()
 void CubeMapManager::BuildRenderItem()
 {
 	_skyRItem = std::make_unique<EditableRenderItem>();
-	_skyRItem->world = XMMatrixScaling(5000.0f, 5000.0f, 5000.0f);
-	_skyRItem->uid = FrameResource::StaticObjectCount++;
+	_skyRItem->World = XMMatrixScaling(5000.0f, 5000.0f, 5000.0f);
+	_skyRItem->Uid = FrameResource::StaticObjectCount++;
 	_skyRItem->Geo = &GeometryManager::Geometries()["shapeGeo"];
 	_skyRItem->PrimitiveType = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 }

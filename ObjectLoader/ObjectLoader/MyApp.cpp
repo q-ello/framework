@@ -123,7 +123,6 @@ void MyApp::Update(const GameTimer& gt)
 	UpdateObjectCBs(gt);
 
 	UpdateMainPassCBs(gt);
-	_taaManager->UpdateTaaParameters(_currFrameResource);
 	_lightingManager->UpdateLightCBs(_currFrameResource);
 	_postProcessManager->UpdateSsrParameters(_currFrameResource);
 	_atmosphereManager->UpdateParameters(_currFrameResource);
@@ -325,7 +324,13 @@ void MyApp::UpdateMainPassCBs(const GameTimer& gt)
 
 	const XMMATRIX viewProj = XMMatrixMultiply(view, proj);
 	const XMMATRIX invViewProj = XMMatrixInverse(nullptr, viewProj);
+	
+	const XMMATRIX prevView = _camera.GetPrevView();
+	const XMMATRIX prevProj = _camera.GetPrevProj();
+	
+	const XMMATRIX prevViewProj = XMMatrixMultiply(prevView, prevProj);
 
+	XMStoreFloat4x4(&_gBufferCb.PrevViewProj, XMMatrixTranspose(prevViewProj));
 	XMStoreFloat4x4(&_gBufferCb.ViewProj, XMMatrixTranspose(viewProj));
 	_gBufferCb.DeltaTime = gt.DeltaTime();
 	_gBufferCb.EyePosW = _camera.GetPosition3F();
@@ -1019,16 +1024,16 @@ void MyApp::DrawMultiObjectTransform(int& btnId) const
 
 	constexpr size_t scaleIndex = BasicUtil::EnumIndex(Transform::Scale);
 
-	const XMFLOAT3 firstScale = manager->Object(*_selectedModels.begin())->transform[scaleIndex];
-	const bool firstScaleLock = manager->Object(*_selectedModels.begin())->lockedScale;
+	const XMFLOAT3 firstScale = manager->Object(*_selectedModels.begin())->Transform[scaleIndex];
+	const bool firstScaleLock = manager->Object(*_selectedModels.begin())->LockedScale;
 	bool allSamePos = true;
 
 	for (const int idx : _selectedModels)
 	{
-		if (manager->Object(idx)->transform[scaleIndex].x != firstScale.x ||
-			manager->Object(idx)->transform[scaleIndex].y != firstScale.y ||
-			manager->Object(idx)->transform[scaleIndex].z != firstScale.z ||
-			manager->Object(idx)->lockedScale != firstScaleLock)
+		if (manager->Object(idx)->Transform[scaleIndex].x != firstScale.x ||
+			manager->Object(idx)->Transform[scaleIndex].y != firstScale.y ||
+			manager->Object(idx)->Transform[scaleIndex].z != firstScale.z ||
+			manager->Object(idx)->LockedScale != firstScaleLock)
 		{
 			allSamePos = false;
 			break;
@@ -1047,7 +1052,7 @@ void MyApp::DrawMultiObjectTransform(int& btnId) const
 		{
 			for (const int idx : _selectedModels)
 			{
-				manager->Object(idx)->lockedScale = scale;
+				manager->Object(idx)->LockedScale = scale;
 				manager->Object(idx)->NumFramesDirty = gNumFrameResources;
 			}
 		}
@@ -1087,7 +1092,7 @@ void MyApp::DrawMultiObjectTransform(int& btnId) const
 					}
 					pos = after;
 				}
-				manager->Object(idx)->transform[scaleIndex] = pos;
+				manager->Object(idx)->Transform[scaleIndex] = pos;
 				manager->Object(idx)->NumFramesDirty = gNumFrameResources;
 			}
 		}
@@ -1103,14 +1108,14 @@ void MyApp::DrawTransformInput(const std::string& label, const int btnId, const 
 {
 	auto& manager = _objectsManager;
 
-	const XMFLOAT3 firstPos = manager->Object(*_selectedModels.begin())->transform[transformIndex];
+	const XMFLOAT3 firstPos = manager->Object(*_selectedModels.begin())->Transform[transformIndex];
 	bool allSamePos = true;
 
 	for (const int idx : _selectedModels)
 	{
-		if (manager->Object(idx)->transform[transformIndex].x != firstPos.x ||
-			manager->Object(idx)->transform[transformIndex].y != firstPos.y ||
-			manager->Object(idx)->transform[transformIndex].z != firstPos.z)
+		if (manager->Object(idx)->Transform[transformIndex].x != firstPos.x ||
+			manager->Object(idx)->Transform[transformIndex].y != firstPos.y ||
+			manager->Object(idx)->Transform[transformIndex].z != firstPos.z)
 		{
 			allSamePos = false;
 			break;
@@ -1128,7 +1133,7 @@ void MyApp::DrawTransformInput(const std::string& label, const int btnId, const 
 		{
 			for (const int idx : _selectedModels)
 			{
-				manager->Object(idx)->transform[transformIndex] = pos;
+				manager->Object(idx)->Transform[transformIndex] = pos;
 				manager->Object(idx)->NumFramesDirty = gNumFrameResources;
 			}
 		}
@@ -1142,7 +1147,7 @@ void MyApp::DrawTransformInput(const std::string& label, const int btnId, const 
 
 void MyApp::DrawObjectMaterial(int& btnId, const int matIndex) const
 {
-	Material* material = _objectsManager->Object(*_selectedModels.begin())->materials[matIndex].get();
+	Material* material = _objectsManager->Object(*_selectedModels.begin())->Materials[matIndex].get();
 	const bool isTransparent = DrawIsTransparentCheckbox();
 	const bool useArm = DrawUseArmTextureCheckbox(material);
 	DrawMaterialProperty(material, "Base Color", BasicUtil::EnumIndex(MatProp::BaseColor), btnId, true);
@@ -1161,7 +1166,7 @@ void MyApp::DrawObjectMaterial(int& btnId, const int matIndex) const
 	DrawMaterialTexture(material, "Normal", BasicUtil::EnumIndex(MatTex::Normal), btnId);
 
 	const auto& ri = _objectsManager->Object(*_selectedModels.begin());
-	if (ri->isTesselated)
+	if (ri->IsTesselated)
 	{
 		DrawMaterialTexture(material, "Displacement", BasicUtil::EnumIndex(MatTex::Displacement), btnId, true,
 		                    "Displacement Scale", BasicUtil::EnumIndex(MatAddInfo::Displacement));
@@ -1183,12 +1188,12 @@ bool MyApp::DrawIsTransparentCheckbox() const
 
 	const auto object = manager->Object(*_selectedModels.begin());
 
-	if (ImGui::Checkbox("Is transparent", &object->isTransparent))
+	if (ImGui::Checkbox("Is transparent", &object->IsTransparent))
 	{
 		object->NumFramesDirty = gNumFrameResources;
 	}
 
-	return object->isTransparent;
+	return object->IsTransparent;
 }
 
 bool MyApp::DrawUseArmTextureCheckbox(Material* material)
@@ -1207,9 +1212,9 @@ void MyApp::DrawMaterials(int& btnId) const
 	const auto& ri = _objectsManager->Object(*_selectedModels.begin());
 
 	std::vector<int> visibleMaterialIndices;
-	for (int i = 0; i < ri->materials.size(); i++)
+	for (int i = 0; i < ri->Materials.size(); i++)
 	{
-		if (ri->materials[i]->isUsed)
+		if (ri->Materials[i]->isUsed)
 		{
 			visibleMaterialIndices.push_back(i);
 		}
@@ -1226,7 +1231,7 @@ void MyApp::DrawMaterials(int& btnId) const
 		for (const int i : visibleMaterialIndices)
 		{
 			const bool isSelected = (selectedMaterial == i);
-			if (ImGui::Selectable(ri->materials[i].get()->name.c_str(), isSelected))
+			if (ImGui::Selectable(ri->Materials[i].get()->name.c_str(), isSelected))
 				selectedMaterial = i;
 
 			if (isSelected)
@@ -1461,20 +1466,20 @@ void MyApp::DrawLoDs(int& btnId)
 {
 	const auto& ri = _objectsManager->Object(*_selectedModels.begin());
 
-	const auto& lods = ri->lodsData;
+	const auto& lods = ri->LodsData;
 
 	if (ImGui::BeginListBox("##lods", ImVec2(-FLT_MIN, ImGui::GetTextLineHeightWithSpacing() * lods.size())))
 	{
 		for (int i = 0; i < lods.size(); i++)
 		{
-			const bool isSelected = ri->currentLODIdx == i;
+			const bool isSelected = ri->CurrentLodIdx == i;
 
-			std::string label = "LOD " + std::to_string(i) + " (" + std::to_string(lods[i].triangleCount) + " triangles)";
+			std::string label = "LOD " + std::to_string(i) + " (" + std::to_string(lods[i].TriangleCount) + " triangles)";
 			if (_fixedLod)
 			{
 				if (ImGui::Selectable(label.c_str(), isSelected))
 				{
-					ri->currentLODIdx = i;
+					ri->CurrentLodIdx = i;
 				}
 			}
 			else
@@ -1716,10 +1721,10 @@ void MyApp::AddLod()
 	{
 		const auto& ri = _objectsManager->Object(*_selectedModels.begin());
 
-		if (_modelManager->ImportLodObject(pszFilePath, static_cast<int>(ri->lodsData.begin()->meshes.size())))
+		if (_modelManager->ImportLodObject(pszFilePath, static_cast<int>(ri->LodsData.begin()->Meshes.size())))
 		{
 			const auto lod = _modelManager->ParseAsLodObject();
-			const LODData data = { static_cast<int>(lod.indices.size()) / 3, lod.meshes };
+			const LodData data = { static_cast<int>(lod.Indices.size()) / 3, lod.Meshes };
 			//generating it as one mesh
 			const int lodIdx = _objectsManager->AddLod(_device.Get(), data, ri);
 			GeometryManager::AddLodGeometry(ri->Name, lodIdx, lod);
@@ -1833,12 +1838,12 @@ void MyApp::GBufferPass() const
 	mCommandList->RSSetScissorRects(1, &mScissorRect);
 
 	//deferred rendering: writing in gbuffer first
-	_gBuffer->ChangeRtVsState(D3D12_RESOURCE_STATE_RENDER_TARGET);
+	_gBuffer->ChangeRtvsState(D3D12_RESOURCE_STATE_RENDER_TARGET);
 	_gBuffer->ChangeDsvState(D3D12_RESOURCE_STATE_DEPTH_WRITE);
 	
 	_gBuffer->ClearInfo(Colors::Transparent);
 	const auto dsv = _gBuffer->DepthStencilView();
-	mCommandList->OMSetRenderTargets(_gBuffer->InfoCount(), _gBuffer->RtVs().data(),
+	mCommandList->OMSetRenderTargets(_gBuffer->InfoCount(), _gBuffer->Rtvs().data(),
 	                                 false, &dsv);
 
 	_objectsManager->Draw(mCommandList.Get(), _currFrameResource, static_cast<float>(mClientHeight), _isWireframe, _fixedLod);
@@ -1848,7 +1853,7 @@ void MyApp::GBufferPass() const
 
 void MyApp::LightingPass() const
 {
-	_gBuffer->ChangeRtVsState(D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+	_gBuffer->ChangeRtvsState(D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 	_gBuffer->ChangeDsvState(D3D12_RESOURCE_STATE_DEPTH_READ);
 
 	_lightingManager->DrawDirLight(mCommandList.Get(), _currFrameResource);

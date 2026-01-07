@@ -21,6 +21,7 @@ cbuffer cbPerObject : register(b0)
 {
     float4x4 gWorld;
     float4x4 gWorldInvTranspose;
+	float4x4 gPrevWorld; 
 };
 
 cbuffer cbPerMaterial : register(b1)
@@ -53,6 +54,7 @@ cbuffer cbPerMaterial : register(b1)
 cbuffer cbPass : register(b2)
 {
     float4x4 gViewProj;
+	float4x4 gPrevViewProj;
     float3 gEyePosW;
     float gDeltaTime;
     float2 gScreenSize;
@@ -72,6 +74,7 @@ struct VertexIn
 struct VertexOut
 {
     float4 PosH : SV_POSITION;
+	float2 Velocity : VELOCITY;
     float3 PosW : POSITION;
     float3 NormalW : NORMAL;
     float2 TexC : TEXCOORD;
@@ -112,6 +115,13 @@ VertexOut GBufferVS(VertexIn vin)
 
     // Transform to homogeneous clip space.
     vout.PosH = mul(posW, gViewProj);
+
+	float4 prevPosW = mul(float4(vin.PosL, 1.0f), gPrevWorld);
+	float4 prevPosH = mul(prevPosW, gPrevViewProj);
+
+	float2 currNDC = vout.PosH.xy / vout.PosH.w;
+	float2 prevNDC = prevPosH.xy / prevPosH.w;
+	vout.Velocity = (prevNDC - currNDC) * 0.5f;
     
     if (taaEnabled == 1)
         vout.PosH += float4(GenerateJitter(frameIndex) * vout.PosH.w / gScreenSize, 0, 0);
@@ -279,6 +289,7 @@ struct GBufferInfo
     float4 Normal : SV_Target2;
     float4 ORM : SV_Target3;
     float2 TexCoord : SV_Target4;
+	float2 Velocity : SV_Target5;
 };
 
 GBufferInfo GBufferPS(VertexOut pin)
@@ -318,6 +329,7 @@ GBufferInfo GBufferPS(VertexOut pin)
     res.Emissive.xyz = useEmissiveMap ? gEmissiveMap.Sample(gsamPointClamp, pin.TexC).xyz : emissive;
     res.Emissive.a = emissiveIntensity;
     res.TexCoord = pin.TexC;
+	res.Velocity = clamp(pin.Velocity, -0.25f, 0.25f);
     
     return res;
 }

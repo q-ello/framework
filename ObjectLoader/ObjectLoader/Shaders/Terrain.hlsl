@@ -175,12 +175,12 @@ GBufferInfo PS(VertexOut pin)
 	float slope = 1 - dot(normal, float3(0.f, 1.f, 0.f));
 	float slopeFactor = smoothstep(0.f, slopeThreshold, slope);
 
-	float height = heightmap.Sample(gsamLinear, pin.uv);
+	float height = heightmap.Sample(gsamLinear, pin.uv).r;
 	float heightFactor = smoothstep(heightThreshold - 0.1f, heightThreshold + 0.1f, height);	
 
-    float3 lowDiffuseColor = UseLowTexture == 1 ? lowDiffuseMap.Sample(gsamLinear, pin.uv) : LowColor;
-    float3 slopeDiffuseColor = UseSlopeTexture == 1 ? slopeDiffuseMap.Sample(gsamLinear, pin.uv) : SlopeColor;
-    float3 highDiffuseColor = UseHighTexture == 1 ? highDiffuseMap.Sample(gsamLinear, pin.uv) : HighColor;
+    float3 lowDiffuseColor = UseLowTexture == 1 ? lowDiffuseMap.Sample(gsamLinear, pin.uv).rgb : LowColor;
+    float3 slopeDiffuseColor = UseSlopeTexture == 1 ? slopeDiffuseMap.Sample(gsamLinear, pin.uv).rgb : SlopeColor;
+    float3 highDiffuseColor = UseHighTexture == 1 ? highDiffuseMap.Sample(gsamLinear, pin.uv).rgb : HighColor;
 	float3 heightColor = lerp(lowDiffuseColor, highDiffuseColor, heightFactor);
 	float3 finalColor = lerp(heightColor, slopeDiffuseColor, slopeFactor);
 

@@ -10,10 +10,10 @@ struct RenderItem
 {
 	RenderItem() = default;
 
-	std::uint32_t uid = 0;
+	std::uint32_t Uid = 0;
 
 	std::string Name;
-	int nameCount = 0;
+	int NameCount = 0;
 
 	int NumFramesDirty = gNumFrameResources;
 
@@ -25,42 +25,43 @@ struct RenderItem
 
 struct Mesh
 {
-	DirectX::XMMATRIX defaultWorld;
-	size_t vertexStart;
-	size_t indexStart;
-	size_t indexCount;
-	size_t materialIndex;
-	int cbOffset;
-	int matOffset;
+	DirectX::XMMATRIX DefaultWorld;
+	size_t VertexStart;
+	size_t IndexStart;
+	size_t IndexCount;
+	size_t MaterialIndex;
+	int CbOffset;
+	int MatOffset;
 };
 
-struct LOD
+struct Lod
 {
-	std::vector<Vertex> vertices{};
-	std::vector<std::int32_t> indices{};
-	std::vector<Mesh> meshes{};
-	DirectX::XMFLOAT3 vMax = { -FLT_MAX, -FLT_MAX, -FLT_MAX };
-	DirectX::XMFLOAT3 vMin = { FLT_MAX, FLT_MAX, FLT_MAX };
-	BoundingBox aabb;
+	std::vector<Vertex> Vertices{};
+	std::vector<std::int32_t> Indices{};
+	std::vector<Mesh> Meshes{};
+	DirectX::XMFLOAT3 VMax = { -FLT_MAX, -FLT_MAX, -FLT_MAX };
+	DirectX::XMFLOAT3 VMin = { FLT_MAX, FLT_MAX, FLT_MAX };
+	BoundingBox Aabb;
 };
 
-struct LODData
+struct LodData
 {
-	int triangleCount = 0;
-	std::vector<Mesh> meshes{};
+	int TriangleCount = 0;
+	std::vector<Mesh> Meshes{};
 };
 
 struct EditableRenderItem : public RenderItem
 {
-	std::array<DirectX::XMFLOAT3, 3> transform = {};
-	bool lockedScale = true;
-	std::vector<std::unique_ptr<Material>> materials;
-	bool isTransparent = false;
+	std::array<DirectX::XMFLOAT3, 3> Transform = {};
+	bool LockedScale = true;
+	std::vector<std::unique_ptr<Material>> Materials;
+	bool IsTransparent = false;
 	BoundingBox Bounds;
-	std::vector<LODData> lodsData;
-	int currentLODIdx = 0;
-	bool isTesselated = false;
-	DirectX::XMMATRIX world = DirectX::XMMatrixIdentity();
+	std::vector<LodData> LodsData;
+	int CurrentLodIdx = 0;
+	bool IsTesselated = false;
+	DirectX::XMMATRIX World = DirectX::XMMatrixIdentity();
+	DirectX::XMMATRIX PrevWorld = DirectX::XMMatrixIdentity();
 };
 
 struct UnlitRenderItem : public RenderItem

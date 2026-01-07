@@ -116,9 +116,9 @@ ModelData GeometryManager::BuildModelGeometry(Model* model)
 
 	for (auto& lod : model->lods())
 	{
-		LODData lodData;
-		lodData.meshes = lod.meshes;
-		lodData.triangleCount = static_cast<int>(lod.indices.size()) / 3;
+		LodData lodData;
+		lodData.Meshes = lod.Meshes;
+		lodData.TriangleCount = static_cast<int>(lod.Indices.size()) / 3;
 		data.LodsData.push_back(lodData);
 	}
 
@@ -143,23 +143,23 @@ ModelData GeometryManager::BuildModelGeometry(Model* model)
 	for (auto& lod : model->lods())
 	{
 		// Pack the indices of all the meshes into one index buffer.
-		const UINT vbByteSize = static_cast<UINT>(lod.vertices.size()) * sizeof(Vertex);
+		const UINT vbByteSize = static_cast<UINT>(lod.Vertices.size()) * sizeof(Vertex);
 
-		const UINT ibByteSize = static_cast<UINT>(lod.indices.size()) * sizeof(std::int32_t);
+		const UINT ibByteSize = static_cast<UINT>(lod.Indices.size()) * sizeof(std::int32_t);
 
 		auto geo = std::make_shared<MeshGeometry>();
 
 		ThrowIfFailed(D3DCreateBlob(vbByteSize, &geo->VertexBufferCPU));
-		CopyMemory(geo->VertexBufferCPU->GetBufferPointer(), lod.vertices.data(), vbByteSize);
+		CopyMemory(geo->VertexBufferCPU->GetBufferPointer(), lod.Vertices.data(), vbByteSize);
 
 		ThrowIfFailed(D3DCreateBlob(ibByteSize, &geo->IndexBufferCPU));
-		CopyMemory(geo->IndexBufferCPU->GetBufferPointer(), lod.indices.data(), ibByteSize);
+		CopyMemory(geo->IndexBufferCPU->GetBufferPointer(), lod.Indices.data(), ibByteSize);
 
 		geo->VertexBufferGPU = d3dUtil::CreateDefaultBuffer(UploadManager::Device,
-			UploadManager::UploadCmdList.Get(), lod.vertices.data(), vbByteSize, geo->VertexBufferUploader);
+			UploadManager::UploadCmdList.Get(), lod.Vertices.data(), vbByteSize, geo->VertexBufferUploader);
 
 		geo->IndexBufferGPU = d3dUtil::CreateDefaultBuffer(UploadManager::Device,
-			UploadManager::UploadCmdList.Get(), lod.indices.data(), ibByteSize, geo->IndexBufferUploader);
+			UploadManager::UploadCmdList.Get(), lod.Indices.data(), ibByteSize, geo->IndexBufferUploader);
 
 		geo->VertexByteStride = sizeof(Vertex);
 		geo->VertexBufferByteSize = vbByteSize;
@@ -179,12 +179,12 @@ ModelData GeometryManager::BuildModelGeometry(Model* model)
 	return data;
 }
 
-void GeometryManager::AddLodGeometry(const std::string& name, const int lodIdx, const LOD& lod)
+void GeometryManager::AddLodGeometry(const std::string& name, const int lodIdx, const Lod& lod)
 {
-	LODData data;
+	LodData data;
 
-	data.meshes = lod.meshes;
-	data.triangleCount = static_cast<int>(lod.indices.size());
+	data.Meshes = lod.Meshes;
+	data.TriangleCount = static_cast<int>(lod.Indices.size());
 
 	if (Geometries().find(name) == Geometries().end())
 	{
@@ -192,32 +192,32 @@ void GeometryManager::AddLodGeometry(const std::string& name, const int lodIdx, 
 	}
 
 	//verifying that model does actually have some data
-	if (lod.indices.empty())
+	if (lod.Indices.empty())
 	{
 		OutputDebugString(L"[ERROR] LOD data is empty! Aborting geometry creation.\n");
 		return;
 	}
 
 	//making a buffer for given lod
-	const UINT vbByteSize = static_cast<UINT>(lod.vertices.size()) * sizeof(Vertex);
+	const UINT vbByteSize = static_cast<UINT>(lod.Vertices.size()) * sizeof(Vertex);
 
 	
 	
-	const UINT ibByteSize = static_cast<UINT>(lod.indices.size()) * sizeof(std::int32_t);
+	const UINT ibByteSize = static_cast<UINT>(lod.Indices.size()) * sizeof(std::int32_t);
 
 	auto geo = std::make_shared<MeshGeometry>();
 
 	ThrowIfFailed(D3DCreateBlob(vbByteSize, &geo->VertexBufferCPU));
-	CopyMemory(geo->VertexBufferCPU->GetBufferPointer(), lod.vertices.data(), vbByteSize);
+	CopyMemory(geo->VertexBufferCPU->GetBufferPointer(), lod.Vertices.data(), vbByteSize);
 
 	ThrowIfFailed(D3DCreateBlob(ibByteSize, &geo->IndexBufferCPU));
-	CopyMemory(geo->IndexBufferCPU->GetBufferPointer(), lod.indices.data(), ibByteSize);
+	CopyMemory(geo->IndexBufferCPU->GetBufferPointer(), lod.Indices.data(), ibByteSize);
 
 	geo->VertexBufferGPU = d3dUtil::CreateDefaultBuffer(UploadManager::Device,
-		UploadManager::UploadCmdList.Get(), lod.vertices.data(), vbByteSize, geo->VertexBufferUploader);
+		UploadManager::UploadCmdList.Get(), lod.Vertices.data(), vbByteSize, geo->VertexBufferUploader);
 
 	geo->IndexBufferGPU = d3dUtil::CreateDefaultBuffer(UploadManager::Device,
-		UploadManager::UploadCmdList.Get(), lod.indices.data(), ibByteSize, geo->IndexBufferUploader);
+		UploadManager::UploadCmdList.Get(), lod.Indices.data(), ibByteSize, geo->IndexBufferUploader);
 
 	geo->VertexByteStride = sizeof(Vertex);
 	geo->VertexBufferByteSize = vbByteSize;

@@ -159,10 +159,9 @@ float4 PS(VertexOut pin) : SV_Target
     {
         const float epsilon = 0.1f;
         float3 pointInAtmosphere = rayOrigin + rayDir * (dstToAtmosphere + epsilon);
-        float3 light = calculateLight(pointInAtmosphere, rayDir, dstThroughAtmosphere - epsilon * 2, originalCol);
+        float3 light = calculateLight(pointInAtmosphere, rayDir, dstThroughAtmosphere - epsilon * 2, originalCol.rgb);
         outputColor = float4(light, 1);
     }
-    
     
     return outputColor;
 }

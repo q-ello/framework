@@ -28,7 +28,7 @@ public:
 	//parse everything as a single mesh even if it is a scene
 	std::unique_ptr<Model> ParseAsOneObject();
 	//parse model as lod
-	LOD ParseAsLodObject() const;
+	Lod ParseAsLodObject() const;
 	//parse scene as different objects
 	std::vector<std::unique_ptr<Model>> ParseScene();
 

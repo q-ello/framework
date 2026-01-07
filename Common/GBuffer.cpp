@@ -140,17 +140,17 @@ void GBuffer::ClearInfo(const FLOAT* color)
 	const auto prevState = _info[0].PrevState;
 	const auto rtvHeapAllocator = TextureManager::RtvHeapAllocator.get();
 
-	ChangeRtVsState(D3D12_RESOURCE_STATE_RENDER_TARGET);
+	ChangeRtvsState(D3D12_RESOURCE_STATE_RENDER_TARGET);
 	for (int i = 0; i < static_cast<int>(GBufferInfo::Count); i++)
 	{
 		if (i == static_cast<int>(GBufferInfo::Depth))
 			continue;
 		_cmdList->ClearRenderTargetView(rtvHeapAllocator->GetCpuHandle(_info[i].OtherIndex), color, 0, nullptr);
 	}
-	ChangeRtVsState(prevState);
+	ChangeRtvsState(prevState);
 }
 
-void GBuffer::ChangeRtVsState(const D3D12_RESOURCE_STATES stateAfter)
+void GBuffer::ChangeRtvsState(const D3D12_RESOURCE_STATES stateAfter)
 {
 	std::vector<CD3DX12_RESOURCE_BARRIER> barriers;
 	for (int i = 0; i < static_cast<int>(GBufferInfo::Count); i++)
@@ -187,7 +187,7 @@ void GBuffer::ChangeBothDepthState(const D3D12_RESOURCE_STATES stateAfter)
 	}
 }
 
-std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> GBuffer::RtVs() const
+std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> GBuffer::Rtvs() const
 {
 	std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> rtvs;
 	const auto rtvDescriptorAllocator = TextureManager::RtvHeapAllocator.get();
