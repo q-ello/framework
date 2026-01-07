@@ -17,7 +17,6 @@ public:
 	void BindToManagers(LightingManager* lightingManager, GBuffer* buffer, Camera* camera);
 	void ApplyTaa(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource);
 	void OnResize(int newWidth, int newHeight);
-	void UpdateTaaParameters(const FrameResource* currFrame) const;
 
 private:
 	void BuildRootSignature();

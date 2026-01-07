@@ -17,25 +17,40 @@ void EditableObjectManager::UpdateObjectCBs(FrameResource* currFrameResource)
 	for (int i = 0; i < _objects.size(); i++)
 	{
 		auto& ri = _objects[i];
-		XMMATRIX scale = XMMatrixScalingFromVector(XMLoadFloat3(&ri->transform[BasicUtil::EnumIndex(Transform::Scale)]));
-		XMMATRIX rotation = XMMatrixRotationRollPitchYawFromVector(XMLoadFloat3(&ri->transform[BasicUtil::EnumIndex(Transform::Rotation)]) * XM_PI / 180.f);
-		XMMATRIX translation = XMMatrixTranslationFromVector(XMLoadFloat3(&ri->transform[BasicUtil::EnumIndex(Transform::Translation)]));
+		XMMATRIX scale = XMMatrixScalingFromVector(XMLoadFloat3(&ri->Transform[BasicUtil::EnumIndex(Transform::Scale)]));
+		XMMATRIX rotation = XMMatrixRotationRollPitchYawFromVector(XMLoadFloat3(&ri->Transform[BasicUtil::EnumIndex(Transform::Rotation)]) * XM_PI / 180.f);
+		XMMATRIX translation = XMMatrixTranslationFromVector(XMLoadFloat3(&ri->Transform[BasicUtil::EnumIndex(Transform::Translation)]));
 
 		XMMATRIX world = scale * rotation * translation;
-		ri->world = world;
+		ri->PrevWorld = ri->World;
+		ri->World = world;
+		
+		XMFLOAT4X4 worldF;
+		XMFLOAT4X4 prevWorldF;
+		
+		XMStoreFloat4x4(&worldF, ri->World);
+		XMStoreFloat4x4(&prevWorldF, ri->PrevWorld);
+		
+		if (worldF.m != prevWorldF.m)
+		{
+			ri->NumFramesDirty = gNumFrameResources;
+		}
+		
 		//updating object data
 		if (ri->NumFramesDirty > 0)
 		{
 			size_t j = 0;
-			for (auto currentLod = ri->lodsData[ri->currentLODIdx]; j < currentLod.meshes.size(); j++)
+			for (auto currentLod = ri->LodsData[ri->CurrentLodIdx]; j < currentLod.Meshes.size(); j++)
 			{
-				XMMATRIX meshWorld = currentLod.meshes.at(j).defaultWorld * world;
-
+				XMMATRIX meshWorld = currentLod.Meshes.at(j).DefaultWorld * world;
+				XMMATRIX prevMeshWorld = currentLod.Meshes.at(j).DefaultWorld * ri->PrevWorld;
+				
 				OpaqueObjectConstants objConstants;
+				XMStoreFloat4x4(&objConstants.PrevWorld, XMMatrixTranspose(prevMeshWorld));
 				XMStoreFloat4x4(&objConstants.World, XMMatrixTranspose(meshWorld));
 				XMStoreFloat4x4(&objConstants.WorldInvTranspose, XMMatrixInverse(nullptr, meshWorld));
 
-				currObjectsCb[ri->uid].get()->CopyData(static_cast<int>(j), objConstants);
+				currObjectsCb[ri->Uid].get()->CopyData(static_cast<int>(j), objConstants);
 			}
 
 			//last piece for AABB
@@ -48,15 +63,15 @@ void EditableObjectManager::UpdateObjectCBs(FrameResource* currFrameResource)
 				XMStoreFloat4x4(&objConstants.World, DirectX::XMMatrixTranspose(aabbWorld));
 				XMStoreFloat4x4(&objConstants.WorldInvTranspose, XMMatrixInverse(nullptr, aabbWorld));
 
-				currObjectsCb[ri->uid].get()->CopyData(static_cast<int>(j), objConstants);
+				currObjectsCb[ri->Uid].get()->CopyData(static_cast<int>(j), objConstants);
 			}
 
 			ri->NumFramesDirty--;
 		}
 
-		for (size_t j = 0; j < ri->materials.size(); j++)
+		for (size_t j = 0; j < ri->Materials.size(); j++)
 		{
-			Material* material = ri->materials[j].get();
+			Material* material = ri->Materials[j].get();
 			if (material->numFramesDirty > 0)
 			{
 				MaterialConstants materialConstants;
@@ -78,7 +93,7 @@ void EditableObjectManager::UpdateObjectCBs(FrameResource* currFrameResource)
 				materialConstants.UseArmMap = material->textures[BasicUtil::EnumIndex(MatTex::ARM)].UseTexture && material->useARMTexture;
 				materialConstants.ArmLayout = static_cast<int>(material->armLayout);
 
-				currMaterialCb[ri->uid].get()->CopyData(static_cast<int>(j), materialConstants);
+				currMaterialCb[ri->Uid].get()->CopyData(static_cast<int>(j), materialConstants);
 
 				material->numFramesDirty--;
 			}
@@ -93,7 +108,7 @@ void EditableObjectManager::UpdateObjectCBs(FrameResource* currFrameResource)
 		_camera->CameraFrustum().Transform(localSpaceFrustum, viewToLocal);
 		if ((localSpaceFrustum.Contains(ri->Bounds) != DirectX::DISJOINT))
 		{
-			(_tesselatedObjects.find(ri->uid) != _tesselatedObjects.end() ? _visibleTesselatedObjects : _visibleUntesselatedObjects).push_back(ri->uid);
+			(_tesselatedObjects.find(ri->Uid) != _tesselatedObjects.end() ? _visibleTesselatedObjects : _visibleUntesselatedObjects).push_back(ri->Uid);
 		}
 	}
 }
@@ -264,19 +279,19 @@ void EditableObjectManager::BuildShaders()
 	_wireframePsShader = d3dUtil::CompileShader(L"Shaders\\GBuffer.hlsl", nullptr, "WireframePS", "ps_5_1");
 }
 
-void EditableObjectManager::CountLodOffsets(LODData* lod) const
+void EditableObjectManager::CountLodOffsets(LodData* lod) const
 {
-	for (int j = 0; j < lod->meshes.size(); j++)
+	for (int j = 0; j < lod->Meshes.size(); j++)
 	{
-		auto& meshData = lod->meshes[j];
-		meshData.cbOffset = j * _cbMeshElementSize;
-		meshData.matOffset = static_cast<int>(meshData.materialIndex * _cbMaterialElementSize);
+		auto& meshData = lod->Meshes[j];
+		meshData.CbOffset = j * _cbMeshElementSize;
+		meshData.MatOffset = static_cast<int>(meshData.MaterialIndex * _cbMaterialElementSize);
 	}
 }
 
 void EditableObjectManager::CountLodIndex(EditableRenderItem* ri, const float screenHeight) const
 {
-	if (ri->lodsData.size() == 1)
+	if (ri->LodsData.size() == 1)
 		return;
 
 	BoundingSphere riSphere;
@@ -284,7 +299,7 @@ void EditableObjectManager::CountLodIndex(EditableRenderItem* ri, const float sc
 	riSphere.Radius = XMVectorGetX(XMVector3Length(XMLoadFloat3(&ri->Bounds.Extents)));
 
 	BoundingSphere worldSphere;
-	riSphere.Transform(worldSphere, ri->world);
+	riSphere.Transform(worldSphere, ri->World);
 	XMVECTOR worldPos = XMLoadFloat3(&worldSphere.Center);
 
 	const float size = ComputeScreenSize(worldPos, worldSphere.Radius, screenHeight);
@@ -298,9 +313,9 @@ void EditableObjectManager::CountLodIndex(EditableRenderItem* ri, const float sc
 	else if (size > 30.0f)  preferableLod = 4;
 	else preferableLod = 5;
 
-	const int maxIndex = static_cast<int>(ri->lodsData.size()) - 1;
+	const int maxIndex = static_cast<int>(ri->LodsData.size()) - 1;
 
-	ri->currentLODIdx = std::min(preferableLod, maxIndex);
+	ri->CurrentLodIdx = std::min(preferableLod, maxIndex);
 }
 
 float EditableObjectManager::ComputeScreenSize(XMVECTOR& center, const float radius, const float screenHeight) const
@@ -319,7 +334,7 @@ float EditableObjectManager::ComputeScreenSize(XMVECTOR& center, const float rad
 void EditableObjectManager::AddObjectToResource(const Microsoft::WRL::ComPtr<ID3D12Device> device, FrameResource* currFrameResource)
 {
 	for (const auto& obj : _objects)
-		currFrameResource->AddOpaqueObjectBuffer(device.Get(), obj->uid, static_cast<int>(obj->lodsData.begin()->meshes.size()), static_cast<int>(obj->materials.size()));
+		currFrameResource->AddOpaqueObjectBuffer(device.Get(), obj->Uid, static_cast<int>(obj->LodsData.begin()->Meshes.size()), static_cast<int>(obj->Materials.size()));
 }
 
 int EditableObjectManager::AddRenderItem(ID3D12Device* device, ModelData&& modelData)  // NOLINT(cppcoreguidelines-rvalue-reference-param-not-moved)
@@ -334,49 +349,49 @@ int EditableObjectManager::AddRenderItem(ID3D12Device* device, ModelData&& model
 	auto modelRitem = std::make_shared<EditableRenderItem>();
 	_objectLoaded[itemName]++;
 
-	modelRitem->uid = _uidCount++;
+	modelRitem->Uid = _uidCount++;
 	modelRitem->Name = name;
-	modelRitem->nameCount = _objectCounters[itemName]++;
+	modelRitem->NameCount = _objectCounters[itemName]++;
 
 	modelRitem->Geo = &GeometryManager::Geometries()[itemName];
 	modelRitem->PrimitiveType = isTesselated ?
 		D3D_PRIMITIVE_TOPOLOGY_3_CONTROL_POINT_PATCHLIST :
 		D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 
-	modelRitem->isTesselated = isTesselated;
+	modelRitem->IsTesselated = isTesselated;
 
 	// Correct moves
-	modelRitem->materials = std::move(modelData.Materials);
-	for (const auto& material : modelRitem->materials)
+	modelRitem->Materials = std::move(modelData.Materials);
+	for (const auto& material : modelRitem->Materials)
 	{
 		material->numFramesDirty = gNumFrameResources;
 	}
 	modelRitem->Bounds = std::move(modelData.Aabb);
-	modelRitem->lodsData = std::move(modelData.LodsData);
-	modelRitem->transform = std::move(modelData.Transform);
+	modelRitem->LodsData = std::move(modelData.LodsData);
+	modelRitem->Transform = std::move(modelData.Transform);
 
-	const auto& lod = modelRitem->lodsData.begin();
+	const auto& lod = modelRitem->LodsData.begin();
 
-	for (int j = 0; j < lod->meshes.size(); j++)
+	for (int j = 0; j < lod->Meshes.size(); j++)
 	{
-		const auto& meshData = lod->meshes[j];
-		modelRitem->materials[meshData.materialIndex]->isUsed = true;
+		const auto& meshData = lod->Meshes[j];
+		modelRitem->Materials[meshData.MaterialIndex]->isUsed = true;
 	}
 
-	for (int i = 0; i < modelRitem->lodsData.size(); i++)
+	for (int i = 0; i < modelRitem->LodsData.size(); i++)
 	{
-		auto& lodData = modelRitem->lodsData[i];
+		auto& lodData = modelRitem->LodsData[i];
 		CountLodOffsets(&lodData);
 	}
 
 	for (int i = 0; i < FrameResource::FrameResources().size(); ++i)
 	{
-		FrameResource::FrameResources()[i]->AddOpaqueObjectBuffer(device, modelRitem->uid,
-		                                                          static_cast<int>(modelRitem->lodsData.begin()->meshes.
-			                                                          size()) + 1, static_cast<int>(modelRitem->materials.size()));
+		FrameResource::FrameResources()[i]->AddOpaqueObjectBuffer(device, modelRitem->Uid,
+		                                                          static_cast<int>(modelRitem->LodsData.begin()->Meshes.
+			                                                          size()) + 1, static_cast<int>(modelRitem->Materials.size()));
 	}
 
-	(isTesselated ? _tesselatedObjects : _untesselatedObjects)[modelRitem->uid] = modelRitem.get();
+	(isTesselated ? _tesselatedObjects : _untesselatedObjects)[modelRitem->Uid] = modelRitem.get();
 
 	_objects.push_back(std::move(modelRitem));
 
@@ -385,24 +400,24 @@ int EditableObjectManager::AddRenderItem(ID3D12Device* device, ModelData&& model
 	return static_cast<int>(_objects.size()) - 1;
 }
 
-int EditableObjectManager::AddLod(ID3D12Device* device, LODData lod, EditableRenderItem* ri) const
+int EditableObjectManager::AddLod(ID3D12Device* device, LodData lod, EditableRenderItem* ri) const
 {
 	int i = 0;
-	for (; i < ri->lodsData.size(); i++)
+	for (; i < ri->LodsData.size(); i++)
 	{
-		if (lod.triangleCount > ri->lodsData[i].triangleCount)
+		if (lod.TriangleCount > ri->LodsData[i].TriangleCount)
 			break;
 	}
 	CountLodOffsets(&lod);
 
-	ri->lodsData.emplace(ri->lodsData.begin() + i, lod);
+	ri->LodsData.emplace(ri->LodsData.begin() + i, lod);
 	return i;
 }
 
 void EditableObjectManager::DeleteLod(EditableRenderItem* ri, const int index)
 {
-	ri->lodsData.erase(ri->lodsData.begin() + index);
-	ri->currentLODIdx = std::min(ri->currentLODIdx, static_cast<int>(ri->lodsData.size()) - 1);
+	ri->LodsData.erase(ri->LodsData.begin() + index);
+	ri->CurrentLodIdx = std::min(ri->CurrentLodIdx, static_cast<int>(ri->LodsData.size()) - 1);
 	GeometryManager::DeleteLodGeometry(ri->Name, index);
 }
 
@@ -410,7 +425,7 @@ bool EditableObjectManager::DeleteObject(const int selectedObject)
 {
 	const EditableRenderItem* objectToDelete = _objects[selectedObject].get();
 
-	for (auto& materialToDelete : objectToDelete->materials)
+	for (auto& materialToDelete : objectToDelete->Materials)
 	{
 		for (int i = 0; i < BasicUtil::EnumIndex(MatProp::Count); i++)
 		{
@@ -428,7 +443,7 @@ bool EditableObjectManager::DeleteObject(const int selectedObject)
 	_objectLoaded[name]--;
 
 	//need for deleting from frame resource
-	std::uint32_t uid = objectToDelete->uid;
+	std::uint32_t uid = objectToDelete->Uid;
 
 	if (_tesselatedObjects.find(uid) != _tesselatedObjects.end())
 	{
@@ -483,7 +498,7 @@ int EditableObjectManager::ObjectsCount()
 std::string EditableObjectManager::ObjectName(const int i)
 {
 	return _objects[i]->Name +
-		(_objects[i]->nameCount == 0 ? "" : std::to_string(_objects[i]->nameCount));
+		(_objects[i]->NameCount == 0 ? "" : std::to_string(_objects[i]->NameCount));
 }
 
 EditableRenderItem* EditableObjectManager::Object(const int i)
@@ -527,32 +542,32 @@ void EditableObjectManager::DrawObjects(ID3D12GraphicsCommandList* cmdList, Fram
 	for (auto& idx : indices)
 	{
 		const auto& ri = objects[idx];
-		const auto objectCb = currFrameResource->OpaqueObjCb[ri->uid]->Resource();
+		const auto objectCb = currFrameResource->OpaqueObjCb[ri->Uid]->Resource();
 		if (!fixedLod)
 			CountLodIndex(ri, screenHeight);
 
-		const int curLodIdx = ri->currentLODIdx;
+		const int curLodIdx = ri->CurrentLodIdx;
 		const MeshGeometry* curLodGeo = ri->Geo->at(curLodIdx).get();
 		const auto vertexBuffer = curLodGeo->VertexBufferView();
 		cmdList->IASetVertexBuffers(0, 1, &vertexBuffer);
 		const auto indexBuffer = curLodGeo->IndexBufferView();
 		cmdList->IASetIndexBuffer(&indexBuffer);
-		const auto materialCb = currFrameResource->MaterialCb[ri->uid]->Resource();
+		const auto materialCb = currFrameResource->MaterialCb[ri->Uid]->Resource();
 
-		auto currentLod = ri->lodsData[curLodIdx];
+		auto currentLod = ri->LodsData[curLodIdx];
 
-		for (size_t i = 0; i < currentLod.meshes.size(); i++)
+		for (size_t i = 0; i < currentLod.Meshes.size(); i++)
 		{
-			const auto& meshData = currentLod.meshes.at(i);
-			const D3D12_GPU_VIRTUAL_ADDRESS meshCbAddress = objectCb->GetGPUVirtualAddress() + meshData.cbOffset;
+			const auto& meshData = currentLod.Meshes.at(i);
+			const D3D12_GPU_VIRTUAL_ADDRESS meshCbAddress = objectCb->GetGPUVirtualAddress() + meshData.CbOffset;
 
 			cmdList->SetGraphicsRootConstantBufferView(8, meshCbAddress);
 
-			const D3D12_GPU_VIRTUAL_ADDRESS materialCbAddress = materialCb->GetGPUVirtualAddress() + meshData.matOffset;
+			const D3D12_GPU_VIRTUAL_ADDRESS materialCbAddress = materialCb->GetGPUVirtualAddress() + meshData.MatOffset;
 			cmdList->SetGraphicsRootConstantBufferView(9, materialCbAddress);
 
 			const auto heapAlloc = TextureManager::SrvHeapAllocator.get();
-			const auto material = ri->materials[meshData.materialIndex].get();
+			const auto material = ri->Materials[meshData.MaterialIndex].get();
 			constexpr size_t offset = BasicUtil::EnumIndex(MatProp::Count) - 1;
 			for (int index = 0; index < offset; index++)
 			{
@@ -566,9 +581,9 @@ void EditableObjectManager::DrawObjects(ID3D12GraphicsCommandList* cmdList, Fram
 				cmdList->SetGraphicsRootDescriptorTable(offset + i1, tex);
 			}
 
-			cmdList->DrawIndexedInstanced(static_cast<UINT>(meshData.indexCount), 1,
-			                              static_cast<UINT>(meshData.indexStart),
-			                              static_cast<UINT>(meshData.vertexStart), 0);
+			cmdList->DrawIndexedInstanced(static_cast<UINT>(meshData.IndexCount), 1,
+			                              static_cast<UINT>(meshData.IndexStart),
+			                              static_cast<UINT>(meshData.VertexStart), 0);
 		}
 	}
 }
@@ -577,8 +592,8 @@ void EditableObjectManager::DrawAabBs(ID3D12GraphicsCommandList* cmdList, FrameR
 {
 	for (const auto& ri : _objects)
 	{
-		const auto objectCb = currFrameResource->OpaqueObjCb[ri->uid]->Resource();
-		const D3D12_GPU_VIRTUAL_ADDRESS aabbcbAddress = objectCb->GetGPUVirtualAddress() + ri->lodsData.begin()->meshes.size() * _cbMeshElementSize;
+		const auto objectCb = currFrameResource->OpaqueObjCb[ri->Uid]->Resource();
+		const D3D12_GPU_VIRTUAL_ADDRESS aabbcbAddress = objectCb->GetGPUVirtualAddress() + ri->LodsData.begin()->Meshes.size() * _cbMeshElementSize;
 
 		//draw local lights
 		MeshGeometry* geo = (GeometryManager::Geometries()["shapeGeo"].begin())->get();

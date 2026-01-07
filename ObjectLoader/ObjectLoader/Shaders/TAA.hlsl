@@ -4,16 +4,11 @@ Texture2D gLitScene : register(t0);
 Texture2D gHistory : register(t1);
 Texture2D gCurrentDepth : register(t2);
 Texture2D gPreviousDepth : register(t3);
+Texture2D gVelocity : register(t4);
 
-cbuffer TAACB : register(b0, space1)
+cbuffer TAACB : register(b0)
 {
-    float4x4 gPrevView;
-    float4x4 gPrevProj;
-    float4x4 gPrevInvProj;
-    float4x4 gCurrInvView;
-    float4x4 gCurrInvProj;
     float2 gScreenSize;
-    float2 pad;
 }
 
 SamplerComparisonState gsamShadow : register(s0);
@@ -28,36 +23,39 @@ float4 TAAPS(VertexOut pin) : SV_Target
     float4 output;
 
     float2 uv = pin.PosH.xy / gScreenSize;
+    
+    float2 velocity = gVelocity.Load(currCoords).xy;
+    
+    float2 historyUV = uv + velocity;
     float depth = gCurrentDepth.Load(currCoords).r;
     
-    float4 clipPos = float4(uv.x * 2.0f - 1.0f, 1.0f - uv.y * 2.0f, depth, 1.0f);
-    float4 currViewPos = mul(clipPos, gCurrInvProj);
-    currViewPos /= currViewPos.w;
-    float4 world = mul(currViewPos, gCurrInvView);
-    float4 prevViewPos = mul(world, gPrevView);
-    float4 prevScreenNDC = mul(prevViewPos, gPrevProj);
-    prevScreenNDC /= prevScreenNDC.w;
-    float2 prevUV = float2(prevScreenNDC.x * 0.5f + 0.5f, 0.5f - prevScreenNDC.y * 0.5f);   
-
-    if (prevUV.x < 0 || prevUV.x > 1 || prevUV.y < 0 || prevUV.y > 1)
+    float prevDepth = gPreviousDepth.Sample(gsamLinear, historyUV).r;
+    
+    bool outOfBounds = historyUV.x < 0 || historyUV.x > 1 || historyUV.y < 0 || historyUV.y > 1;
+    
+    if (outOfBounds)
         return currentColor;
 
-    float predictedPrevViewDepth = prevViewPos.z;
+    historyUV = clamp(historyUV, 0.0f, 1.0f);
+    
+    float depthDiff = abs(prevDepth - depth);
+    float depthThreshold = max(0.001f, depth * 0.01f);
 
-    int3 prevCoords = int3(prevUV * gScreenSize, 0);
+    float historyConfidence = 1.0f;
+    
+    bool noHistory = prevDepth >= 0.9999f;
 
-    float prevDepthNDC = gPreviousDepth.Load(prevCoords).r;
+    float historyWeight = 0.9f;
 
-    float4 actuaPrevClipPos = float4(prevScreenNDC.x, prevScreenNDC.y, prevDepthNDC, 1.0f);
-    float4 actualPrevViewPos = mul(actuaPrevClipPos, gPrevInvProj);
-    actualPrevViewPos /= actualPrevViewPos.w;
-
-    float actualPrevViewDepth = actualPrevViewPos.z;
-
-    float depthDiff = abs(predictedPrevViewDepth - actualPrevViewDepth);
-    float depthFactor = saturate(1.0f - depthDiff / predictedPrevViewDepth);  
-
-    float4 historyColor = gHistory.Load(prevCoords);
+    if (!noHistory)
+    {
+        float depthConfidence =
+            saturate(1.0f - depthDiff / depthThreshold);
+        //okay that one just makes a lot of flickering bruh
+        //historyWeight *= depthConfidence;
+    }
+    
+    float4 historyColor = gHistory.Sample(gsamLinear, historyUV);
     
     float4 minColor = 9999.0, maxColor = -9999.0;
     
@@ -77,7 +75,7 @@ float4 TAAPS(VertexOut pin) : SV_Target
  
     float4 historyColorClamped = clamp(historyColor, minColor, maxColor);
     
-    output = lerp(currentColor, historyColorClamped, 0.9f);
-
+    output = lerp(currentColor, historyColorClamped, historyWeight);
+    
     return output;
 }

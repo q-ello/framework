@@ -911,8 +911,8 @@ std::vector<int> LightingManager::FrustumCulling(const std::vector<std::shared_p
 		BoundingBox objectLsBounds;
 		BoundingBox objectWorldBounds;
 
-		objects[i]->Bounds.Transform(objectLsBounds, objects[i]->world * _cascades[cascadeIdx].LightView);
-		objects[i]->Bounds.Transform(objectWorldBounds, objects[i]->world);
+		objects[i]->Bounds.Transform(objectLsBounds, objects[i]->World * _cascades[cascadeIdx].LightView);
+		objects[i]->Bounds.Transform(objectWorldBounds, objects[i]->World);
 		float distance;
 		XMStoreFloat(&distance, XMVector3Length(XMLoadFloat3(&objectWorldBounds.Center) - _camera->GetPosition()));
 		if (lightAabb.Contains(objectLsBounds) != DirectX::DISJOINT)
@@ -932,7 +932,7 @@ std::vector<int> LightingManager::FrustumCulling(const std::vector<std::shared_p
 	{
 		BoundingBox worldBounds;
 
-		objects[i]->Bounds.Transform(worldBounds, objects[i]->world);
+		objects[i]->Bounds.Transform(worldBounds, objects[i]->World);
 		if (lightAabb.Contains(worldBounds) != DirectX::DISJOINT)
 		{
 			visibleObjects.push_back(i);
@@ -949,8 +949,8 @@ void LightingManager::ShadowPass(FrameResource* currFrameResource, ID3D12Graphic
 	for (auto& idx : visibleObjects)
 	{
 		auto& ri = *objects[idx];
-		const auto objectCb = currFrameResource->OpaqueObjCb[ri.uid]->Resource();
-		const int curLodIdx = ri.currentLODIdx;
+		const auto objectCb = currFrameResource->OpaqueObjCb[ri.Uid]->Resource();
+		const int curLodIdx = ri.CurrentLodIdx;
 
 		const MeshGeometry* curLodGeo = ri.Geo->at(curLodIdx).get();
 		const auto& vertexBuffer = curLodGeo->VertexBufferView();
@@ -958,14 +958,14 @@ void LightingManager::ShadowPass(FrameResource* currFrameResource, ID3D12Graphic
 		const auto& indexBuffer = curLodGeo->IndexBufferView();
 		cmdList->IASetIndexBuffer(&indexBuffer);
 
-		auto currentLod = ri.lodsData[curLodIdx];
-		for (size_t i = 0; i < currentLod.meshes.size(); i++)
+		auto currentLod = ri.LodsData[curLodIdx];
+		for (size_t i = 0; i < currentLod.Meshes.size(); i++)
 		{
-			const auto& meshData = currentLod.meshes.at(i);
-			const D3D12_GPU_VIRTUAL_ADDRESS meshCbAddress = objectCb->GetGPUVirtualAddress() + meshData.cbOffset;
+			const auto& meshData = currentLod.Meshes.at(i);
+			const D3D12_GPU_VIRTUAL_ADDRESS meshCbAddress = objectCb->GetGPUVirtualAddress() + meshData.CbOffset;
 			cmdList->SetGraphicsRootConstantBufferView(0, meshCbAddress);
-			cmdList->DrawIndexedInstanced(static_cast<UINT>(meshData.indexCount), 1, static_cast<UINT>(meshData.indexStart),
-			                              static_cast<UINT>(meshData.vertexStart), 0);
+			cmdList->DrawIndexedInstanced(static_cast<UINT>(meshData.IndexCount), 1, static_cast<UINT>(meshData.IndexStart),
+			                              static_cast<UINT>(meshData.VertexStart), 0);
 		}
 	}
 }
@@ -1008,9 +1008,9 @@ void LightingManager::CreateMiddlewareTexture()
 
 	D3D12_CLEAR_VALUE clearValue = {};
 	clearValue.Format = _middlewareTextureFormat;
-	clearValue.Color[0] = 0.690196097f;
-	clearValue.Color[1] = 0.768627524f;
-	clearValue.Color[2] = 0.870588303f;
+	clearValue.Color[0] = 0.f;
+	clearValue.Color[1] = 0.f;
+	clearValue.Color[2] = 0.f;
 	clearValue.Color[3] = 1.f;
 
 	CD3DX12_HEAP_PROPERTIES heapProps(D3D12_HEAP_TYPE_DEFAULT);

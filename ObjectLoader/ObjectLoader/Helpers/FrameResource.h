@@ -13,6 +13,7 @@ struct StaticObjectConstants
 struct OpaqueObjectConstants : public StaticObjectConstants
 {
     DirectX::XMFLOAT4X4 WorldInvTranspose = MathHelper::Identity4x4();
+    DirectX::XMFLOAT4X4 PrevWorld = MathHelper::Identity4x4();
 };
 
 struct MaterialConstants
@@ -45,6 +46,7 @@ struct MaterialConstants
 struct GBufferPassConstants
 {
     DirectX::XMFLOAT4X4 ViewProj = MathHelper::Identity4x4();
+    DirectX::XMFLOAT4X4 PrevViewProj = MathHelper::Identity4x4();
     DirectX::XMFLOAT3 EyePosW = { 0.0f, 0.0f, 0.0f };
     float DeltaTime = 0.0f;
     DirectX::XMFLOAT2 ScreenSize = { 0.0f, 0.0f };
@@ -167,17 +169,6 @@ struct TerrainTextures
     DirectX::XMFLOAT3 HighColor;
 };
 
-struct TaaConstants
-{
-	DirectX::XMFLOAT4X4 PrevView = MathHelper::Identity4x4();
-	DirectX::XMFLOAT4X4 PrevProj = MathHelper::Identity4x4();
-	DirectX::XMFLOAT4X4 PrevInvProj = MathHelper::Identity4x4();
-	DirectX::XMFLOAT4X4 CurrInvView = MathHelper::Identity4x4();
-	DirectX::XMFLOAT4X4 CurrInvProj = MathHelper::Identity4x4();
-	DirectX::XMFLOAT2 ScreenSize = { 0.0f, 0.0f };
-	float Pad[2] = {0.0f, 0.0f};
-};
-
 struct AtmosphereConstants
 {
     DirectX::XMFLOAT3 DirToSun = {1.0f, 1.0f, 1.0f};
@@ -233,7 +224,6 @@ public:
 	std::unique_ptr<UploadBuffer<GridInfo>> GridInfoCb = nullptr;
     std::unique_ptr<UploadBuffer<TerrainTextures>> TerrainTexturesCb = nullptr;
 
-	std::unique_ptr<UploadBuffer<TaaConstants>> TaaCb = nullptr;
 	std::unique_ptr<UploadBuffer<AtmosphereConstants>> AtmosphereCb = nullptr;
 
     std::unordered_map<std::uint32_t, std::unique_ptr<UploadBuffer<OpaqueObjectConstants>>> OpaqueObjCb = {};

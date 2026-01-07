@@ -31,7 +31,7 @@ public:
 		return _aabb;
 	}
 
-	std::vector<LOD> lods() const
+	std::vector<Lod> lods() const
 	{
 		return std::move(_lods);
 	}
@@ -47,7 +47,7 @@ public:
 	}
 
 private:
-	std::vector<LOD> _lods = {};
+	std::vector<Lod> _lods = {};
 
 	std::vector<std::unique_ptr<Material>> _materials = {};
 
@@ -60,10 +60,10 @@ private:
 
 	bool _isTesselated = false;
 
-	Mesh ParseMesh(aiMesh* mesh, LOD& lod, DirectX::XMMATRIX parentWorld = DirectX::XMMatrixIdentity());
+	Mesh ParseMesh(aiMesh* mesh, Lod& lod, DirectX::XMMATRIX parentWorld = DirectX::XMMatrixIdentity());
 	void ParseMaterial(aiMaterial* material, aiTexture** textures);
-	std::vector<Mesh> ParseNode(aiNode* node, aiMesh** meshes, LOD& lod, DirectX::XMMATRIX parentWorld = DirectX::XMMatrixIdentity());
-	LOD ParseLOD(aiNode* node, aiMesh** meshes);
+	std::vector<Mesh> ParseNode(aiNode* node, aiMesh** meshes, Lod& lod, DirectX::XMMATRIX parentWorld = DirectX::XMMatrixIdentity());
+	Lod ParseLOD(aiNode* node, aiMesh** meshes);
 
 	//helper
 	bool LoadMatPropTexture(aiMaterial* material, Material* newMaterial, aiTexture** textures, MatProp property, aiTextureType texType);

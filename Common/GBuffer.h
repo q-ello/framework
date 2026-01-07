@@ -9,7 +9,8 @@ enum class GBufferInfo : uint8_t
 	Normals,
 	Orm,
 	TexCoord,
-	Count, //depth is separate so count is before that
+	Velocity,
+	Count, //depth and velocity are separate so count is before that
 	Depth,
 };
 
@@ -31,16 +32,23 @@ public:
 
 	void ClearInfo(const FLOAT* color);
 
-	static int InfoCount()
+	static int InfoCount(const bool forRtvs = true)
 	{
-		return static_cast<int>(GBufferInfo::Count);
+		if (forRtvs)
+		{
+			return static_cast<int>(GBufferInfo::Count);
+		}
+		else
+		{
+			return static_cast<int>(GBufferInfo::Count) - 1;
+		}
 	}
 
-	void ChangeRtVsState(D3D12_RESOURCE_STATES stateAfter);
+	void ChangeRtvsState(D3D12_RESOURCE_STATES stateAfter);
 	void ChangeDsvState(D3D12_RESOURCE_STATES stateAfter, const int depthIndex = CurrentDepth);
 	void ChangeBothDepthState(D3D12_RESOURCE_STATES stateAfter);
 
-	std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> RtVs() const;
+	std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> Rtvs() const;
 
 	static constexpr DXGI_FORMAT infoFormats[static_cast<int>(GBufferInfo::Count)] = {
 	DXGI_FORMAT_R8G8B8A8_UNORM,			// Diffuse
@@ -48,6 +56,7 @@ public:
 	DXGI_FORMAT_R16G16B16A16_FLOAT,		//Emissive
 	DXGI_FORMAT_R8G8B8A8_UNORM,			//ORM
 	DXGI_FORMAT_R16G16_FLOAT,			//Tex Coords
+	DXGI_FORMAT_R16G16_FLOAT,			//Velocity
 	};
 
 	static constexpr DXGI_FORMAT depthFormat = DXGI_FORMAT_R24G8_TYPELESS;

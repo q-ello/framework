@@ -153,7 +153,7 @@ std::unique_ptr<Model> ModelManager::ParseAsOneObject()
 		_scene->mMeshes, _scene->mTextures, _fileLocation);
 }
 
-LOD ModelManager::ParseAsLodObject() const
+Lod ModelManager::ParseAsLodObject() const
 {
 	if (_scene == nullptr)
 	{

@@ -56,6 +56,8 @@ public:
 	// Get View/Proj matrices.
 	DirectX::XMMATRIX GetView()const;
 	DirectX::XMMATRIX GetProj()const;
+	DirectX::XMMATRIX GetPrevView()const;
+	DirectX::XMMATRIX GetPrevProj()const;
 	DirectX::XMMATRIX GetInvView()const;
 	DirectX::XMMATRIX GetInvProj()const;
 
