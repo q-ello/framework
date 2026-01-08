@@ -47,4 +47,5 @@ private:
     LightingManager* _lightingManager = nullptr;
     
     int _framesDirty;
+    
 };
