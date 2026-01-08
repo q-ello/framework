@@ -127,6 +127,13 @@ void MyApp::Update(const GameTimer& gt)
 	_postProcessManager->UpdateSsrParameters(_currFrameResource);
 	_atmosphereManager->UpdateParameters(_currFrameResource);
 	_terrainManager->UpdateTerrainCb(_currFrameResource);
+	
+	//animation
+	if (_timeSpeed != 0.f)
+	{
+		_timeInMinutes += gt.DeltaTime() * _timeSpeed;
+		UpdateDirToSun();
+	}
 }
 
 void MyApp::Draw(const GameTimer& gt)
@@ -735,6 +742,12 @@ void MyApp::DrawAtmosphere(int& btnId)
 	{
 		ImGui::Checkbox("Enabled##atmosphere", &_atmosphereEnabled);
 		{
+			ImGui::Text("Time Speed");
+			ImGui::SameLine();
+			ImGui::SetNextItemWidth(50.0f);
+			ImGui::DragFloat("##atmosphere-time-speed", &_timeSpeed, 0.1f, -100.0f, 100.0f);
+		}
+		{
 			ImGui::Text("Time");
 			ImGui::SameLine();
 			ImGui::SetNextItemWidth(50.0f);
@@ -746,8 +759,11 @@ void MyApp::DrawAtmosphere(int& btnId)
 			ImGui::Text("h");
 			ImGui::SameLine();
 			ImGui::SetNextItemWidth(50.0f);
-			if (ImGui::DragInt("##atmosphere-time-in-minutes", &_timeInMinutes, 1, -1, 60))
+			//so that looks still fine and not 1.387
+			int timeInMinutesInt = static_cast<int>(_timeInMinutes);
+			if (ImGui::DragInt("##atmosphere-time-in-minutes", &timeInMinutesInt, 1, -1, 60))
 			{
+				_timeInMinutes = static_cast<float>(timeInMinutesInt);
 				UpdateDirToSun();
 			}
 			ImGui::SameLine();
@@ -1749,15 +1765,15 @@ void MyApp::UpdateDirToSun()
 {
 	//I like modulo better but I guess this way is faster.
 	{
-		if (_timeInMinutes > 59)
+		if (_timeInMinutes > 59.f)
 		{
 			_timeInHours++;
-			_timeInMinutes = 0;
+			_timeInMinutes = 0.f;
 		}
-		else if (_timeInMinutes < 0)
+		else if (_timeInMinutes < 0.f)
 		{
 			_timeInHours--;
-			_timeInMinutes = 59;
+			_timeInMinutes = 59.f;
 		}
 	
 		if (_timeInHours > 23)
@@ -1766,7 +1782,7 @@ void MyApp::UpdateDirToSun()
 			_timeInHours = 23;
 	}
 	
-	const int timeTotal = _timeInHours * 60 + _timeInMinutes;
+	const float timeTotal = static_cast<float>(_timeInHours) * 60.f + _timeInMinutes;
 		
 	constexpr float minutesInDay = 12.f * 60.f;
 	

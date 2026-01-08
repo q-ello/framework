@@ -168,7 +168,7 @@ private:
 	bool _taaEnabled = false;
 	bool _atmosphereEnabled = false;	
 	int _timeInHours = 0;
-	int _timeInMinutes = 0;
-	
+	float _timeInMinutes = 0.f;
+	float _timeSpeed = 1.0f;
 };
 
