@@ -48,7 +48,7 @@ private:
     Microsoft::WRL::ComPtr<ID3D12Resource> _instanceBuffer;
     UINT _instanceBufferSize = 0;
 
-    UINT _instanceCount = 0;
+    int _instanceCount = -1;
     int _width;
     int _height;
     UINT _tlasSrvIndex;

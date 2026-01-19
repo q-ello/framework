@@ -284,13 +284,27 @@ void GeometryManager::BuildBlasForMesh(MeshGeometry& geo)
 	desc.DestAccelerationStructureData = geo.Rt->Blas->GetGPUVirtualAddress();
 	
 	const auto& cmdList = UploadManager::UploadCmdList;
+	{
+		D3D12_RESOURCE_BARRIER barriers[1] = {};
+
+		// Scratch → UAV
+		barriers[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+		barriers[0].Transition.pResource = geo.Rt->Scratch.Get();
+		barriers[0].Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
+		barriers[0].Transition.StateAfter  = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+		barriers[0].Transition.Subresource =
+			D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+
+		cmdList->ResourceBarrier(1, barriers);
+
+	}
+	
 	cmdList->BuildRaytracingAccelerationStructure(&desc, 0, nullptr);
 	
 	D3D12_RESOURCE_BARRIER barrier = {};
 	barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
 	barrier.UAV.pResource = geo.Rt->Blas.Get();
 	cmdList->ResourceBarrier(1, &barrier);
-
 }
 
 void GeometryManager::UnloadModel(const std::string& modelName)

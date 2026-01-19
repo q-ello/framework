@@ -280,7 +280,7 @@ Microsoft::WRL::ComPtr<ID3D12Resource> UploadManager::CreateUavBuffer(const UINT
 			&heapProps,
 			D3D12_HEAP_FLAG_NONE,
 			&desc,
-			D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+			D3D12_RESOURCE_STATE_COMMON,
 			nullptr,
 			IID_PPV_ARGS(&buffer)));
 

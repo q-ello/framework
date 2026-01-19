@@ -4,6 +4,7 @@
 #include <iostream>
 
 #include "imgui/backends/imgui_impl_win32.h"
+#include "Managers/UploadManager.h"
 
 #pragma comment(lib, "ComCtl32.lib")
 
@@ -1707,6 +1708,7 @@ void MyApp::AddRenderItem(ModelData data)
 		{
 			GeometryManager::BuildBlasForMesh(*lod.get());
 		}
+		UploadManager::ExecuteUploadCommandList();
 	}
 	_selectedModels.insert(_objectsManager->AddRenderItem(_device.Get(), std::move(data)));
 }
@@ -1820,6 +1822,7 @@ void MyApp::AddLod()
 			if (_supportsRayTracing)
 			{
 				GeometryManager::BuildBlasForMesh(*(GeometryManager::Geometries()[ri->Name].end() - 1)->get());
+				UploadManager::ExecuteUploadCommandList();
 			}
 			AddToast("Your LOD was added as LOD" + std::to_string(lodIdx) + "!");
 		}

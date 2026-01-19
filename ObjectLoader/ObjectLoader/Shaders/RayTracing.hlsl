@@ -3,7 +3,7 @@
 RaytracingAccelerationStructure SceneBVH : register(t0);
 Texture2D<float4> gBufferNorm : register(t1);
 Texture2D<float4> gBufferDepth : register(t2);
-RWTexture2D<float4> shadowMask : register(u0);
+RWTexture2D<float> shadowMask : register(u0);
 
 cbuffer SunCB : register(b1)
 {
@@ -28,10 +28,11 @@ void RayGenShadows()
 
     float3 pos  = ComputeWorldPos(uv, gBufferDepth);
     float3 norm = normalize(gBufferNorm[pixel].xyz);
+    float depth = gBufferDepth[pixel].x;
 
-    if (all(pos == 0))
+    if (depth >= 0.99f)
     {
-        shadowMask[pixel] = float4(1,1,1,1);
+        shadowMask[pixel] = 1;
         return;
     }
 
@@ -40,7 +41,7 @@ void RayGenShadows()
     RayDesc ray;
     ray.Origin = pos + norm * 1e-3; // bias
     ray.Direction = rayDir;
-    ray.TMin = 0.0;
+    ray.TMin = 0.001;
     ray.TMax = 1e6;
 
     ShadowPayload payload;
@@ -57,14 +58,14 @@ void RayGenShadows()
     );
 
     float shadow = payload.occluded ? 0.0 : 1.0;
-    shadowMask[pixel] = float4(shadow.xxx, 1.0);
+    shadowMask[pixel] = shadow.x;
 }
 
 [shader("closesthit")]
 void ShadowClosestHit(inout ShadowPayload payload,
                       BuiltInTriangleIntersectionAttributes attr)
 {
-    payload.occluded = 1;
+    payload.occluded = 0;
 }
 
 [shader("miss")]
