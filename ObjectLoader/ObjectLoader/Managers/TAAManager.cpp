@@ -22,7 +22,7 @@ void TaaManager::Init(const int width, const int height)
 void TaaManager::BindToManagers(LightingManager* lightingManager, GBuffer* buffer, Camera* camera)
 {
 	_lightingManager = lightingManager;
-	_fullscreenVs = _lightingManager->GetFullScreenVS();
+	_fullscreenVs = _lightingManager->GetFullScreenVs();
 	_gBuffer = buffer;
 	_camera = camera;
 }
@@ -161,13 +161,13 @@ void TaaManager::BuildTextures()
 	}
 }
 
-void TaaManager::ChangeHistoryState(ID3D12GraphicsCommandList* cmdList, const int index, const D3D12_RESOURCE_STATES newState)
+void TaaManager::ChangeHistoryState(ID3D12GraphicsCommandList4* cmdList, const int index, const D3D12_RESOURCE_STATES newState)
 {
 	RtvSrvTexture& texture = _historyTextures[index];
 	BasicUtil::ChangeTextureState(cmdList, texture, newState);
 }
 
-void TaaManager::ApplyTaa(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource)
+void TaaManager::ApplyTaa(ID3D12GraphicsCommandList4* cmdList, const FrameResource* currFrameResource)
 {
 	_gBuffer->ChangeBothDepthState(D3D12_RESOURCE_STATE_GENERIC_READ);
 	

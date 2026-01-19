@@ -13,13 +13,14 @@
 #include "../Managers/ModelManager.h"
 #include <sstream>
 #include "imgui/backends/imgui_impl_dx12.h"
-#include "../Managers/OpaqueObjectManager.h"
+#include "../Managers/EditableObjectManager.h"
 #include "../Managers/UnlitObjectManager.h"
 #include "../Managers/PostProcessManager.h"
 #include "../Managers/CubeMapManager.h"
 #include "../Managers/TerrainManager.h"
 #include "../Managers/TAAManager.h"
 #include "Managers/AtmosphereManager.h"
+#include "Managers/RayTracingManager.h"
 
 struct Toast {
 	std::string Message;
@@ -104,6 +105,7 @@ private:
 
 	void DrawHeader();
 	void DrawCameraSpeed() const;
+	void AddRenderItem(ModelData data);
 
 	//modals
 	void DrawImportModal();
@@ -140,6 +142,7 @@ private:
 	std::unique_ptr<TerrainManager> _terrainManager = nullptr;
 	std::unique_ptr<TaaManager> _taaManager = nullptr;
 	std::unique_ptr<AtmosphereManager> _atmosphereManager = nullptr;
+	std::unique_ptr<RayTracingManager> _rayTracingManager = nullptr;
 
 	GBufferPassConstants _gBufferCb;
 	LightingPassConstants _lightingCb;
@@ -166,9 +169,12 @@ private:
 	bool _vignetting = false;
 
 	bool _taaEnabled = false;
+
 	bool _atmosphereEnabled = false;	
 	int _timeInHours = 0;
 	float _timeInMinutes = 0.f;
 	float _timeSpeed = 1.0f;
+
+	bool _rayTracingEnabled = false;
 };
 

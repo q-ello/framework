@@ -28,7 +28,7 @@ public:
 	void Init();
 
 	void AddObjectToResource(const FrameResource* currFrameResource) const;
-	void Draw(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource) const;
+	void Draw(ID3D12GraphicsCommandList4* cmdList, const FrameResource* currFrameResource) const;
 
 	std::string EnvironmentName(CubeMap type) const
 	{

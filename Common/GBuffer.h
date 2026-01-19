@@ -17,7 +17,7 @@ enum class GBufferInfo : uint8_t
 class GBuffer
 {
 public:
-	GBuffer(ID3D12Device* device, ID3D12GraphicsCommandList* cmdList, int width, int height);
+	GBuffer(ID3D12Device* device, ID3D12GraphicsCommandList4* cmdList, int width, int height);
 	~GBuffer() = default;
 	GBuffer(GBuffer&) = delete;
 	GBuffer& operator=(GBuffer&) = delete;
@@ -52,8 +52,8 @@ public:
 
 	static constexpr DXGI_FORMAT infoFormats[static_cast<int>(GBufferInfo::Count)] = {
 	DXGI_FORMAT_R8G8B8A8_UNORM,			// Diffuse
-	DXGI_FORMAT_R16G16B16A16_FLOAT,		// Normals
 	DXGI_FORMAT_R16G16B16A16_FLOAT,		//Emissive
+	DXGI_FORMAT_R16G16B16A16_FLOAT,		// Normals
 	DXGI_FORMAT_R8G8B8A8_UNORM,			//ORM
 	DXGI_FORMAT_R16G16_FLOAT,			//Tex Coords
 	DXGI_FORMAT_R16G16_FLOAT,			//Velocity
@@ -81,6 +81,6 @@ private:
 	RtvSrvTexture _info[static_cast<int>(GBufferInfo::Count)];
 	RtvSrvTexture _depths[depthsNum];
 
-	Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> _cmdList;
+	Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4> _cmdList;
 	Microsoft::WRL::ComPtr<ID3D12Device> _device;
 };

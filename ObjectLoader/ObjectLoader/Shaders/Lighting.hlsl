@@ -6,9 +6,13 @@ Texture2D gNormal : register(t2);
 Texture2D gORM : register(t3);
 Texture2D gTexCoord : register(t4);
 Texture2D gDepth : register(t5);
-Texture2DArray gCascadesShadowMap : register(t6);
-Texture2DArray gShadowMap : register(t7);
-Texture2D gShadowMask : register(t8);
+Texture2D gShadowMask : register(t6);
+#ifdef CSM
+Texture2DArray gCascadesShadowMap : register(t7);
+Texture2DArray gShadowMap : register(t8);
+#else
+Texture2D gRtShadowMask : register(t7);
+#endif
 
 TextureCube gSkyIrradiance : register(t0, space2);
 TextureCube gSkyPrefiltered : register(t1, space2);
@@ -172,17 +176,19 @@ float4 DirLightingPS(VertexOut pin) : SV_Target
     float3 normalW = normalize(gNormal.Load(coords).xyz);
     float3 posOffseted = posW + normalW * 0.01f;
     
-    float shadowFactor;
+    float shadowFactor = 1.f;
     
     if (mainLightIsOn)
     {
         int cascadeIdx = CalculateCascadeIndex(posW);
         //main light intensity is 3
+#ifdef CSM
         shadowFactor = ShadowFactor(posOffseted, cascades[cascadeIdx].viewProj, cascadeIdx, gCascadesShadowMap);
+#else
+        shadowFactor = gRtShadowMask.Load(coords).x;
+#endif
         shadowFactor += gShadowMask.Sample(gsamLinearWrap, gTexCoord.Load(coords).xy).a * scale;
-        
         finalColor.xyz = PBRShading(coords, -mainLightDirection, mainLightColor, posW, saturate(shadowFactor), 1.f);
-        //finalColor.xyz *= lerp(shadowFactor, 1.0f, gShadowMask.Sample(gsamLinearWrap, gTexCoord.Load(coords).xy * scale).a);
     }
     
     //spotlight in hand

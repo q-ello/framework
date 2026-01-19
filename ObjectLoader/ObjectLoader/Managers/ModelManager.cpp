@@ -41,9 +41,9 @@ namespace
 
 int ModelManager::ImportObject(const WCHAR* filename)
 {
-	std::wstring ws(filename);
+	const std::wstring ws(filename);
 	_fileLocation = ws.substr(0, ws.find_last_of('\\') + 1);
-	const std::string s(ws.begin(), ws.end());
+	const std::string s = BasicUtil::WStringToUtf8(ws);
 	_scene = _importer.ReadFile(s,
 		aiProcess_Triangulate |
 		aiProcess_JoinIdenticalVertices |
@@ -94,8 +94,8 @@ int ModelManager::ImportObject(const WCHAR* filename)
 
 bool ModelManager::ImportLodObject(const WCHAR* filename, const int meshesCount)
 {
-	std::wstring ws(filename);
-	const std::string s(ws.begin(), ws.end());
+	const std::wstring ws(filename);
+	const std::string s = BasicUtil::WStringToUtf8(ws);
 	_scene = _importer.ReadFile(s,
 		aiProcess_Triangulate |
 		aiProcess_JoinIdenticalVertices |

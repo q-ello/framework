@@ -246,6 +246,67 @@ void GeometryManager::DeleteLodGeometry(const std::string& name, const int lodId
 	UploadManager::ExecuteUploadCommandList();
 }
 
+void GeometryManager::BuildBlasForMesh(MeshGeometry& geo)
+{
+	geo.Rt = std::make_unique<RayTracingGeometry>();
+	
+	D3D12_RAYTRACING_GEOMETRY_DESC geometry;
+	geometry.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES;
+	geometry.Triangles.VertexBuffer.StartAddress = geo.VertexBufferGPU->GetGPUVirtualAddress();
+	geometry.Triangles.VertexBuffer.StrideInBytes = geo.VertexByteStride;
+	geometry.Triangles.VertexCount = geo.VertexBufferByteSize / geo.VertexByteStride;
+	geometry.Triangles.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT;
+	geometry.Triangles.IndexBuffer = geo.IndexBufferGPU->GetGPUVirtualAddress();
+	geometry.Triangles.IndexFormat = geo.IndexFormat;
+	geometry.Triangles.IndexCount = (geo.IndexFormat == DXGI_FORMAT_R32_UINT)
+		? geo.IndexBufferByteSize / sizeof(uint32_t)
+		: geo.IndexBufferByteSize / sizeof(uint16_t);
+	geometry.Triangles.Transform3x4 = 0;
+	geometry.Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE;
+	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS asInputs = {};
+	asInputs.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL;
+	asInputs.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
+	asInputs.pGeometryDescs = &geometry;
+	asInputs.NumDescs = 1;
+	asInputs.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE; //
+	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO asBuildInfo = {};
+	UploadManager::Device->GetRaytracingAccelerationStructurePrebuildInfo(&asInputs, &asBuildInfo);
+	
+	geo.Rt->ScratchSize = asBuildInfo.ScratchDataSizeInBytes;
+	geo.Rt->ResultSize = asBuildInfo.ResultDataMaxSizeInBytes;
+
+	geo.Rt->Scratch = UploadManager::CreateUavBuffer(asBuildInfo.ScratchDataSizeInBytes);
+	geo.Rt->Blas    = UploadManager::CreateAsBuffer(asBuildInfo.ResultDataMaxSizeInBytes);
+	
+	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC desc = {};
+	desc.Inputs = asInputs;
+	desc.ScratchAccelerationStructureData = geo.Rt->Scratch->GetGPUVirtualAddress();
+	desc.DestAccelerationStructureData = geo.Rt->Blas->GetGPUVirtualAddress();
+	
+	const auto& cmdList = UploadManager::UploadCmdList;
+	{
+		D3D12_RESOURCE_BARRIER barriers[1] = {};
+
+		// Scratch → UAV
+		barriers[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+		barriers[0].Transition.pResource = geo.Rt->Scratch.Get();
+		barriers[0].Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
+		barriers[0].Transition.StateAfter  = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+		barriers[0].Transition.Subresource =
+			D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+
+		cmdList->ResourceBarrier(1, barriers);
+
+	}
+	
+	cmdList->BuildRaytracingAccelerationStructure(&desc, 0, nullptr);
+	
+	D3D12_RESOURCE_BARRIER barrier = {};
+	barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+	barrier.UAV.pResource = geo.Rt->Blas.Get();
+	cmdList->ResourceBarrier(1, &barrier);
+}
+
 void GeometryManager::UnloadModel(const std::string& modelName)
 {
 	if (Geometries().find(modelName) != Geometries().end())

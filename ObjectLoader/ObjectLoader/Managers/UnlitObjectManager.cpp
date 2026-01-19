@@ -100,11 +100,11 @@ void UnlitObjectManager::BuildShaders()
 	_psShader = d3dUtil::CompileShader(L"Shaders\\Unlit.hlsl", nullptr, "UnlitPS", "ps_5_1");
 }
 
-void UnlitObjectManager::AddObjectToResource(Microsoft::WRL::ComPtr<ID3D12Device> device, FrameResource* currFrameResource)
+void UnlitObjectManager::AddObjectToResource(Microsoft::WRL::ComPtr<ID3D12Device5> device, FrameResource* currFrameResource)
 {
 }
 
-int UnlitObjectManager::AddRenderItem(ID3D12Device* device, ModelData&& modelData)
+int UnlitObjectManager::AddRenderItem(ID3D12Device5* device, ModelData&& modelData)
 {
 	auto renderItem = std::make_unique<UnlitRenderItem>();
 	renderItem->Uid = FrameResource::StaticObjectCount++;

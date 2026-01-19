@@ -4,6 +4,7 @@
 #include <iostream>
 
 #include "imgui/backends/imgui_impl_win32.h"
+#include "Managers/UploadManager.h"
 
 #pragma comment(lib, "ComCtl32.lib")
 
@@ -15,9 +16,6 @@ MyApp::MyApp(const HINSTANCE hInstance)
 
 MyApp::~MyApp()
 {
-	if (_device != nullptr)
-		FlushCommandQueue();
-
 	ImGui_ImplDX12_Shutdown();
 	ImGui_ImplWin32_Shutdown();
 	ImGui::DestroyContext();
@@ -95,6 +93,11 @@ void MyApp::OnResize()
 	{
 		_atmosphereManager->OnResize(mClientWidth, mClientHeight);
 	}
+
+	if (_supportsRayTracing && _rayTracingManager != nullptr)
+	{
+		_rayTracingManager->OnResize(mClientWidth, mClientHeight);
+	}
 	
 	_camera.UpdateFrustum();
 }
@@ -145,6 +148,11 @@ void MyApp::Draw(const GameTimer& gt)
 
 	DrawInterface();
 
+	if (_supportsRayTracing)
+	{
+		_rayTracingManager->UpdateData();
+	}
+
 	const auto cmdListAlloc = _currFrameResource->CmdListAlloc;
 
 	// Reuse the memory associated with command recording.
@@ -171,14 +179,24 @@ void MyApp::Draw(const GameTimer& gt)
 	else
 	{
 		const auto objects = _objectsManager->Objects();
-		_lightingManager->DrawShadows(mCommandList.Get(), _currFrameResource, objects);
+		//cascade maps are needed only if rt is disabled
+		if (!_rayTracingEnabled)
+			_lightingManager->DrawShadows(mCommandList.Get(), _currFrameResource, objects);
 		GBufferPass();
+
+		if (_rayTracingEnabled)
+		{
+			_rayTracingManager->DispatchRays(mCommandList.Get(), _currFrameResource);
+		}
+		
 		LightingPass();
 		if (_atmosphereEnabled)
 			_atmosphereManager->Draw(mCommandList.Get(), _currFrameResource);
-		
-		//we are getting rid of this one since we have atmosphere now
-		// _cubeMapManager->Draw(mCommandList.Get(), _currFrameResource);
+		else
+		{
+			//black screen is kinda sad, so I guess that won't hurt to draw skybox
+			_cubeMapManager->Draw(mCommandList.Get(), _currFrameResource);
+		}
 		
 		if (_taaEnabled)
 			_taaManager->ApplyTaa(mCommandList.Get(), _currFrameResource);
@@ -360,13 +378,19 @@ void MyApp::UpdateMainPassCBs(const GameTimer& gt)
 	currLightingCb->CopyData(0, _lightingCb);
 
 	_lightingManager->UpdateDirectionalLightCb(_currFrameResource);
+
+	const auto rayTracingCb = _currFrameResource->RayTracingCb.get();
+	RayTracingConstants rayTracCb;
+	float* lightDirection = _lightingManager->MainLightDirection();
+	rayTracCb.SunDirection = {lightDirection[0], lightDirection[1], lightDirection[2]};
+	rayTracingCb->CopyData(0, rayTracCb);
 }
 
 void MyApp::BuildDescriptorHeaps()
 {
 	//imgui heap
 	D3D12_DESCRIPTOR_HEAP_DESC heapDesc = {};
-	heapDesc.NumDescriptors = 1; // Adjust based on the number of UI textures
+	heapDesc.NumDescriptors = 32; // Adjust based on the number of UI textures
 	heapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 	heapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 
@@ -416,6 +440,11 @@ void MyApp::DrawInterface()
 		ImGui::Checkbox("Wireframe", &_isWireframe);
 		DrawPostProcesses();
 		ImGui::Checkbox("TAA Enabled", &_taaEnabled);
+		ImGui::BeginDisabled(!_supportsRayTracing);
+		ImGui::Checkbox("Ray Tracing Enabled", &_rayTracingEnabled);
+		if (!_supportsRayTracing)
+			ImGui::SetItemTooltip("Ray tracing is not supported in your device.");
+		ImGui::EndDisabled();
 		ImGui::EndTabItem();
 	}
 
@@ -671,7 +700,7 @@ void MyApp::DrawTerrainTexture(int& btnId, const int index, const char* label) c
 	const bool textureTabOpen = property->texture.UseTexture;
 	
 	// ReSharper disable once CppVariableCanBeMadeConstexpr
-	static const int propsNum = BasicUtil::EnumIndex(TerrainTexture::Count);
+	static const int propsNum = static_cast<int>(BasicUtil::EnumIndex(TerrainTexture::Count));
 	static std::vector<int> selectedTabs;
 	if (selectedTabs.size() == 0)
 	{
@@ -741,6 +770,7 @@ void MyApp::DrawAtmosphere(int& btnId)
 	if (ImGui::CollapsingHeader("Atmosphere"))
 	{
 		ImGui::Checkbox("Enabled##atmosphere", &_atmosphereEnabled);
+		ImGui::BeginDisabled(!_atmosphereEnabled);
 		{
 			ImGui::Text("Time Speed");
 			ImGui::SameLine();
@@ -830,6 +860,7 @@ void MyApp::DrawAtmosphere(int& btnId)
 				_atmosphereManager->SetDirty();
 			}
 		}
+		ImGui::EndDisabled();
 	}
 }
 
@@ -844,6 +875,8 @@ void MyApp::DrawHandSpotlight(int& btnId) const
 		light->Active = static_cast<int>(lightEnabled);
 	}
 	ImGui::PopID();
+
+	ImGui::BeginDisabled(!lightEnabled);
 
 	ImGui::PushID(btnId++);
 	ImGui::ColorEdit3("Color", &light->Color.x);
@@ -860,34 +893,45 @@ void MyApp::DrawHandSpotlight(int& btnId) const
 	ImGui::PushID(btnId++);
 	ImGui::SliderAngle("Angle", &light->Angle, 1.0f, 89.f);
 	ImGui::PopID();
+	
+	ImGui::EndDisabled();
 }
 
 void MyApp::DrawLightData(int& btnId) const
 {
-	//made a sun dependent on time of day so bye for now
-	// if (ImGui::CollapsingHeader("Directional Light", ImGuiTreeNodeFlags_DefaultOpen))
-	// {
-	// 	ImGui::Checkbox("Turn on", _lightingManager->IsMainLightOn());
-	//
-	// 	ImGui::Text("Direction");
-	// 	ImGui::SameLine();
-	// 	ImGui::PushID(btnId++);
-	// 	if (ImGui::DragFloat3("", _lightingManager->MainLightDirection(), 0.1f))
-	// 	{
-	// 		const float* dir = _lightingManager->MainLightDirection();
-	// 		XMVECTOR dirVec = XMVectorSet(-dir[0], -dir[1], -dir[2], 1.0f);
-	// 		dirVec = XMVector3Normalize(dirVec);
-	// 		XMStoreFloat3(&_atmosphereManager->Parameters.DirToSun, dirVec);
-	// 		_atmosphereManager->SetDirty();
-	// 	}
-	// 	ImGui::PopID();
-	//
-	// 	ImGui::Text("Color");
-	// 	ImGui::SameLine();
-	// 	ImGui::PushID(btnId++);
-	// 	ImGui::ColorEdit3("", _lightingManager->MainLightColor());
-	// 	ImGui::PopID();
-	// }
+	ImGui::BeginDisabled(_atmosphereEnabled);
+	if (ImGui::CollapsingHeader("Directional Light", ImGuiTreeNodeFlags_DefaultOpen))
+	 {
+	 	ImGui::Checkbox("Turn on", _lightingManager->IsMainLightOn());
+	 	
+	 	ImGui::BeginDisabled(!(*_lightingManager->IsMainLightOn()));
+	
+	 	ImGui::Text("Direction");
+	 	ImGui::SameLine();
+	 	ImGui::PushID(btnId++);
+	 	if (ImGui::DragFloat3("", _lightingManager->MainLightDirection(), 0.1f))
+	 	{
+	 		const float* dir = _lightingManager->MainLightDirection();
+	 		XMVECTOR dirVec = XMVectorSet(-dir[0], -dir[1], -dir[2], 1.0f);
+	 		dirVec = XMVector3Normalize(dirVec);
+	 		XMStoreFloat3(&_atmosphereManager->Parameters.DirToSun, dirVec);
+	 		_atmosphereManager->SetDirty();
+	 	}
+	 	ImGui::PopID();
+	
+	 	ImGui::Text("Color");
+	 	ImGui::SameLine();
+	 	ImGui::PushID(btnId++);
+	 	ImGui::ColorEdit3("", _lightingManager->MainLightColor());
+	 	ImGui::PopID();
+	 	
+	 	ImGui::EndDisabled();
+	 }
+	ImGui::EndDisabled();
+	if (_atmosphereEnabled)
+	{
+		ImGui::SetItemTooltip("Cannot configure that when atmosphere is enabled");
+	}
 	if (ImGui::CollapsingHeader("Spotlight in hand", ImGuiTreeNodeFlags_DefaultOpen))
 	{
 		DrawHandSpotlight(btnId);
@@ -924,6 +968,17 @@ void MyApp::DrawLocalLightData(int& btnId, const int lightIndex) const
 		}
 		const auto light = _lightingManager->GetLight(lightIndex);
 
+		bool lightEnabled = light->LightData.Active == 1;
+		ImGui::PushID(btnId++);
+		if (ImGui::Checkbox("Enabled", &lightEnabled))
+		{
+			light->LightData.Active = static_cast<int>(lightEnabled);
+			light->NumFramesDirty = gNumFrameResources;
+		}
+		ImGui::PopID();
+
+		ImGui::BeginDisabled(!lightEnabled);
+
 		ImGui::PushID(btnId++);
 		if (ImGui::RadioButton("Point Light", light->LightData.Type == 0) && light->LightData.Type != 0)
 		{
@@ -937,15 +992,8 @@ void MyApp::DrawLocalLightData(int& btnId, const int lightIndex) const
 			light->LightData.Type = 1;
 			_lightingManager->UpdateWorld(lightIndex);
 		}
-		bool lightEnabled = light->LightData.Active == 1;
 		ImGui::PopID();
-		ImGui::PushID(btnId++);
-		if (ImGui::Checkbox("Enabled", &lightEnabled))
-		{
-			light->LightData.Active = static_cast<int>(lightEnabled);
-			light->NumFramesDirty = gNumFrameResources;
-		}
-		ImGui::PopID();
+		
 		ImGui::PushID(btnId++);
 		if (ImGui::DragFloat3("Position", &light->LightData.Position.x, 0.1f))
 		{
@@ -985,6 +1033,7 @@ void MyApp::DrawLocalLightData(int& btnId, const int lightIndex) const
 			}
 			ImGui::PopID();
 		}
+		ImGui::EndDisabled();
 	}
 }
 
@@ -1069,6 +1118,7 @@ void MyApp::DrawMultiObjectTransform(int& btnId) const
 			for (const int idx : _selectedModels)
 			{
 				manager->Object(idx)->LockedScale = scale;
+				manager->Object(idx)->RayTracingDirty = true;
 				manager->Object(idx)->NumFramesDirty = gNumFrameResources;
 			}
 		}
@@ -1109,6 +1159,7 @@ void MyApp::DrawMultiObjectTransform(int& btnId) const
 					pos = after;
 				}
 				manager->Object(idx)->Transform[scaleIndex] = pos;
+				manager->Object(idx)->RayTracingDirty = true;
 				manager->Object(idx)->NumFramesDirty = gNumFrameResources;
 			}
 		}
@@ -1150,6 +1201,7 @@ void MyApp::DrawTransformInput(const std::string& label, const int btnId, const 
 			for (const int idx : _selectedModels)
 			{
 				manager->Object(idx)->Transform[transformIndex] = pos;
+				manager->Object(idx)->RayTracingDirty = true;
 				manager->Object(idx)->NumFramesDirty = gNumFrameResources;
 			}
 		}
@@ -1550,11 +1602,13 @@ void MyApp::DrawPostProcesses()
 	{
 		bool isDirty = false;
 		isDirty = ImGui::Checkbox("Enabled##godrays", &_godRays) || isDirty;
+		ImGui::BeginDisabled(!_godRays);
 		isDirty = ImGui::DragInt("Samples##godrays", &_postProcessManager->GodRaysParameters.SamplesCount, 5, 10, 100) || isDirty;
 		isDirty = ImGui::DragFloat("Decay##godrays", &_postProcessManager->GodRaysParameters.Decay, 0.05f, 0.1f, 1.0f) || isDirty;
 		isDirty = ImGui::DragFloat("Exposure##godrays", &_postProcessManager->GodRaysParameters.Exposure, 0.05f, 0.1f, 1.0f) || isDirty;
 		isDirty = ImGui::DragFloat("Density##godrays", &_postProcessManager->GodRaysParameters.Density, 0.05f, 0.1f, 1.0f) || isDirty;
 		isDirty = ImGui::DragFloat("Weight##godrays", &_postProcessManager->GodRaysParameters.Weight, 0.05f, 0.1f, 1.0f) || isDirty;
+		ImGui::EndDisabled();
 		if (isDirty)
 			_postProcessManager->UpdateGodRaysParameters();
 	}
@@ -1563,22 +1617,28 @@ void MyApp::DrawPostProcesses()
 	{
 		//no need for dirty flag 'cause we update it every frame
 		ImGui::Checkbox("Enabled##ssr", &_ssr);
+		ImGui::BeginDisabled(!_ssr);
 		ImGui::DragInt("Step Size##ssr", &_postProcessManager->SsrParameters.StepScale, 1, 1, 20);
 		ImGui::DragInt("Max Screen Distance##ssr", &_postProcessManager->SsrParameters.MaxScreenDistance, 5, 100, 1000);
 		ImGui::DragInt("Max Steps##ssr", &_postProcessManager->SsrParameters.MaxSteps, 5, 100, 500);
+		ImGui::EndDisabled();
 	}
 
 	if (ImGui::CollapsingHeader("Chromatic Aberration"))
 	{
 		//no need for dirty flag 'cause we just have one root constant
 		ImGui::Checkbox("Enabled##chromaticaberration", &_chromaticAberration);
+		ImGui::BeginDisabled(!_chromaticAberration);
 		ImGui::DragFloat("Strength##chromaticaberration", &_postProcessManager->ChromaticAberrationStrength, 0.01f, 0.0f, 0.1f);
+		ImGui::EndDisabled();
 	}
 
 	if (ImGui::CollapsingHeader("Vignetting"))
 	{
 		ImGui::Checkbox("Enabled##vignetting", &_vignetting);
+		ImGui::BeginDisabled(!_vignetting);
 		ImGui::DragFloat("Vignetting Power##vignetting", &_postProcessManager->VignettingPower, 0.1f, 1.f, 2.0f);
+		ImGui::EndDisabled();
 	}
 }
 
@@ -1640,6 +1700,19 @@ void MyApp::DrawCameraSpeed() const
 	ImGui::Text(("Camera speed: " + cameraSpeedStr.substr(0, cameraSpeedStr.find_last_of('.') + 3)).c_str());
 }
 
+void MyApp::AddRenderItem(ModelData data)
+{
+	if (_supportsRayTracing)
+	{
+		for (auto& lod : GeometryManager::Geometries()[data.CroppedName])
+		{
+			GeometryManager::BuildBlasForMesh(*lod.get());
+		}
+		UploadManager::ExecuteUploadCommandList();
+	}
+	_selectedModels.insert(_objectsManager->AddRenderItem(_device.Get(), std::move(data)));
+}
+
 void MyApp::DrawImportModal()
 {
 	const ImVec2 center = ImGui::GetMainViewport()->GetCenter();
@@ -1673,7 +1746,9 @@ void MyApp::DrawImportModal()
 			//merge meshes into one file
 			ModelData data = std::move(GeometryManager::BuildModelGeometry(_modelManager->ParseAsOneObject().get()));
 			_selectedModels.clear();
-			_selectedModels.insert(_objectsManager->AddRenderItem(_device.Get(), std::move(data)));
+			AddRenderItem(std::move(data));
+
+			
 			ImGui::CloseCurrentPopup();
 		}
 
@@ -1707,7 +1782,7 @@ void MyApp::AddModel()
 			//generating it as one mesh
 			ModelData data = GeometryManager::BuildModelGeometry(model.get());
 			_selectedModels.clear();
-			_selectedModels.insert(_objectsManager->AddRenderItem(_device.Get(), std::move(data)));
+			AddRenderItem(std::move(data));
 		}
 		else if (modelCount >= 20)
 		{
@@ -1726,7 +1801,7 @@ void MyApp::AddMultipleModels()
 		ModelData data = std::move(GeometryManager::BuildModelGeometry(model.get()));
 		if (data.LodsData.empty())
 			continue;
-		_selectedModels.insert(_objectsManager->AddRenderItem(_device.Get(), std::move(data)));
+		AddRenderItem(std::move(data));
 	}
 }
 
@@ -1744,6 +1819,11 @@ void MyApp::AddLod()
 			//generating it as one mesh
 			const int lodIdx = _objectsManager->AddLod(_device.Get(), data, ri);
 			GeometryManager::AddLodGeometry(ri->Name, lodIdx, lod);
+			if (_supportsRayTracing)
+			{
+				GeometryManager::BuildBlasForMesh(*(GeometryManager::Geometries()[ri->Name].end() - 1)->get());
+				UploadManager::ExecuteUploadCommandList();
+			}
 			AddToast("Your LOD was added as LOD" + std::to_string(lodIdx) + "!");
 		}
 		CoTaskMemFree(pszFilePath);
@@ -1763,7 +1843,7 @@ void MyApp::AddShadowMask() const
 
 void MyApp::UpdateDirToSun()
 {
-	//I like modulo better but I guess this way is faster.
+	//I like modulo better, but I guess this way is faster.
 	{
 		if (_timeInMinutes > 59.f)
 		{
@@ -1801,17 +1881,25 @@ void MyApp::UpdateDirToSun()
 
 void MyApp::InitManagers()
 {
+	_rayTracingManager = std::make_unique<RayTracingManager>(_device.Get(), mClientWidth, mClientHeight);
+	if (_supportsRayTracing)
+	{
+		_rayTracingManager->Init();
+		_rayTracingManager->BindToOtherData(_gBuffer.get());
+	}
+	
 	_objectsManager = std::make_unique<EditableObjectManager>(_device.Get());
 	_objectsManager->Init();
-	_objectsManager->SetCamera(&_camera);
+	_objectsManager->BindToOtherData(&_camera, _rayTracingManager.get());
+	
 	_gridManager = std::make_unique<UnlitObjectManager>(_device.Get());
 	_gridManager->Init();
 
 	_cubeMapManager = std::make_unique<CubeMapManager>(_device.Get());
 	_cubeMapManager->Init();
 
-	_lightingManager = std::make_unique<LightingManager>(_device.Get(), mClientWidth, mClientHeight);
-	_lightingManager->BindToOtherData(_gBuffer.get(), _cubeMapManager.get(), &_camera, _objectsManager->InputLayout());
+	_lightingManager = std::make_unique<LightingManager>(_device.Get(), mClientWidth, mClientHeight, _supportsRayTracing);
+	_lightingManager->BindToOtherData(_gBuffer.get(), _cubeMapManager.get(), &_camera, _objectsManager->InputLayout(), _rayTracingManager.get());
 	_lightingManager->Init();
 
 	_postProcessManager = std::make_unique<PostProcessManager>(_device.Get());
@@ -1839,7 +1927,7 @@ void MyApp::InitManagers()
 		// Convert to local time.
 		_localtime32_s(&newtime, &time32);
 		_timeInHours = newtime.tm_hour;
-		_timeInMinutes = newtime.tm_min;
+		_timeInMinutes = static_cast<float>(newtime.tm_min);
 
 		UpdateDirToSun();
 	}
@@ -1872,12 +1960,12 @@ void MyApp::LightingPass() const
 	_gBuffer->ChangeRtvsState(D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 	_gBuffer->ChangeDsvState(D3D12_RESOURCE_STATE_DEPTH_READ);
 
-	_lightingManager->DrawDirLight(mCommandList.Get(), _currFrameResource);
+	_lightingManager->DrawDirLight(mCommandList.Get(), _currFrameResource, _rayTracingEnabled);
 
 	if (_lightingManager->LightsCount() > 0)
 	{
 		_gBuffer->ChangeDsvState(D3D12_RESOURCE_STATE_DEPTH_READ);
-		_lightingManager->DrawLocalLights(mCommandList.Get(), _currFrameResource);
+		_lightingManager->DrawLocalLights(mCommandList.Get(), _currFrameResource, _rayTracingEnabled);
 
 		if (*_lightingManager->DebugEnabled())
 		{
@@ -1885,7 +1973,7 @@ void MyApp::LightingPass() const
 		}
 	}
 
-	_lightingManager->DrawEmissive(mCommandList.Get(), _currFrameResource);
+	//_lightingManager->DrawEmissive(mCommandList.Get(), _currFrameResource);
 }
 
 void MyApp::WireframePass() const

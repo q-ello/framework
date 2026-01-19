@@ -36,11 +36,11 @@ void PostProcessManager::BindToManagers(GBuffer* gbuffer, LightingManager* light
 	_lightingManager = lightingManager;
 	_camera = camera;
 
-	_fullscreenLightVs = _lightingManager->GetFullScreenVSWithSamplers();
-	_fullscreenVs = _lightingManager->GetFullScreenVS();
+	_fullscreenLightVs = _lightingManager->GetFullScreenVsWithSamplers();
+	_fullscreenVs = _lightingManager->GetFullScreenVs();
 }
 
-void PostProcessManager::DrawGodRaysPass(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource) const
+void PostProcessManager::DrawGodRaysPass(ID3D12GraphicsCommandList4* cmdList, const FrameResource* currFrameResource)
 {
 	if (!*_lightingManager->IsMainLightOn())
 		return;
@@ -49,10 +49,10 @@ void PostProcessManager::DrawGodRaysPass(ID3D12GraphicsCommandList* cmdList, con
 	GodRaysPass(cmdList, currFrameResource);
 }
 
-void PostProcessManager::OcclusionMaskPass(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource) const
+void PostProcessManager::OcclusionMaskPass(ID3D12GraphicsCommandList4* cmdList, const FrameResource* currFrameResource)
 {
 	//occlusion mask to rtv
-	ChangeTextureState(cmdList, _lightOcclusionMask, D3D12_RESOURCE_STATE_RENDER_TARGET);
+	BasicUtil::ChangeTextureState(cmdList, _lightOcclusionMask, D3D12_RESOURCE_STATE_RENDER_TARGET);
 
 	cmdList->RSSetViewports(1, &_occlusionMaskViewport);
 	cmdList->RSSetScissorRects(1, &_occlusionMaskScissorRect);
@@ -77,7 +77,7 @@ void PostProcessManager::OcclusionMaskPass(ID3D12GraphicsCommandList* cmdList, c
 	cmdList->DrawInstanced(3, 1, 0, 0);
 
 	//occlusion mask to srv
-	ChangeTextureState(cmdList, _lightOcclusionMask, D3D12_RESOURCE_STATE_GENERIC_READ);
+	BasicUtil::ChangeTextureState(cmdList, _lightOcclusionMask, D3D12_RESOURCE_STATE_GENERIC_READ);
 }
 
 void PostProcessManager::GodRaysPass(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource) const
@@ -104,7 +104,7 @@ void PostProcessManager::GodRaysPass(ID3D12GraphicsCommandList* cmdList, const F
 	cmdList->DrawInstanced(3, 1, 0, 0);
 }
 
-void PostProcessManager::DrawSsr(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource) const
+void PostProcessManager::DrawSsr(ID3D12GraphicsCommandList4* cmdList, const FrameResource* currFrameResource)
 {
 	cmdList->SetPipelineState(_ssrPso.Get());
 	cmdList->SetGraphicsRootSignature(_ssrRootSignature.Get());
@@ -120,19 +120,19 @@ void PostProcessManager::DrawSsr(ID3D12GraphicsCommandList* cmdList, const Frame
 	const auto ssrCb = currFrameResource->SsrCb->Resource();
 	cmdList->SetGraphicsRootConstantBufferView(3, ssrCb->GetGPUVirtualAddress());
 
-	ChangeTextureState(cmdList, _ssrTexture, D3D12_RESOURCE_STATE_RENDER_TARGET);
+	BasicUtil::ChangeTextureState(cmdList, _ssrTexture, D3D12_RESOURCE_STATE_RENDER_TARGET);
 
 	const auto rtDesc = TextureManager::RtvHeapAllocator->GetCpuHandle(_ssrTexture.OtherIndex);
 
 	cmdList->OMSetRenderTargets(1, &rtDesc, true, nullptr);
 	cmdList->DrawInstanced(3, 1, 0, 0);
 
-	ChangeTextureState(cmdList, _ssrTexture, D3D12_RESOURCE_STATE_GENERIC_READ);
+	BasicUtil::ChangeTextureState(cmdList, _ssrTexture, D3D12_RESOURCE_STATE_GENERIC_READ);
 
 	_lightingManager->SetFinalTextureIndex(_ssrTexture.SrvIndex);
 }
 
-void PostProcessManager::DrawChromaticAberration(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource) const
+void PostProcessManager::DrawChromaticAberration(ID3D12GraphicsCommandList4* cmdList, const FrameResource* currFrameResource)
 {
 	//just in case
 	_lightingManager->ChangeMiddlewareState(cmdList, D3D12_RESOURCE_STATE_GENERIC_READ);
@@ -147,19 +147,19 @@ void PostProcessManager::DrawChromaticAberration(ID3D12GraphicsCommandList* cmdL
 
 	cmdList->SetGraphicsRoot32BitConstants(2, 1, &ChromaticAberrationStrength, 0);
 
-	ChangeTextureState(cmdList, _chromaticAberrationTexture, D3D12_RESOURCE_STATE_RENDER_TARGET);
+	BasicUtil::ChangeTextureState(cmdList, _chromaticAberrationTexture, D3D12_RESOURCE_STATE_RENDER_TARGET);
 
 	const auto rtDesc = TextureManager::RtvHeapAllocator->GetCpuHandle(_chromaticAberrationTexture.OtherIndex);
 
 	cmdList->OMSetRenderTargets(1, &rtDesc, true, nullptr);
 	cmdList->DrawInstanced(3, 1, 0, 0);
 
-	ChangeTextureState(cmdList, _chromaticAberrationTexture, D3D12_RESOURCE_STATE_GENERIC_READ);
+	BasicUtil::ChangeTextureState(cmdList, _chromaticAberrationTexture, D3D12_RESOURCE_STATE_GENERIC_READ);
 
 	_lightingManager->SetFinalTextureIndex(_chromaticAberrationTexture.SrvIndex);
 }
 
-void PostProcessManager::DrawVignetting(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource) const
+void PostProcessManager::DrawVignetting(ID3D12GraphicsCommandList4* cmdList, const FrameResource* currFrameResource)
 {
 	//just in case
 	_lightingManager->ChangeMiddlewareState(cmdList, D3D12_RESOURCE_STATE_GENERIC_READ);
@@ -174,13 +174,13 @@ void PostProcessManager::DrawVignetting(ID3D12GraphicsCommandList* cmdList, cons
 
 	cmdList->SetGraphicsRoot32BitConstants(2, 1, &VignettingPower, 0);
 
-	ChangeTextureState(cmdList, _vignettingTexture, D3D12_RESOURCE_STATE_RENDER_TARGET);
+	BasicUtil::ChangeTextureState(cmdList, _vignettingTexture, D3D12_RESOURCE_STATE_RENDER_TARGET);
 
 	const auto rtDesc = TextureManager::RtvHeapAllocator->GetCpuHandle(_vignettingTexture.OtherIndex);
 	cmdList->OMSetRenderTargets(1, &rtDesc, true, nullptr);
 	cmdList->DrawInstanced(3, 1, 0, 0);
 
-	ChangeTextureState(cmdList, _vignettingTexture, D3D12_RESOURCE_STATE_GENERIC_READ);
+	BasicUtil::ChangeTextureState(cmdList, _vignettingTexture, D3D12_RESOURCE_STATE_GENERIC_READ);
 
 	_lightingManager->SetFinalTextureIndex(_vignettingTexture.SrvIndex);
 }
@@ -562,19 +562,6 @@ void PostProcessManager::BuildTextures()
 		_device->CreateShaderResourceView(_vignettingTexture.Resource.Get(), &shaderResourceViewDesc,
 			TextureManager::SrvHeapAllocator->GetCpuHandle(_vignettingTexture.SrvIndex));
 	}
-}
-
-void PostProcessManager::ChangeTextureState(ID3D12GraphicsCommandList* cmdList, const RtvSrvTexture& texture,
-	const D3D12_RESOURCE_STATES state)
-{
-	if (texture.PrevState == state)
-	{
-		return;
-	}
-
-	const auto barrier = CD3DX12_RESOURCE_BARRIER::Transition(texture.Resource.Get(),
-		texture.PrevState, state);
-	cmdList->ResourceBarrier(1, &barrier);
 }
 
 void PostProcessManager::SetNewResolutionAndRects(const int newWidth, const int newHeight)

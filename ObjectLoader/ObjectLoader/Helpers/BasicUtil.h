@@ -12,7 +12,8 @@ public:
 	static std::wstring GetCroppedName(const WCHAR* filename);
 	static std::string TrimName(const std::string& name, int border);
 	static bool TryToOpenFile(const WCHAR* extension1, const WCHAR* extension2, PWSTR& filePath);
-	static void ChangeTextureState(ID3D12GraphicsCommandList* cmdList, RtvSrvTexture& texture, D3D12_RESOURCE_STATES newState);
+	static void ChangeTextureState(ID3D12GraphicsCommandList4* cmdList, RtvSrvTexture& texture, D3D12_RESOURCE_STATES newState);
+	static std::string WStringToUtf8(const std::wstring& wstr);
 
 	//helper with enums
 	template<typename E>

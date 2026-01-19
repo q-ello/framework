@@ -175,11 +175,17 @@ struct AtmosphereConstants
     float AtmosphereRadius = 1050.0f;
     DirectX::XMFLOAT3 PlanetCenter = {0.0f, -1000.0f, 0.0f};
     float PlanetRadius = 1000.0f;
-    DirectX::XMFLOAT3 Wavelengths = {700.0f, 530.0f, 440.0f};
+    DirectX::XMFLOAT3 Wavelengths = {900.0f, 700.0f, 440.0f};
     int NumInScatteringPoints = 10;
     int NumOpticalDepthPoints = 10;
     float DensityFalloff = 4;
     int Pad[2];
+};
+
+struct RayTracingConstants
+{
+    DirectX::XMFLOAT3 SunDirection = {1.0f, 1.0f, 1.0f};
+    float Pad = 0.0f;
 };
 
 // Stores the resources needed for the CPU to build the command lists
@@ -225,6 +231,8 @@ public:
     std::unique_ptr<UploadBuffer<TerrainTextures>> TerrainTexturesCb = nullptr;
 
 	std::unique_ptr<UploadBuffer<AtmosphereConstants>> AtmosphereCb = nullptr;
+
+    std::unique_ptr<UploadBuffer<RayTracingConstants>> RayTracingCb = nullptr;
 
     std::unordered_map<std::uint32_t, std::unique_ptr<UploadBuffer<OpaqueObjectConstants>>> OpaqueObjCb = {};
     std::unordered_map<std::uint32_t, std::unique_ptr<UploadBuffer<MaterialConstants>>> MaterialCb = {};

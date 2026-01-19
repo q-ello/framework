@@ -7,14 +7,14 @@
 class ObjectManager
 {
 public:
-	explicit ObjectManager(ID3D12Device* device);
+	explicit ObjectManager(ID3D12Device5* device);
 	virtual ~ObjectManager() = default;
 
-	virtual int AddRenderItem(ID3D12Device* device, ModelData&& modelData) = 0;
+	virtual int AddRenderItem(ID3D12Device5* device, ModelData&& modelData) = 0;
 	virtual bool DeleteObject(int selectedObject) = 0;
 
 	virtual void UpdateObjectCBs(FrameResource* currFrameResource) = 0;
-	virtual void AddObjectToResource(Microsoft::WRL::ComPtr<ID3D12Device> device, FrameResource* currFrameResource) = 0;
+	virtual void AddObjectToResource(Microsoft::WRL::ComPtr<ID3D12Device5> device, FrameResource* currFrameResource) = 0;
 
 	virtual int ObjectsCount() = 0;
 	virtual int VisibleObjectsCount() = 0;
@@ -39,7 +39,7 @@ protected:
 	std::vector<D3D12_INPUT_ELEMENT_DESC> _inputLayout;
 	Microsoft::WRL::ComPtr<ID3DBlob> _vsShader;
 	Microsoft::WRL::ComPtr<ID3DBlob> _psShader;
-	Microsoft::WRL::ComPtr<ID3D12Device> _device;
+	Microsoft::WRL::ComPtr<ID3D12Device5> _device;
 
 	virtual void BuildInputLayout() = 0;
 	virtual void BuildRootSignature() = 0;

@@ -149,7 +149,7 @@ void TerrainManager::BuildRootSignature()
 	CD3DX12_DESCRIPTOR_RANGE texTable;
 	texTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0, 1);
 	CD3DX12_DESCRIPTOR_RANGE texturesTable;
-	texturesTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, BasicUtil::EnumIndex(TerrainTexture::Count), 1, 1);
+	texturesTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, static_cast<UINT>(BasicUtil::EnumIndex(TerrainTexture::Count)), 1, 1);
 
 	constexpr int slotRootParameterCount = 6;
 	

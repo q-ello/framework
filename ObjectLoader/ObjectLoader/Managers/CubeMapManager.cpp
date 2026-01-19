@@ -45,7 +45,7 @@ void CubeMapManager::AddObjectToResource(const FrameResource* currFrameResource)
 	currFrameResource->StaticObjCb->CopyData(_skyRItem->Uid, constants);
 }
 
-void CubeMapManager::Draw(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource) const
+void CubeMapManager::Draw(ID3D12GraphicsCommandList4* cmdList, const FrameResource* currFrameResource) const
 {
 	if (_maps[static_cast<int>(CubeMap::Skybox)].UseTexture == false)
 		return;

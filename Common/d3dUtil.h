@@ -28,30 +28,9 @@
 #include "d3dx12.h"
 #include "DDSTextureLoader.h"
 #include "MathHelper.h"
+#include <dxcapi.h>
 
 extern const int gNumFrameResources;
-
-inline void d3dSetDebugName(IDXGIObject* obj, const char* name)
-{
-    if(obj)
-    {
-        obj->SetPrivateData(WKPDID_D3DDebugObjectName, lstrlenA(name), name);
-    }
-}
-inline void d3dSetDebugName(ID3D12Device* obj, const char* name)
-{
-    if(obj)
-    {
-        obj->SetPrivateData(WKPDID_D3DDebugObjectName, lstrlenA(name), name);
-    }
-}
-inline void d3dSetDebugName(ID3D12DeviceChild* obj, const char* name)
-{
-    if(obj)
-    {
-        obj->SetPrivateData(WKPDID_D3DDebugObjectName, lstrlenA(name), name);
-    }
-}
 
 inline std::wstring AnsiToWString(const std::string& str)
 {
@@ -116,7 +95,7 @@ public:
 
     static Microsoft::WRL::ComPtr<ID3D12Resource> CreateDefaultBuffer(
         ID3D12Device* device,
-        ID3D12GraphicsCommandList* cmdList,
+        ID3D12GraphicsCommandList4* cmdList,
         const void* initData,
         UINT64 byteSize,
         Microsoft::WRL::ComPtr<ID3D12Resource>& uploadBuffer);
@@ -126,6 +105,8 @@ public:
 		const D3D_SHADER_MACRO* defines,
 		const std::string& entrypoint,
 		const std::string& target);
+
+	static Microsoft::WRL::ComPtr<IDxcBlob> CompileDxilLibrary(const std::wstring& filename);
 };
 
 class DxException
@@ -155,6 +136,17 @@ struct SubmeshGeometry
     // Bounding box of the geometry defined by this submesh. 
     // This is used in later chapters of the book.
 	DirectX::BoundingBox Bounds;
+};
+
+struct RayTracingGeometry
+{
+	Microsoft::WRL::ComPtr<ID3D12Resource> Blas;
+	Microsoft::WRL::ComPtr<ID3D12Resource> Scratch;
+
+	UINT64 ResultSize = 0;
+	UINT64 ScratchSize = 0;
+
+	bool AllowUpdate = false;
 };
 
 struct MeshGeometry
@@ -226,6 +218,8 @@ struct MeshGeometry
 		VertexBufferUploader = nullptr;
 		IndexBufferUploader = nullptr;
 	}
+
+	std::unique_ptr<RayTracingGeometry> Rt;
 };
 
 struct Texture
@@ -238,7 +232,7 @@ struct Texture
         Name = name;
 		if (Resource != nullptr)
 		{
-			d3dSetDebugName(Resource.Get(), std::string(Name.begin(), Name.end()).c_str());
+			Resource->SetName(Name.c_str());
 		}
 	}
 

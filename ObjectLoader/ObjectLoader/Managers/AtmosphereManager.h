@@ -20,7 +20,7 @@ public:
 
     void Init(int width, int height);
     void BindToManagers(LightingManager* lightingManager, GBuffer* buffer);
-    void Draw(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource);
+    void Draw(ID3D12GraphicsCommandList4* cmdList, const FrameResource* currFrameResource);
     void UpdateParameters(const FrameResource* currFrame);
     void SetDirty();
     void OnResize(int width, int height);

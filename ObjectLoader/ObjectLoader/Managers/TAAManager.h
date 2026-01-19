@@ -15,7 +15,7 @@ public:
 
 	void Init(const int width, const int height);
 	void BindToManagers(LightingManager* lightingManager, GBuffer* buffer, Camera* camera);
-	void ApplyTaa(ID3D12GraphicsCommandList* cmdList, const FrameResource* currFrameResource);
+	void ApplyTaa(ID3D12GraphicsCommandList4* cmdList, const FrameResource* currFrameResource);
 	void OnResize(int newWidth, int newHeight);
 
 private:
@@ -23,7 +23,7 @@ private:
 	void BuildShaders();
 	void BuildPso();
 	void BuildTextures();
-	void ChangeHistoryState(ID3D12GraphicsCommandList* cmdList, int index, D3D12_RESOURCE_STATES newState);
+	void ChangeHistoryState(ID3D12GraphicsCommandList4* cmdList, int index, D3D12_RESOURCE_STATES newState);
 
 private:
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> _rootSignature;
