@@ -310,7 +310,7 @@ void LightingManager::DrawDirLight(ID3D12GraphicsCommandList4* cmdList, const Fr
 	//set current depth
 	cmdList->SetGraphicsRootDescriptorTable(6, _gbuffer->GetGBufferDepthSrv(true));
 	
-	const int shadowMaskSrvIndex = _shadowMasks.empty() ? 0 : _shadowMasks[_selectedShadowMask].index;
+	const int shadowMaskSrvIndex = _shadowMasks.empty() ? 0 : _shadowMasks[_selectedShadowMask].Index;
 	cmdList->SetGraphicsRootDescriptorTable(7, srvAllocator->GetGpuHandle(shadowMaskSrvIndex));
 	constexpr float shadowMaskIntensity = 0.0f;
 	cmdList->SetGraphicsRoot32BitConstants(8, 1, _shadowMasks.empty() ? &shadowMaskIntensity : &ShadowMaskUvScale, 0);

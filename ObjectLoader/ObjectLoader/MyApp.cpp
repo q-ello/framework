@@ -700,7 +700,7 @@ void MyApp::DrawTerrainTexture(int& btnId, const int index, const char* label) c
 	const bool textureTabOpen = property->texture.UseTexture;
 	
 	// ReSharper disable once CppVariableCanBeMadeConstexpr
-	static const int propsNum = BasicUtil::EnumIndex(TerrainTexture::Count);
+	static const int propsNum = static_cast<int>(BasicUtil::EnumIndex(TerrainTexture::Count));
 	static std::vector<int> selectedTabs;
 	if (selectedTabs.size() == 0)
 	{
@@ -1927,7 +1927,7 @@ void MyApp::InitManagers()
 		// Convert to local time.
 		_localtime32_s(&newtime, &time32);
 		_timeInHours = newtime.tm_hour;
-		_timeInMinutes = newtime.tm_min;
+		_timeInMinutes = static_cast<float>(newtime.tm_min);
 
 		UpdateDirToSun();
 	}
